@@ -9,7 +9,7 @@ import {
 } from '../lib/seed';
 import type { ISODate } from '../lib/dates';
 
-export const DATA_VERSION = 2;
+export const DATA_VERSION = 3;
 
 export function emptyData(): AppData {
   const d: any = { ready: false, settings: defaultSettings(), meta: null };
@@ -89,6 +89,8 @@ export function dataMigrationOps(data: AppData): Op[] {
     }
   }
   const { medicalAck: _old, ...rest } = data.settings as any;
+  // v3: фото прогресса раз в неделю вместо раза в месяц
+  if (rest.photo && typeof rest.photo.weekday !== 'number') rest.photo = { enabled: rest.photo.enabled !== false, weekday: defaultSettings().photo.weekday };
   const settings = { ...defaultSettings(), ...rest };
   if (JSON.stringify(settings) !== JSON.stringify(data.settings)) ops.push({ store: 'settings', put: settings });
   if (v !== DATA_VERSION) ops.push({ store: 'meta', put: { ...data.meta, dataVersion: DATA_VERSION } });

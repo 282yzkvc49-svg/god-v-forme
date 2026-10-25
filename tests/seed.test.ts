@@ -58,18 +58,19 @@ test('сопоставление блюд: каждое блюдо разобр�
   assert.ok(unknown > 0, 'есть блюда «Нужно уточнить рецепт»');
 });
 
-test('миграция данных v2: убирает примечание у «Апельсинов» и старое поле настроек', async () => {
+test('миграции данных: примечание у «Апельсинов», старое поле настроек, фото раз в неделю', async () => {
   const { dataMigrationOps, applyOps } = await import('../src/state/model');
   let d = freshData();
   const ev = d.shoppingEvents['shop-2026-11-01'];
   d = applyOps(d, [
     { store: 'shoppingEvents', put: { ...ev, items: ev.items.map((it) => (it.itemId === 'p46' ? { ...it, note: 'старое примечание' } : it)) } },
-    { store: 'settings', put: { ...d.settings, medicalAck: true } as any },
+    { store: 'settings', put: { ...d.settings, medicalAck: true, photo: { enabled: true, dayOfMonth: 2 } } as any },
     { store: 'meta', put: { ...d.meta!, dataVersion: 1 } },
   ]);
   const d2 = applyOps(d, dataMigrationOps(d));
+  assert.deepEqual(d2.settings.photo, { enabled: true, weekday: 1 }, 'v3: фото раз в неделю');
   assert.equal(d2.shoppingEvents['shop-2026-11-01'].items.find((it) => it.itemId === 'p46')!.note, null);
   assert.equal('medicalAck' in d2.settings, false);
-  assert.equal(d2.meta!.dataVersion, 2);
+  assert.equal(d2.meta!.dataVersion, 3);
   assert.equal(dataMigrationOps(d2).length, 0, 'повторная миграция ничего не меняет');
 });

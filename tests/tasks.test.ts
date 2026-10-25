@@ -36,7 +36,8 @@ test('после 01.12 план не копируется', () => {
   assert.ok(!t.some((x) => x.kind === 'meal' || x.kind === 'training'));
   // взвешивания и фото работают бессрочно
   assert.ok(baseTasksForDate(d, '2027-06-07').some((x) => x.kind === 'weigh'));
-  assert.ok(baseTasksForDate(d, '2027-06-02').some((x) => x.kind === 'photo'));
+  assert.ok(baseTasksForDate(d, '2027-06-07').some((x) => x.kind === 'photo'), 'фото — каждый понедельник');
+  assert.ok(!baseTasksForDate(d, '2027-06-08').some((x) => x.kind === 'photo'));
 });
 
 test('пустая отметка — не пропуск; перенос сохраняет задачу', () => {

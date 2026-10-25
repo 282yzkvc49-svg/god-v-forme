@@ -140,7 +140,7 @@ export function defaultSettings(): Settings {
     trainingTimeWeekday: '19:00',
     trainingTimeWeekend: '11:00',
     weighIn: { enabled: true, weekday: 1, time: '07:30' },
-    photo: { enabled: true, dayOfMonth: 2 },
+    photo: { enabled: true, weekday: 1 },
     monthStartDay: 2,
     containersEnabled: true,
     trainingStartDate: null,

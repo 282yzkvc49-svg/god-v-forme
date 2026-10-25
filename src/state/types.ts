@@ -332,7 +332,7 @@ export interface Settings {
   trainingTimeWeekday: string;
   trainingTimeWeekend: string;
   weighIn: { enabled: boolean; weekday: number; time: string };
-  photo: { enabled: boolean; dayOfMonth: number };
+  photo: { enabled: boolean; weekday: number }; // фото прогресса раз в неделю, 1 = понедельник
   monthStartDay: number;
   containersEnabled: boolean;
   trainingStartDate: ISODate | null;

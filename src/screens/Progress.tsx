@@ -326,7 +326,7 @@ function PhotosSection({ addDate }: { addDate: ISODate | null }) {
             )}
           </div>
           {selecting && <p className="hint mt0">Выберите два снимка — сравнение появится выше.</p>}
-          {photos.length === 0 ? <Empty title="Фото пока нет">Снимайте раз в месяц при одинаковом свете, в одной позе и одежде — так сравнение честнее.</Empty> : (
+          {photos.length === 0 ? <Empty title="Фото пока нет">Снимайте раз в неделю при одинаковом свете, в одной позе и одежде — так сравнение честнее.</Empty> : (
             <div className="gallery">
               {photos.map((p) => (
                 <Thumb key={p.id} p={p} selected={sel.includes(p.id)} badge={sel.includes(p.id) ? String(pair.findIndex((x) => x.id === p.id) + 1 || '') : undefined}

@@ -5,7 +5,7 @@ import type {
 } from '../state/types';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
 import {
-  addDays, daysInMonth, isoWeekday, isWeekend, parts, timeToMinutes, type ISODate,
+  addDays, isoWeekday, isWeekend, timeToMinutes, type ISODate,
 } from '../lib/dates';
 import { isStrength, TEMPLATE_NAMES } from './templates';
 
@@ -62,10 +62,6 @@ function isPostponed(data: AppData, originDate: ISODate, templateId: string): bo
   return templateId === 'stepper' && data.settings.postponeCardio;
 }
 
-function photoDayFor(date: ISODate, dayOfMonth: number): boolean {
-  const { y, m, d } = parts(date);
-  return d === Math.min(dayOfMonth, daysInMonth(y, m));
-}
 
 /** Задачи, запланированные на дату (до учёта переносов). */
 export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
@@ -135,9 +131,9 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
     });
   }
 
-  if (s.photo.enabled && photoDayFor(date, s.photo.dayOfMonth) && date >= installDate) {
+  if (s.photo.enabled && isoWeekday(date) === s.photo.weekday && date >= installDate) {
     out.push({
-      id: `photo:${date}`, kind: 'photo', originDate: date, date, title: 'Фото прогресса', subtitle: 'раз в месяц, при одинаковом свете',
+      id: `photo:${date}`, kind: 'photo', originDate: date, date, title: 'Фото прогресса', subtitle: 'раз в неделю, при одинаковом свете',
       sortMin: (timeToMinutes(s.weighIn.time) ?? 450) + 5, movable: true,
     });
   }

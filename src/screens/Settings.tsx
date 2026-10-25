@@ -105,11 +105,11 @@ export function SettingsScreen() {
               <div style={{ width: 140 }}><TimeField label="Время" value={s.weighIn.time} onChange={(v) => A.updateSettings({ weighIn: { ...s.weighIn, time: v } })} /></div>
             </div>
           )}
-          <Switch checked={s.photo.enabled} onChange={(v) => A.updateSettings({ photo: { ...s.photo, enabled: v } })} label="Напоминать о фото прогресса" hint="Раз в месяц" />
+          <Switch checked={s.photo.enabled} onChange={(v) => A.updateSettings({ photo: { ...s.photo, enabled: v } })} label="Напоминать о фото прогресса" hint="Раз в неделю" />
           {s.photo.enabled && (
-            <label className="field"><span>Число месяца</span>
-              <select className="input" value={s.photo.dayOfMonth} onChange={(e) => A.updateSettings({ photo: { ...s.photo, dayOfMonth: Number(e.target.value) } })}>
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}-е</option>)}
+            <label className="field"><span>День недели</span>
+              <select className="input" value={s.photo.weekday} onChange={(e) => A.updateSettings({ photo: { ...s.photo, weekday: Number(e.target.value) } })}>
+                {WEEKDAYS_FULL.map((w, i) => <option key={w} value={i + 1}>{w}</option>)}
               </select>
             </label>
           )}
