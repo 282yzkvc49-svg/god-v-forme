@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0.0",
+  "update_type": "plan_update",
+  "title": "Пример: корректировка на декабрь 2026",
+  "summary": "Пример формата. Присед и мостик чуть сложнее, расписание первой недели декабря, меню на 2 декабря и закупка 2 декабря. Это не рекомендация, а образец для проверки импорта.",
+  "based_on_period": { "from": "2026-11-02", "to": "2026-12-01" },
+  "changes": [
+    {
+      "type": "workout_template",
+      "template_id": "strength_a",
+      "effective_from": "2026-12-02",
+      "reason": "Пример: присед 2×8 отмечен «легко» несколько раз подряд, жалоб нет",
+      "item_updates": [
+        { "exercise_id": "goblet_squat", "sets": 3, "reps": 8, "weight_kg": [12, 16] },
+        { "exercise_id": "glute_bridge", "sets": 3, "reps": 12 }
+      ]
+    },
+    {
+      "type": "calendar_training",
+      "reason": "Пример расписания первой недели декабря",
+      "days": [
+        { "date": "2026-12-02", "template_id": "strength_b", "time": "19:00" },
+        { "date": "2026-12-03", "template_id": "recovery" },
+        { "date": "2026-12-04", "template_id": "strength_a", "time": "19:00" },
+        { "date": "2026-12-05", "template_id": "stepper" },
+        { "date": "2026-12-06", "template_id": "recovery" }
+      ]
+    },
+    {
+      "type": "meal_plan",
+      "reason": "Пример: блюда из существующих рецептов",
+      "days": [
+        {
+          "date": "2026-12-02",
+          "breakfast": "Творог с яблоком, корицей, орехами и хлебцами",
+          "lunch": "Куриные котлеты + булгур + брокколи + морковь",
+          "snack": "Йогурт 200 г + ягоды 100 г + орехи 25 г + банан",
+          "dinner": "Форель + салат"
+        }
+      ]
+    },
+    {
+      "type": "shopping_event",
+      "reason": "Пример: короткая закупка",
+      "events": [
+        {
+          "date": "2026-12-02",
+          "title": "Докупка на неделю",
+          "for_dates_text": "02.12–08.12",
+          "items": [
+            { "category": "Белок", "name": "Куриный фарш", "unit": "кг", "qty": 0.7, "price_per_unit_rub": 450, "note": "на котлеты" },
+            { "category": "Овощи", "name": "Брокколи замороженная", "unit": "кг", "qty": 0.6, "price_per_unit_rub": 280 }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "meal_prep_event",
+      "events": [
+        { "date": "2026-12-02", "dishes": ["Куриные котлеты", "Булгур"], "for_dates": ["2026-12-03", "2026-12-04"], "storage": "Порционно остудить; хранить до 3 дней" }
+      ]
+    },
+    { "type": "goal", "reason": "Цель без изменений — пример поля", "target_weight_kg": 82 }
+  ]
+}

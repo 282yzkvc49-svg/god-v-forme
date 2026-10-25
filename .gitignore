@@ -1,0 +1,7 @@
+node_modules
+dist/
+dist-dev/
+dist-single/
+e2e/screens/
+*.log
+.DS_Store

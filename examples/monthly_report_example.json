@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "report_type": "monthly_review",
+  "app": { "name": "Мой год в форме", "version": "1.0.0" },
+  "generated_at": "2026-12-02T09:00:00.000Z",
+  "period": { "from": "2026-11-02", "to": "2026-12-01", "days": 30 },
+  "goals": {
+    "start_weight_kg": 107,
+    "target_weight_kg": 82,
+    "kcal_reference_per_day": 2450,
+    "kcal_note": "Оценочный стартовый ориентир, калории по блюдам не считаются.",
+    "equipment": ["мини-степпер", "одна разборная гиря до 24 кг", "собственный вес"],
+    "training_start_date": null
+  },
+  "weights": [],
+  "weight_summary": { "entries": 0, "first": null, "last": null, "change_kg": null, "weekly_rate_kg": null, "last_known_before_period": null },
+  "waist": [],
+  "photos": [],
+  "workouts": [],
+  "workout_summary": { "due": 0, "done": 0, "skipped": 0, "not_logged": 0, "moved": 0, "postponed": 0, "upcoming": 0, "strength_done": 0, "stepper_done": 0, "recovery_marked": 0, "stepper_minutes": 0, "warmup_minutes": 0, "sets_marked": 0 },
+  "working_weights": {},
+  "nutrition_adherence": { "planned": 0, "done": 0, "skipped": 0, "unknown": 0 },
+  "nutrition_days": [],
+  "cooking_and_shopping": [],
+  "day_notes": [],
+  "observations": ["Пример структуры без результатов: реальные значения появятся только из введённых данных."],
+  "notes_for_chatgpt": "",
+  "current_plan": { "templates": [], "allowed_exercise_ids": [], "allowed_template_ids": ["strength_a", "strength_b", "stepper", "recovery"], "kettlebell_max_kg": 24, "plan_days_loaded_until": "2026-12-01" },
+  "plan_update_schema_version": "1.0.0"
+}

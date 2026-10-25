@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [],
+    "typeRoots": [],
+    "jsx": "preserve",
+    "noUnusedLocals": false,
+    "noImplicitAny": false
+  },
+  "include": ["src", "tests", "tools/typecheck/react-shim.d.ts", "src/env.d.ts"]
+}
