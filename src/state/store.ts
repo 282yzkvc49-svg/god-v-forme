@@ -5,6 +5,7 @@ import { deleteDB, getAll, getOne, openDB, write, type Op } from './idb';
 import { applyOps, dataMigrationOps, emptyData, seedOps, seedUpgradeOps } from './model';
 import { RECORD_STORES, type AppData, type PhotoBlobRec } from './types';
 import { localDate } from '../lib/dates';
+import { today } from '../lib/clock';
 import { nowStamp } from '../lib/util';
 
 let db: IDBDatabase | null = null;
@@ -54,11 +55,17 @@ export async function commit(ops: Op[]): Promise<void> {
 /** Заменить всё состояние (восстановление из копии). */
 export async function replaceAll(ops: Op[]): Promise<void> {
   const clearOps: Op[] = [...RECORD_STORES, 'settings', 'meta', 'photoBlobs'].map((store) => ({ store, clear: true as const }));
-  const all = [...clearOps, ...ops];
-  data = applyOps(emptyData(), ops);
-  data.ready = true;
+  let d = applyOps(emptyData(), ops);
+  // копия из прежней версии приложения: те же миграции, что и при запуске
+  const now = nowStamp();
+  const up = d.meta ? seedUpgradeOps(d, now) : [];
+  d = applyOps(d, up);
+  const mig = d.meta ? dataMigrationOps(d, today(), now) : [];
+  d = applyOps(d, mig);
+  d.ready = true;
+  data = d;
   emit();
-  if (db) await write(db, all);
+  if (db) await write(db, [...clearOps, ...ops, ...up, ...mig]);
 }
 
 export async function init(): Promise<void> {
@@ -72,15 +79,17 @@ export async function init(): Promise<void> {
     d = applyOps(d, ops);
     const now = nowStamp();
     const extra: Op[] = [];
-    if (!d.meta) extra.push(...seedOps(now, localDate()));
-    else {
-      extra.push(...seedUpgradeOps(d, now));
-      extra.push(...dataMigrationOps(d));
-    }
-    if (extra.length) {
-      await write(db, extra);
+    if (!d.meta) {
+      extra.push(...seedOps(now, localDate()));
       d = applyOps(d, extra);
+    } else {
+      const up = seedUpgradeOps(d, now);
+      d = applyOps(d, up);
+      const mig = dataMigrationOps(d, today(), now);
+      d = applyOps(d, mig);
+      extra.push(...up, ...mig);
     }
+    if (extra.length) await write(db, extra);
     d.ready = true;
     data = d;
     setStatus({ mode: 'idb', error: null });

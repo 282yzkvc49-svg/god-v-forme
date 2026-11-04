@@ -1,13 +1,14 @@
 // Задачи дня строятся из плана (PlanDay, события готовки и закупок), настроек (взвешивание, фото,
 // контейнеры) и пользовательских задач. Статусы и переносы хранятся отдельно и план не меняют.
 import type {
-  AppData, CookingEvent, MealSlot, PlanDay, ShoppingEvent, TaskKind, TaskStatus, TemplateId,
+  AppData, CookingEvent, MealSlot, PlanDay, PlanTraining, ShoppingEvent, TaskKind, TaskStatus, TemplateId,
 } from '../state/types';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
 import {
-  addDays, isoWeekday, isWeekend, timeToMinutes, type ISODate,
+  addDays, diffDays, isoWeekday, isWeekend, timeToMinutes, type ISODate,
 } from '../lib/dates';
 import { isStrength, TEMPLATE_NAMES } from './templates';
+import { DISHES, PRODUCTS, fmtAmount } from './catalog';
 
 export interface DayTask {
   id: string;
@@ -55,6 +56,56 @@ function trainingTime(data: AppData, date: ISODate, planTime?: string | null): s
   return isWeekend(date) ? data.settings.trainingTimeWeekend : data.settings.trainingTimeWeekday;
 }
 
+/** Сколько дней недели из списка в интервале [from, to). */
+function countWeekdays(from: ISODate, to: ISODate, days: number[]): number {
+  const n = diffDays(to, from);
+  if (n <= 0) return 0;
+  let count = Math.floor(n / 7) * days.length;
+  for (let i = Math.floor(n / 7) * 7; i < n; i++) if (days.includes(isoWeekday(addDays(from, i)))) count++;
+  return count;
+}
+
+/**
+ * Тренировка на дату: своё расписание (по умолчанию силовые пн/ср/пт с чередованием А/Б, степпер вт/сб),
+ * не зависит от даты старта питания. Импортированный план может переопределить конкретный день.
+ */
+export function scheduledTraining(data: AppData, date: ISODate): PlanTraining | null {
+  const override = data.planDays[date]?.training;
+  if (override) return override;
+  const tr = data.settings.training;
+  if (!tr || date < tr.startDate) return null;
+  const wd = isoWeekday(date);
+  if (tr.strengthDays.includes(wd)) {
+    const id: TemplateId = countWeekdays(tr.startDate, date, tr.strengthDays) % 2 === 0 ? 'strength_a' : 'strength_b';
+    return { templateId: id, label: TEMPLATE_NAMES[id], time: null };
+  }
+  if (tr.cardioDays.includes(wd)) return { templateId: 'stepper', label: TEMPLATE_NAMES.stepper, time: null };
+  return { templateId: 'recovery', label: TEMPLATE_NAMES.recovery, time: null };
+}
+
+/** Что достать из морозилки вечером date: сырое к завтрашней готовке и готовые порции к завтрашним приёмам. */
+export function thawList(data: AppData, date: ISODate): string[] {
+  const out: string[] = [];
+  const next = addDays(date, 1);
+  for (const e of Object.values(data.cookingEvents)) {
+    const cookDay = e.date;
+    // к утренней готовке — накануне вечером; к вечерней — тоже накануне (сутки в холодильнике)
+    if (cookDay !== next) continue;
+    for (const t of e.thawProducts ?? []) out.push(`${PRODUCTS[t.productId]?.name ?? t.productId} — ${fmtAmount(t.qty, PRODUCTS[t.productId]?.unit ?? 'g')} (к готовке ${e.time ?? ''})`.replace(' ()', ''));
+  }
+  const plan = data.planDays[next];
+  if (plan?.mealCards) {
+    for (const slot of MEAL_SLOTS) {
+      for (const p of plan.mealCards[slot].parts) {
+        if (p.storage !== 'freeze' || p.thawOn !== date) continue;
+        const d = DISHES[p.dishId];
+        out.push(`${d?.title ?? p.dishId} — ${d?.unit === 'g' ? `${Math.round(p.qty)} г` : `${p.qty} порц.`} (${MEAL_LABELS[slot].toLowerCase()})`);
+      }
+    }
+  }
+  return out;
+}
+
 function isPostponed(data: AppData, originDate: ISODate, templateId: string): boolean {
   const start = data.settings.trainingStartDate;
   if (!start || originDate >= start) return false;
@@ -85,12 +136,14 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
     }
   }
 
-  if (plan?.training && plan.training.templateId !== 'rest') {
-    const tid = plan.training.templateId as TemplateId;
-    const time = tid === 'recovery' ? null : trainingTime(data, date, plan.training.time);
+  const log = data.trainingLogs[`train:${date}`];
+  const training = scheduledTraining(data, date) ?? (log ? { templateId: log.templateId, label: TEMPLATE_NAMES[log.templateId], time: null } : null);
+  if (training && training.templateId !== 'rest') {
+    const tid = (log?.templateId ?? training.templateId) as TemplateId;
+    const time = tid === 'recovery' ? null : trainingTime(data, date, training.time);
     out.push({
       id: `train:${date}`, kind: 'training', originDate: date, date, templateId: tid,
-      title: tid === 'recovery' ? TEMPLATE_NAMES.recovery : plan.training.label || TEMPLATE_NAMES[tid],
+      title: tid === 'recovery' ? TEMPLATE_NAMES.recovery : (log ? TEMPLATE_NAMES[tid] : training.label) || TEMPLATE_NAMES[tid],
       time, sortMin: timeToMinutes(time) ?? 1100,
       movable: true, optional: tid === 'recovery', postponed: isPostponed(data, date, tid),
     });
@@ -98,17 +151,29 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
 
   for (const e of cookingEventsOn(data, date)) {
     if (e.eventType !== 'meal_prep') continue;
+    const subtitle = e.items?.length
+      ? e.items.filter((i) => DISHES[i.dishId]?.unit === 'portion' && DISHES[i.dishId]?.category === 'main').map((i) => `${DISHES[i.dishId].short} ×${i.qty}`).join(', ')
+      : e.dishes.map((d) => d.text).join(', ');
     out.push({
       id: `cook:${e.id}`, kind: 'cooking', originDate: date, date, eventId: e.id,
-      title: 'Готовка', subtitle: e.dishes.map((d) => d.text).join(', '),
-      sortMin: weekend ? 700 : 1090, movable: true,
+      title: e.kind === 'quick' ? 'Быстрая готовка' : 'Готовка', subtitle, time: e.time ?? null,
+      sortMin: timeToMinutes(e.time) ?? (weekend ? 700 : 1090), movable: true,
     });
   }
 
   for (const e of shoppingEventsOn(data, date)) {
     out.push({
       id: `shop:${e.id}`, kind: 'shopping', originDate: date, date, eventId: e.id,
-      title: 'Закупка', subtitle: e.title, sortMin: weekend ? 650 : 1080, movable: true,
+      title: e.kind === 'topup' ? 'Докупка свежего' : 'Закупка', subtitle: e.lines ? `${e.title}: ${e.lines.length} поз.` : e.title,
+      time: e.time ?? null, sortMin: timeToMinutes(e.time) ?? (weekend ? 650 : 1080), movable: true,
+    });
+  }
+
+  const thaw = thawList(data, date);
+  if (thaw.length) {
+    out.push({
+      id: `thaw:${date}`, kind: 'thaw', originDate: date, date, title: 'Разморозка на завтра',
+      subtitle: `переложить из морозилки в холодильник: ${thaw.length} поз.`, sortMin: 1300, movable: false,
     });
   }
 
@@ -153,7 +218,7 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
 export function taskById(data: AppData, taskId: string): DayTask | null {
   const [kind, a] = taskId.split(':');
   let origin: ISODate | null = null;
-  if (kind === 'meal' || kind === 'train' || kind === 'box' || kind === 'weigh' || kind === 'photo') origin = a;
+  if (kind === 'meal' || kind === 'train' || kind === 'box' || kind === 'thaw' || kind === 'weigh' || kind === 'photo') origin = a;
   else if (kind === 'cook') origin = data.cookingEvents[taskId.slice(5)]?.date ?? null;
   else if (kind === 'shop') origin = data.shoppingEvents[taskId.slice(5)]?.date ?? null;
   else if (kind === 'custom') origin = data.customTasks[taskId.slice(7)]?.date ?? null;

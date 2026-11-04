@@ -1,12 +1,14 @@
-import { applyOps, emptyData, seedOps } from '../src/state/model';
+import { applyOps, emptyData, freshPlanOps, seedOps } from '../src/state/model';
 import type { Op } from '../src/state/idb';
 import type { AppData } from '../src/state/types';
 
 export const NOW = '2026-10-25T15:00:00.000Z';
 
-/** Состояние «после первого запуска» с seed. */
-export function freshData(installDate = '2026-10-25'): AppData {
-  const d = applyOps(emptyData(), seedOps(NOW, installDate));
+/** Состояние «после первого запуска»: шаблоны, настройки и план питания со стартом 02.11.2026. */
+export function freshData(installDate = '2026-10-25', planStart: string | null = '2026-11-02'): AppData {
+  let d = applyOps(emptyData(), seedOps(NOW, installDate));
+  if (planStart) d = applyOps(d, freshPlanOps(d, planStart, installDate, NOW));
+  d = applyOps(d, [{ store: 'settings', put: { ...d.settings, onboarded: true } }]);
   d.ready = true;
   return d;
 }

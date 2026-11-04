@@ -2,9 +2,11 @@
 import { commit, forgetPhotoURL, getData, putPhotoBlob } from './store';
 import type { Op } from './idb';
 import type {
-  CustomTask, Difficulty, ExerciseLog, ExportRecord, Feeling, MealMapEntry, PhotoMeta, PhotoPose, Recipe, Settings,
+  CustomTask, Difficulty, ExerciseLog, ExportRecord, Feeling, MealMapEntry, PhotoMeta, PhotoPose, PlanSettings, Recipe, Settings,
   TaskStatus, TemplateId, TrainingLog,
 } from './types';
+import { replanOps } from '../domain/plan';
+import { today as todayFn } from '../lib/clock';
 import type { DayTask } from '../domain/tasks';
 import { templateVersionFor } from '../domain/templates';
 import { processPhoto } from '../lib/image';
@@ -171,13 +173,30 @@ export function deleteAllPhotos() {
 export function setBought(eventId: string, itemId: string, bought: boolean) {
   const id = `${eventId}:${itemId}`;
   const prev = getData().shoppingChecks[id];
-  return commit([{ store: 'shoppingChecks', put: { id, eventId, itemId, actualPrice: prev?.actualPrice ?? null, bought, updatedAt: nowStamp() } }]);
+  return commit([{ store: 'shoppingChecks', put: { id, eventId, itemId, actualPrice: prev?.actualPrice ?? null, atHome: bought ? false : prev?.atHome ?? false, bought, updatedAt: nowStamp() } }]);
+}
+
+/** «Есть дома» — позицию не покупать, в сумму не входит. */
+export function setAtHome(eventId: string, itemId: string, atHome: boolean) {
+  const id = `${eventId}:${itemId}`;
+  const prev = getData().shoppingChecks[id];
+  return commit([{ store: 'shoppingChecks', put: { id, eventId, itemId, actualPrice: prev?.actualPrice ?? null, bought: atHome ? false : prev?.bought ?? false, atHome, updatedAt: nowStamp() } }]);
+}
+
+/** Применить новую дату старта или релакс-день: план пересобирается, история и отметки остаются. */
+export function applyPlan(cfg: PlanSettings) {
+  const res = replanOps(getData(), cfg, todayFn());
+  return commit(res.ops);
+}
+
+export function previewPlan(cfg: PlanSettings) {
+  return replanOps(getData(), cfg, todayFn());
 }
 
 export function setActualPrice(eventId: string, itemId: string, price: number | null) {
   const id = `${eventId}:${itemId}`;
   const prev = getData().shoppingChecks[id];
-  return commit([{ store: 'shoppingChecks', put: { id, eventId, itemId, bought: prev?.bought ?? false, actualPrice: price, updatedAt: nowStamp() } }]);
+  return commit([{ store: 'shoppingChecks', put: { id, eventId, itemId, bought: prev?.bought ?? false, atHome: prev?.atHome ?? false, actualPrice: price, updatedAt: nowStamp() } }]);
 }
 
 export function setAllBought(eventId: string, itemIds: string[], bought: boolean) {
@@ -185,7 +204,7 @@ export function setAllBought(eventId: string, itemIds: string[], bought: boolean
   const ops: Op[] = itemIds.map((itemId) => {
     const id = `${eventId}:${itemId}`;
     const prev = d.shoppingChecks[id];
-    return { store: 'shoppingChecks', put: { id, eventId, itemId, actualPrice: prev?.actualPrice ?? null, bought, updatedAt: nowStamp() } };
+    return { store: 'shoppingChecks', put: { id, eventId, itemId, actualPrice: prev?.actualPrice ?? null, bought, atHome: bought ? false : prev?.atHome ?? false, updatedAt: nowStamp() } };
   });
   return commit(ops);
 }

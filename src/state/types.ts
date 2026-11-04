@@ -28,6 +28,25 @@ export interface PlanDay {
   drinks?: string | null;
   note?: string | null;
   kcalNote?: string | null;
+  /** Экземпляр плана питания из шаблона (src/data/plan_template.json). */
+  instanceId?: string | null;
+  templateDay?: number | null;
+  /** Подробные карточки приёмов пищи: блюда с количеством, из какой готовки взять порцию. */
+  mealCards?: Record<MealSlot, MealCard> | null;
+}
+
+export interface MealCardPart {
+  dishId: string;
+  qty: number; // в единицах блюда: порции или граммы
+  fresh: boolean; // готовится к этому приёму (не из партии)
+  cookEventId?: string | null;
+  storage?: 'fridge' | 'freeze' | 'pantry' | null;
+  thawOn?: ISODate | null;
+}
+
+export interface MealCard {
+  title: string;
+  parts: MealCardPart[];
 }
 
 export interface TemplateItem {
@@ -38,6 +57,14 @@ export interface TemplateItem {
   minutes?: number | [number, number] | null;
   perSide?: string | null;
   weightKg?: [number, number] | null;
+  /** Явный вес гири: 12 или 16 кг; null — без гири. Автоматически не повышается. */
+  kettlebellKg?: number | null;
+  /** Более лёгкий вариант, если техника нарушается (например, 12 кг вместо 16). */
+  fallbackKg?: number | null;
+  /** Замена упражнения, если вес не удаётся безопасно контролировать. */
+  alternative?: { exerciseId: string; reps?: number | null; note?: string | null } | null;
+  /** Условие выполнения (показывается в карточке). */
+  condition?: string | null;
   weightNote?: string | null;
   note?: string | null;
 }
@@ -74,6 +101,22 @@ export interface ShoppingItem {
   note: string | null;
 }
 
+export interface ShoppingNeed { date: ISODate; label: string; qty: number }
+
+/** Строка закупки, посчитанная из меню и готовок: сколько нужно, сколько купить, сколько останется. */
+export interface ShopLine {
+  productId: string;
+  need: number; // нужно к этой закупке (единицы продукта, масса покупки с учётом несъедобной части)
+  fromStock: number; // покроет остаток прошлых закупок
+  buy: number; // купить
+  packs: number | null; // упаковок; null — по весу
+  cost: number;
+  leftover: number;
+  freezeNow: number; // заморозить в день покупки (нужно позже срока хранения)
+  notes: string[];
+  needs: ShoppingNeed[];
+}
+
 export interface ShoppingEvent {
   id: string;
   date: ISODate;
@@ -82,6 +125,11 @@ export interface ShoppingEvent {
   items: ShoppingItem[];
   source: 'seed' | 'import';
   patchId?: string | null;
+  instanceId?: string | null;
+  kind?: 'main' | 'topup' | null;
+  time?: string | null;
+  lines?: ShopLine[] | null;
+  covers?: { from: ISODate; to: ISODate } | null;
 }
 
 export interface CookingDish {
@@ -102,6 +150,29 @@ export interface CookingEvent {
   dishes: CookingDish[];
   source: 'seed' | 'import';
   patchId?: string | null;
+  instanceId?: string | null;
+  blockId?: string | null;
+  kind?: 'main' | 'quick' | null;
+  time?: string | null;
+  timeNote?: string | null;
+  items?: CookItem[] | null;
+  /** Сырые продукты из морозилки: накануне переложить в холодильник. */
+  thawProducts?: { productId: string; qty: number }[] | null;
+}
+
+export interface CookUse {
+  date: ISODate;
+  slot: MealSlot;
+  qty: number;
+  via?: string | null; // блюдо, в которое входит (лаваш с индейкой и т. п.)
+  storage: 'fridge' | 'freeze' | 'pantry';
+  thawOn?: ISODate | null;
+}
+
+export interface CookItem {
+  dishId: string;
+  qty: number; // всего в единицах блюда
+  uses: CookUse[];
 }
 
 // ---------------------------------------------------------------- справочники (из сборки)
@@ -172,7 +243,7 @@ export interface MealMapEntry {
 export type TaskStatus = 'planned' | 'done' | 'skipped';
 
 export type TaskKind =
-  | 'meal' | 'training' | 'cooking' | 'shopping' | 'containers' | 'weigh' | 'photo' | 'custom';
+  | 'meal' | 'training' | 'cooking' | 'shopping' | 'containers' | 'thaw' | 'weigh' | 'photo' | 'custom';
 
 export interface TaskStatusRec {
   taskId: string;
@@ -210,6 +281,10 @@ export interface ExerciseLog {
   index: number;
   exerciseId: string;
   sets: boolean[];
+  /** Фактические повторы (или секунды) по подходам; null — не записано. */
+  reps?: (number | null)[] | null;
+  /** Выбранный вариант упражнения (например, отжимания от возвышения вместо жима). */
+  variantId?: string | null;
   weightKg?: number | null;
   difficulty?: Difficulty | null;
   minutes?: number | null;
@@ -256,6 +331,7 @@ export interface ShoppingCheck {
   eventId: string;
   itemId: string;
   bought: boolean;
+  atHome?: boolean; // «есть дома» — не покупать
   actualPrice?: number | null;
   updatedAt: string;
 }
@@ -337,6 +413,10 @@ export interface Settings {
   containersEnabled: boolean;
   trainingStartDate: ISODate | null;
   postponeCardio: boolean;
+  /** Программа питания: дата старта (день 1) и номер релакс-дня. null — ещё не выбрано. */
+  plan: PlanSettings | null;
+  /** Расписание тренировок — своё, не зависит от даты старта питания. */
+  training: TrainingSchedule;
   restDefaultSec: number;
   restAutoStart: boolean;
   restSound: boolean;
@@ -346,6 +426,20 @@ export interface Settings {
   onboarded: boolean;
   installHintDismissed: boolean;
   lastBackupAt: string | null;
+}
+
+export interface PlanSettings {
+  startDate: ISODate;
+  relaxDay: number; // 1–30, по умолчанию 28
+  instanceId: string;
+  confirmed: boolean; // пользователь подтвердил дату (после обновления — false, пока не подтвердит)
+  setAt: string;
+}
+
+export interface TrainingSchedule {
+  startDate: ISODate; // первый день программы тренировок; силовые чередуются А/Б начиная с неё
+  strengthDays: number[]; // 1 = пн … 7 = вс
+  cardioDays: number[];
 }
 
 export interface Meta {

@@ -11,6 +11,9 @@ import { go, href } from '../app/router';
 import { isStandalone } from '../lib/files';
 import { Note, Ring, toast } from '../ui/kit';
 import { AddTaskSheet, KindIcon, NoPlanCard, RelaxCard, TaskList, WeightSheet } from './shared';
+import { PlanStartSheet } from './planViews';
+import { PLAN_LENGTH, planEnd } from '../domain/plan';
+import { fmtFull } from '../lib/dates';
 import { MEAL_LABELS } from '../state/types';
 import { PiCalendarBlank, PiPlus, PiShareNetwork, PiShieldCheck, PiX } from '../ui/icons';
 
@@ -27,6 +30,8 @@ export function Today() {
   const today = useToday();
   const [adding, setAdding] = useState(false);
   const [weigh, setWeigh] = useState(false);
+  const [planSheet, setPlanSheet] = useState(false);
+  const cfg = data.settings.plan;
   const range = planRange(data);
   const p = planDay(data, today);
   const beforePlan = !!range && today < range.from;
@@ -38,7 +43,8 @@ export function Today() {
   const firstPrep = beforePlan ? ups.find((u) => u.kind === 'shopping' || u.kind === 'cooking') ?? null : null;
 
   let sub: string;
-  if (p?.dayNumber) sub = `День ${p.dayNumber} из ${Object.values(data.planDays).filter((d) => d.dayNumber).length} стартового плана`;
+  if (p?.dayNumber && p.instanceId) sub = `День ${p.dayNumber} из ${PLAN_LENGTH} плана питания`;
+  else if (p?.dayNumber) sub = `День ${p.dayNumber} плана`;
   else if (p) sub = 'План загружен из обновления';
   else if (beforePlan) sub = `До начала плана ${diffDays(range!.from, today)} ${plural(diffDays(range!.from, today), 'день', 'дня', 'дней')}`;
   else sub = 'План на этот день пока не добавлен';
@@ -71,6 +77,14 @@ export function Today() {
         <div className="banner">
           <PiShareNetwork />
           <span className="grow">Это предпросмотр. Офлайн-режим, значок на экране «Домой», сохранение отчётов и копий в «Файлы» работают в версии, опубликованной на GitHub Pages.</span>
+        </div>
+      )}
+      {cfg && !cfg.confirmed && (
+        <div className="banner">
+          <PiCalendarBlank />
+          <span className="grow">Меню обновлено: у каждого приёма пищи — продукты с граммовками, порции готовок и закупки пересчитаны, тренировки — только с гирями 12 и 16 кг. План питания идёт с {fmtFull(cfg.startDate)} по {fmtFull(planEnd(cfg))}. Отметки сохранены.</span>
+          <button className="btn small" onClick={() => A.updateSettings({ plan: { ...cfg, confirmed: true } })}>Оставить</button>
+          <button className="btn small" onClick={() => setPlanSheet(true)}>Другая дата</button>
         </div>
       )}
       {needBackup && (
@@ -148,6 +162,7 @@ export function Today() {
       </div>
       <AddTaskSheet open={adding} date={today} onClose={() => setAdding(false)} />
       <WeightSheet open={weigh} date={today} onClose={() => setWeigh(false)} />
+      <PlanStartSheet open={planSheet} onClose={() => setPlanSheet(false)} />
     </div>
   );
 }

@@ -1,41 +1,61 @@
 import { useState } from 'react';
 import { useApp } from '../state/store';
 import * as A from '../state/actions';
-import { PLAN_START } from '../lib/seed';
-import { fmtDayMonth, isISODate } from '../lib/dates';
+import { addDays, fmtDayMonth, isISODate, isoWeekday } from '../lib/dates';
+import { today as todayFn } from '../lib/clock';
 import { isStandalone } from '../lib/files';
 import { Note, Sheet } from '../ui/kit';
 import { PiLock, PiShareNetwork } from '../ui/icons';
+import { PlanStartForm } from './planViews';
+import { go } from '../app/router';
+import type { PlanSettings } from '../state/types';
 
-/** Первый запуск: что умеет приложение и когда начинать силовые. */
+/** Первый запуск: дата старта питания, затем — начало тренировок (своё расписание). */
 export function Onboarding() {
   const data = useApp();
-  const [later, setLater] = useState(false);
-  const [date, setDate] = useState('');
+  const [step, setStep] = useState<1 | 2>(data.settings.plan?.confirmed ? 2 : 1);
+  const [plan, setPlan] = useState<PlanSettings | null>(data.settings.plan);
+  const today = todayFn();
+  const nextMonday = addDays(today, (8 - isoWeekday(today)) % 7 || 7);
+  const [trainFrom, setTrainFrom] = useState<string>(isoWeekday(today) === 1 ? today : nextMonday);
   const finish = () => {
-    A.updateSettings({ onboarded: true, trainingStartDate: later && isISODate(date) ? date : null });
+    A.updateSettings({
+      onboarded: true,
+      training: { ...data.settings.training, startDate: isISODate(trainFrom) ? trainFrom : today },
+    });
   };
   return (
-    <Sheet open onClose={() => A.updateSettings({ onboarded: true })} title="Мой год в форме" label="Первый запуск">
-      <p className="mt0">План на 30 дней с {fmtDayMonth(PLAN_START)}: меню, рецепты, закупки, готовка, тренировки с гирей и степпером. Отмечайте выполнение, раз в неделю записывайте вес и делайте фото, раз в месяц выгружайте отчёт для разбора в ChatGPT.</p>
-      <Note kind="ok" icon={<PiLock />}>Данные хранятся только на этом устройстве. Регулярно сохраняйте резервную копию в «Файлы».</Note>
-      {!isStandalone() && (
-        <div style={{ marginTop: 10 }}><Note kind="info" icon={<PiShareNetwork />}>Добавьте приложение на экран «Домой» (Safari → «Поделиться» → «На экран „Домой“») и ведите записи уже в нём: данные вкладки Safari хранятся отдельно.</Note></div>
+    <Sheet open onClose={() => (plan ? finish() : undefined)} title="Мой год в форме" label="Первый запуск">
+      {step === 1 ? (
+        <>
+          <p className="mt0">Меню на 30 дней с граммовками, рецепты, закупки, готовка, тренировки с гирями 12 и 16 кг и степпером. Отмечайте выполнение, раз в неделю записывайте вес и делайте фото, раз в месяц выгружайте отчёт для разбора в ChatGPT.</p>
+          <Note kind="ok" icon={<PiLock />}>Данные хранятся только на этом устройстве. Регулярно сохраняйте резервную копию в «Файлы».</Note>
+          {!isStandalone() && (
+            <div style={{ marginTop: 10 }}><Note kind="info" icon={<PiShareNetwork />}>Добавьте приложение на экран «Домой» (Safari → «Поделиться» → «На экран „Домой“») и ведите записи уже в нём: данные вкладки Safari хранятся отдельно.</Note></div>
+          )}
+          <h3 style={{ marginTop: 16 }}>Когда начинаем программу питания?</h3>
+          <p className="small muted mt0">Можно выбрать любую дату. Меню, закупки, готовка, контейнеры и релакс-день встанут на свои места; первая закупка и готовка — накануне старта.</p>
+          <PlanStartForm firstRun submitLabel="Дальше" onDone={(cfg) => { setPlan(cfg); setStep(2); }} />
+          <button className="btn ghost block" style={{ marginTop: 8 }} onClick={() => { A.updateSettings({ onboarded: true }); go('/analysis', { tab: 'backup' }); }}>У меня есть резервная копия — восстановить</button>
+        </>
+      ) : (
+        <>
+          <p className="mt0">План питания: с {plan ? fmtDayMonth(plan.startDate) : '—'}.</p>
+          <h3>Когда начать тренировки?</h3>
+          <p className="small muted mt0">У тренировок своё расписание, оно не зависит от даты старта питания: силовые — пн, ср, пт (А и Б по очереди), степпер — вт и сб, в остальные дни — восстановление. Гири: 12 и 16 кг.</p>
+          <label className="field">
+            <span>Первый день тренировок</span>
+            <input className="input" type="date" value={trainFrom} onChange={(e) => setTrainFrom(e.target.value)} />
+          </label>
+          <div className="chips" style={{ marginBottom: 12 }}>
+            <button className="chip" onClick={() => setTrainFrom(today)}>Сегодня</button>
+            <button className="chip" onClick={() => setTrainFrom(nextMonday)}>С понедельника</button>
+            {plan && <button className="chip" onClick={() => setTrainFrom(plan.startDate)}>Вместе с питанием</button>}
+          </div>
+          <button className="btn primary big block" onClick={finish} disabled={!isISODate(trainFrom)}>Начать</button>
+          <p className="hint center">{data.settings.goals.startWeightKg} → {data.settings.goals.targetWeightKg} кг примерно за год, без жёстких диет.</p>
+        </>
       )}
-      <h3 style={{ marginTop: 16 }}>Когда начать силовые</h3>
-      <div className="menu-list" style={{ marginTop: 12 }}>
-        <button aria-pressed={!later} onClick={() => setLater(false)} style={!later ? { outline: '2px solid var(--accent)' } : undefined}>Начать по плану, с {fmtDayMonth(PLAN_START)}</button>
-        <button aria-pressed={later} onClick={() => setLater(true)} style={later ? { outline: '2px solid var(--accent)' } : undefined}>Перенести начало силовых</button>
-      </div>
-      {later && (
-        <label className="field" style={{ marginTop: 10 }}>
-          <span>Силовые — с даты</span>
-          <input className="input" type="date" value={date} min={PLAN_START} onChange={(e) => setDate(e.target.value)} />
-          <span className="hint">До этой даты силовые будут помечены «отложено» и не попадут в пропуски. Дату можно поменять в настройках.</span>
-        </label>
-      )}
-      <button className="btn primary big block" style={{ marginTop: 14 }} onClick={finish} disabled={later && !isISODate(date)}>Понятно, начать</button>
-      <p className="hint center">{data.settings.goals.startWeightKg} → {data.settings.goals.targetWeightKg} кг примерно за год, без жёстких диет.</p>
     </Sheet>
   );
 }

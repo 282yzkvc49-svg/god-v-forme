@@ -48,6 +48,10 @@ function TemplateIcon({ id }: { id: TemplateId }) {
   return <KettlebellIcon />;
 }
 
+function weekdaysText(days: number[]): string {
+  return days.map((d) => ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'][d - 1]).join('/');
+}
+
 export function TrainingHub() {
   const data = useApp();
   const today = useToday();
@@ -60,7 +64,7 @@ export function TrainingHub() {
   const s = data.settings;
   return (
     <div className="page">
-      <PageHead title="Тренировки" sub="Мини-степпер, одна разборная гиря до 24 кг и собственный вес" />
+      <PageHead title="Тренировки" sub="Мини-степпер, гиря 12 кг, гиря 16 кг и собственный вес" />
       {s.trainingStartDate && s.trainingStartDate > today && (
         <div className="banner">
           <PiCalendarBlank />
@@ -124,7 +128,7 @@ export function TrainingHub() {
               </div>
             );
           })}
-          <Note kind="plain">Гиря разборная, до 24 кг. Стартовый вес для приседа и тяг — около 12–16 кг, для жима легче (6–10 кг). Вес увеличивайте постепенно, только при чистой технике и без боли. Дни восстановления — прогулка по самочувствию.</Note>
+          <Note kind="plain">Есть две гири: 12 кг и 16 кг. Присед, тяги и жим — 12 кг, румынская тяга — 16 кг (при нарушении техники — 12 кг). Вес приложение само не повышает: переход с 12 на 16 кг — только осознанно, при чистой технике и без боли. Без работы до отказа и без задержки дыхания. Расписание: силовые {weekdaysText(s.training.strengthDays)}, степпер {weekdaysText(s.training.cardioDays)} — не зависит от даты старта питания.</Note>
         </div>
 
         <div className="stack sticky-col">

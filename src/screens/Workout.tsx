@@ -4,8 +4,8 @@ import * as A from '../state/actions';
 import { useToday } from '../lib/clock';
 import { go, href } from '../app/router';
 import { taskById, statusOf, type DayTask } from '../domain/tasks';
-import { templateFor, prescription, weightText, exerciseName } from '../domain/templates';
-import { EXERCISES } from '../lib/seed';
+import { templateFor, prescription, weightText, exerciseName, plannedKg } from '../domain/templates';
+import { AVAILABLE_KETTLEBELLS, EXERCISES, PROFILE } from '../lib/seed';
 import { fmtDayMonth, fmtLong } from '../lib/dates';
 import type { Difficulty, Feeling, TemplateItem, TrainingLog, WorkoutTemplate } from '../state/types';
 import { DIFFICULTY_LABELS, FEELING_LABELS } from '../state/types';
@@ -90,6 +90,7 @@ export function WorkoutScreen({ taskId }: { taskId: string }) {
       )}
       {status === 'skipped' && <Note kind="plain">Тренировка отмечена как пропущенная. Отметьте подходы — и она снова станет активной.</Note>}
 
+      {tpl.type === 'strength' && <Note kind="plain">{(PROFILE as any).training_rules ?? 'Без работы до отказа, без задержки дыхания; при боли — остановитесь.'} Вес гири приложение не повышает само: переход с 12 на 16 кг — только вашим решением.</Note>}
       <div className="card flat" style={{ margin: '12px 0' }}>
         <div className="row between">
           <span><b className="num">{setsDone}</b> из <span className="num">{setsTotal}</span> подходов отмечено</span>
@@ -119,11 +120,28 @@ export function WorkoutScreen({ taskId }: { taskId: string }) {
 function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
   it: TemplateItem; idx: number; log?: TrainingLog; open: boolean; onToggleOpen: () => void; onSet: (si: number) => void; ensure: () => TrainingLog | null;
 }) {
-  const ex = EXERCISES[it.exerciseId];
   const el = log?.exercises.find((e) => e.index === idx);
+  const variant = el?.variantId && it.alternative?.exerciseId === el.variantId ? it.alternative : null;
+  const ex = EXERCISES[variant ? variant.exerciseId : it.exerciseId];
   const sets = el?.sets ?? Array.from({ length: it.sets }, () => false);
   const done = sets.length > 0 && sets.every(Boolean);
-  const isBell = ex?.equipment.includes('Гиря');
+  const isBell = !variant && !!ex?.equipment.includes('Гиря');
+  const planKg = variant ? null : plannedKg(it);
+  const actualReps = el?.reps ?? [];
+  const setVariant = (v: string | null) => { const l = ensure(); if (l) A.updateExerciseLog(l.id, idx, { variantId: v, weightKg: v ? null : el?.weightKg ?? null }); };
+  const pickKg = (kg: number) => {
+    const l = ensure();
+    if (!l) return;
+    if (planKg != null && kg > planKg && el?.weightKg !== kg && !confirm(`По плану гиря ${planKg} кг. Перейти на ${kg} кг только если техника чистая во всех повторах и нет боли. Записать ${kg} кг?`)) return;
+    A.updateExerciseLog(l.id, idx, { weightKg: el?.weightKg === kg ? null : kg });
+  };
+  const setReps = (si: number, v: number | null) => {
+    const l = ensure();
+    if (!l) return;
+    const arr = Array.from({ length: sets.length }, (_, i) => actualReps[i] ?? null);
+    arr[si] = v;
+    A.updateExerciseLog(l.id, idx, { reps: arr });
+  };
   const isTime = ex?.kind === 'time';
   const isCardio = ex?.kind === 'cardio';
   const wt = weightText(it);
@@ -137,13 +155,21 @@ function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
       <button className="ex-head" onClick={onToggleOpen} aria-expanded={open}>
         <span className={`ex-num${done ? ' done' : ''}`}>{done ? <PiCheckBold /> : idx + 1}</span>
         <span className="grow">
-          <span className="ex-name" style={{ display: 'block' }}>{exerciseName(it.exerciseId)}</span>
-          <span className="ex-presc">{prescription(it)}{wt ? `, ориентир ${wt}` : ''}{it.note ? ` · ${it.note}` : ''}</span>
+          <span className="ex-name" style={{ display: 'block' }}>{exerciseName(variant ? variant.exerciseId : it.exerciseId)}</span>
+          <span className="ex-presc">{variant ? `${it.sets} × ${variant.reps ?? it.reps}, без гири` : `${prescription(it)}${wt ? `, ${wt}` : ''}`}{it.note && !variant ? ` · ${it.note}` : ''}</span>
         </span>
         <span className="muted small">{open ? 'Скрыть' : 'Техника'}</span>
         {open ? <PiCaretUp /> : <PiCaretDown />}
       </button>
       <div className="ex-body">
+        {(it.condition || it.alternative) && (
+          <div className="note plain small" style={{ margin: 0 }}>
+            {it.condition && <div>{it.condition}.</div>}
+            {it.alternative && (variant
+              ? <button className="btn small" style={{ marginTop: 6 }} onClick={() => setVariant(null)}>Вернуть: {exerciseName(it.exerciseId)}{planKg ? `, ${planKg} кг` : ''}</button>
+              : <><div>{it.alternative.note}</div><button className="btn small" style={{ marginTop: 6 }} onClick={() => setVariant(it.alternative!.exerciseId)}>Заменить на «{exerciseName(it.alternative.exerciseId)}»</button></>)}
+          </div>
+        )}
         <div className="sets" role="group" aria-label={`Подходы: ${exerciseName(it.exerciseId)}`}>
           {sets.map((on, si) => (
             <button key={si} className={`set-btn${on ? ' on' : ''}`} onClick={() => onSet(si)} aria-pressed={on} aria-label={`Подход ${si + 1}${on ? ', выполнен' : ''}`}>
@@ -181,13 +207,27 @@ function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
           </div>
         )}
         {isBell && (
-          <div className="row" style={{ gap: 14, alignItems: 'flex-end' }}>
-            <div className="field" style={{ margin: 0 }}>
-              <span className="field-label">Фактический вес гири (необязательно)</span>
-              <NumberStepper label="Вес гири" value={el?.weightKg ?? null} step={2} min={0} max={24} unit="кг" onChange={(v) => {
-                const l = ensure();
-                if (l) A.updateExerciseLog(l.id, idx, { weightKg: v });
-              }} />
+          <div className="field" style={{ margin: 0 }}>
+            <span className="field-label">Гиря {el?.weightKg != null ? `— записано ${el.weightKg} кг` : planKg ? `— по плану ${planKg} кг` : ''}</span>
+            <div className="seg" role="group" aria-label="Вес гири">
+              {AVAILABLE_KETTLEBELLS.map((kg) => (
+                <button key={kg} type="button" aria-pressed={(el?.weightKg ?? null) === kg} onClick={() => pickKg(kg)}>{kg} кг{kg === planKg ? ' (план)' : ''}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!isCardio && (it.reps != null || it.seconds != null) && (
+          <div className="field" style={{ margin: 0 }}>
+            <span className="field-label">Фактически {it.seconds != null && !variant ? 'секунд' : 'повторов'}{it.perSide ? ` (на ${it.perSide})` : ''} — необязательно</span>
+            <div className="row" style={{ gap: 8 }}>
+              {sets.map((_, si) => (
+                <label key={si} className="row nowrap" style={{ gap: 4 }}>
+                  <span className="small muted">{si + 1}:</span>
+                  <input className="input num-input" style={{ width: 64 }} inputMode="numeric" aria-label={`Подход ${si + 1}: фактически`}
+                    placeholder={String(variant ? variant.reps ?? it.reps ?? '' : it.seconds ?? it.reps ?? '')}
+                    value={actualReps[si] ?? ''} onChange={(e) => { const n = parseInt(e.target.value, 10); setReps(si, Number.isFinite(n) && n >= 0 && n < 1000 ? n : null); }} />
+                </label>
+              ))}
             </div>
           </div>
         )}

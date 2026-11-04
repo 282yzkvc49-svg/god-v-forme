@@ -93,6 +93,8 @@ export interface ExerciseRow {
   setsDone: number;
   weightKgUsed: number | null;
   difficulty: Difficulty | null;
+  actualReps: (number | null)[] | null;
+  variantId: string | null;
 }
 
 export interface TrainingRow {
@@ -144,10 +146,12 @@ export function trainingRows(data: AppData, from: ISODate, to: ISODate, today: I
       return {
         index, exerciseId: it.exerciseId, name: exerciseName(it.exerciseId),
         plannedSets: it.sets, plannedReps: it.reps ?? null, plannedSeconds: it.seconds ?? null, plannedMinutes: it.minutes ?? null,
-        plannedWeightKg: it.weightKg ?? null, perSide: it.perSide ?? null,
+        plannedWeightKg: it.kettlebellKg != null ? [it.kettlebellKg, it.kettlebellKg] : it.weightKg ?? null, perSide: it.perSide ?? null,
         setsDone: el ? el.sets.filter(Boolean).length : 0,
         weightKgUsed: el?.weightKg ?? null,
         difficulty: el?.difficulty ?? null,
+        actualReps: el?.reps?.some((x) => x != null) ? el.reps : null,
+        variantId: el?.variantId ?? null,
       };
     });
     const setsDone = exercises.reduce((s, e) => s + e.setsDone, 0);

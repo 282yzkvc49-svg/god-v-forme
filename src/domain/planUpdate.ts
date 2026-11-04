@@ -9,7 +9,7 @@ import type {
 import { MEAL_LABELS, MEAL_SLOTS, TEMPLATE_IDS } from '../state/types';
 import type { Op } from '../state/idb';
 import { fmtShort, isISODate, isTime, type ISODate } from '../lib/dates';
-import { EXERCISES, KETTLEBELL_MAX_KG } from '../lib/seed';
+import { AVAILABLE_KETTLEBELLS, EXERCISES } from '../lib/seed';
 import { fmtNum, normText } from '../lib/util';
 import { exerciseName, prescription, templateFor, templateVersionFor, TEMPLATE_NAMES, weightText } from './templates';
 import { recipeById } from './meals';
@@ -127,7 +127,9 @@ function itemText(it: TemplateItem | undefined): string {
 }
 
 function maxWeight(it: TemplateItem | undefined): number | null {
-  return it?.weightKg ? it.weightKg[1] : null;
+  if (!it) return null;
+  if (it.kettlebellKg != null) return it.kettlebellKg;
+  return it.weightKg ? it.weightKg[1] : null;
 }
 
 /** Резкий рост нагрузки — требует отдельного подтверждения. */
@@ -165,16 +167,17 @@ function parseItem(x: any, path: string, v: V, partial: boolean): Partial<Templa
   }
   if ('per_side' in x) out.perSide = v.str(x.per_side, `${path}.per_side`, { max: 20 });
   if ('weight_kg' in x) {
+    // доступны только гири 12 и 16 кг; null — без гири
     const w = x.weight_kg;
-    if (w == null) out.weightKg = null;
+    const ok = (n: unknown) => typeof n === 'number' && AVAILABLE_KETTLEBELLS.includes(n);
+    const msg = `доступны только гири ${AVAILABLE_KETTLEBELLS.join(' и ')} кг или null (без гири)`;
+    if (w == null) { out.weightKg = null; out.kettlebellKg = null; }
     else if (Array.isArray(w)) {
-      const a = v.num(w[0], `${path}.weight_kg[0]`, 0, KETTLEBELL_MAX_KG, true), b = v.num(w[1], `${path}.weight_kg[1]`, 0, KETTLEBELL_MAX_KG, true);
-      if (a != null && b != null) { if (a > b) v.err(`${path}.weight_kg`, 'начало диапазона больше конца'); out.weightKg = [a, b]; }
-    } else {
-      const a = v.num(w, `${path}.weight_kg`, 0, KETTLEBELL_MAX_KG);
-      if (typeof w === 'number' && w > KETTLEBELL_MAX_KG) v.err(`${path}.weight_kg`, `гиря разборная до ${KETTLEBELL_MAX_KG} кг`);
-      if (a != null) out.weightKg = [a, a];
-    }
+      if (w.length !== 2 || !ok(w[0]) || !ok(w[1])) v.err(`${path}.weight_kg`, msg);
+      else if (w[0] !== w[1]) v.err(`${path}.weight_kg`, 'укажите одну гирю: 12 или 16 (диапазон не допускается — вес выбирается явно)');
+      else { out.weightKg = [w[0], w[0]]; out.kettlebellKg = w[0]; }
+    } else if (!ok(w)) v.err(`${path}.weight_kg`, msg);
+    else { out.weightKg = [w as number, w as number]; out.kettlebellKg = w as number; }
   }
   if ('note' in x) out.note = v.str(x.note, `${path}.note`, { max: 300 });
   if ('weight_note' in x) out.weightNote = v.str(x.weight_note, `${path}.weight_note`, { max: 200 });
@@ -231,7 +234,7 @@ function parseWorkoutTemplate(c: any, path: string, v: V, data: AppData, today: 
   if (hasItems) {
     newItems = items.map((x) => ({
       exerciseId: x.exerciseId, sets: x.sets, reps: x.reps ?? null, seconds: x.seconds ?? null, minutes: x.minutes ?? null,
-      perSide: x.perSide ?? EXERCISES[x.exerciseId]?.per_side ?? null, weightKg: x.weightKg ?? null, weightNote: x.weightNote ?? null, note: x.note ?? null,
+      perSide: x.perSide ?? EXERCISES[x.exerciseId]?.per_side ?? null, weightKg: x.weightKg ?? null, kettlebellKg: x.kettlebellKg ?? null, weightNote: x.weightNote ?? null, note: x.note ?? null,
     }));
   } else {
     newItems = cur.items.map((x) => ({ ...x }));
@@ -680,7 +683,7 @@ export function templatesForExport(data: AppData, date: ISODate) {
       rest_sec: t?.restSec ?? null,
       items: (t?.items ?? []).map((it) => ({
         exercise_id: it.exerciseId, name: exerciseName(it.exerciseId), sets: it.sets, reps: it.reps ?? null, seconds: it.seconds ?? null,
-        minutes: it.minutes ?? null, per_side: it.perSide ?? null, weight_kg: it.weightKg ?? null, note: it.note ?? null,
+        minutes: it.minutes ?? null, per_side: it.perSide ?? null, weight_kg: it.kettlebellKg ?? (it.weightKg ? (it.weightKg[0] === it.weightKg[1] ? it.weightKg[0] : it.weightKg) : null), note: it.note ?? null,
       })),
     };
   });

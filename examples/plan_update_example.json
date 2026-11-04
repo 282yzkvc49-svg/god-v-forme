@@ -11,7 +11,7 @@
       "effective_from": "2026-12-02",
       "reason": "Пример: присед 2×8 отмечен «легко» несколько раз подряд, жалоб нет",
       "item_updates": [
-        { "exercise_id": "goblet_squat", "sets": 3, "reps": 8, "weight_kg": [12, 16] },
+        { "exercise_id": "goblet_squat", "sets": 3, "reps": 8, "weight_kg": 12 },
         { "exercise_id": "glute_bridge", "sets": 3, "reps": 12 }
       ]
     },

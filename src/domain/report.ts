@@ -9,7 +9,7 @@ import {
   type TrainingRow,
 } from './stats';
 import { templatesForExport, PLAN_UPDATE_SCHEMA_VERSION } from './planUpdate';
-import { EXERCISES, KETTLEBELL_MAX_KG } from '../lib/seed';
+import { AVAILABLE_KETTLEBELLS, EXERCISES } from '../lib/seed';
 import { TEMPLATE_IDS } from '../state/types';
 
 export const REPORT_SCHEMA_VERSION = '1.0.0';
@@ -59,6 +59,8 @@ function workoutJson(r: TrainingRow) {
       planned: { sets: e.plannedSets, reps: e.plannedReps, seconds: e.plannedSeconds, minutes: e.plannedMinutes, weight_kg_range: e.plannedWeightKg, per_side: e.perSide },
       sets_marked: e.setsDone,
       weight_kg_used: e.weightKgUsed,
+      actual_reps_per_set: e.actualReps,
+      variant_exercise_id: e.variantId,
       difficulty: e.difficulty,
     })) : [],
   };
@@ -127,8 +129,10 @@ export function buildReport(data: AppData, o: ReportOptions) {
       start_weight_kg: data.settings.goals.startWeightKg,
       target_weight_kg: data.settings.goals.targetWeightKg,
       kcal_reference_per_day: data.settings.goals.kcalReference,
-      kcal_note: 'Оценочный стартовый ориентир, калории по блюдам не считаются.',
-      equipment: ['мини-степпер', `одна разборная гиря до ${KETTLEBELL_MAX_KG} кг`, 'собственный вес'],
+      kcal_note: 'Калорийность приёмов пищи считается по справочным данным (USDA, Скурихин); для продуктов «по этикетке» — требует уточнения.',
+      equipment: ['мини-степпер', 'гиря 12 кг', 'гиря 16 кг', 'собственный вес'],
+      nutrition_plan: data.settings.plan ? { start_date: data.settings.plan.startDate, relax_day_number: data.settings.plan.relaxDay } : null,
+      training_schedule: data.settings.training,
       training_start_date: data.settings.trainingStartDate,
     },
     weights: o.include.weights ? weights.map((w) => ({ date: w.date, kg: w.kg })) : [],
@@ -160,7 +164,7 @@ export function buildReport(data: AppData, o: ReportOptions) {
       templates: templatesForExport(data, to),
       allowed_exercise_ids: Object.keys(EXERCISES),
       allowed_template_ids: TEMPLATE_IDS,
-      kettlebell_max_kg: KETTLEBELL_MAX_KG,
+      available_kettlebells_kg: AVAILABLE_KETTLEBELLS,
       plan_days_loaded_until: Object.keys(data.planDays).sort().slice(-1)[0] ?? null,
     },
     plan_update_schema_version: PLAN_UPDATE_SCHEMA_VERSION,
@@ -179,7 +183,7 @@ function buildMarkdown(data: AppData, o: ReportOptions, j: any, rows: TrainingRo
   L.push(`# Отчёт за период ${fmtFull(o.from)} — ${fmtFull(o.to)}`);
   L.push('');
   L.push(`Приложение «Мой год в форме», версия ${o.appVersion}. Сформирован ${o.generatedAt.slice(0, 16).replace('T', ' ')}.`);
-  L.push(`Цель: ${fmtNum(j.goals.start_weight_kg)} → ${fmtNum(j.goals.target_weight_kg)} кг примерно за год. Инвентарь: мини-степпер, одна разборная гиря до 24 кг, собственный вес.`);
+  L.push(`Цель: ${fmtNum(j.goals.start_weight_kg)} → ${fmtNum(j.goals.target_weight_kg)} кг примерно за год. Инвентарь: мини-степпер, гиря 12 кг, гиря 16 кг, собственный вес (других весов нет).`);
   L.push('В отчёт попали только введённые данные. Отсутствие отметки не означает пропуск.');
   L.push('');
   L.push('## Вес');
@@ -284,7 +288,7 @@ export const PLAN_UPDATE_SCHEMA_DOC = `## Схема plan_update.json для о�
       "effective_from": "2026-12-02",
       "reason": "Присед 2×8 с 12 кг оценён как «легко» три раза подряд",
       "item_updates": [
-        { "exercise_id": "goblet_squat", "sets": 3, "reps": 8, "weight_kg": [12, 14] }
+        { "exercise_id": "goblet_squat", "sets": 3, "reps": 8, "weight_kg": 12 }
       ]
     },
     {

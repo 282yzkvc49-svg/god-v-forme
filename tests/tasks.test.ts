@@ -14,26 +14,28 @@ test('день плана: 4 приёма пищи, тренировка, кон
   assert.equal(t.find((x) => x.kind === 'training')!.title, 'Силовая А');
 });
 
-test('04.11 — готовка, 16.11 — закупка, 01.11 — закупка и готовка', () => {
+test('04.11 — готовка, 15.11 — вторая закупка, 01.11 — закупка и готовка', () => {
   const d = freshData();
   assert.ok(tasksForDate(d, '2026-11-04').some((t) => t.kind === 'cooking'));
-  assert.ok(tasksForDate(d, '2026-11-16').some((t) => t.kind === 'shopping'));
+  assert.ok(tasksForDate(d, '2026-11-15').some((t) => t.kind === 'shopping'));
   const nov1 = tasksForDate(d, '2026-11-01').map((t) => t.kind);
   assert.ok(nov1.includes('shopping') && nov1.includes('cooking'));
   assert.ok(tasksForDate(d, '2026-11-28').some((t) => t.kind === 'cooking'), '28.11 — сдвинутая готовка');
 });
 
-test('29.11 — релакс-день: нет приёмов пищи, тренировки и готовки', () => {
+test('29.11 — релакс-день: нет приёмов пищи, готовки и контейнеров; тренировки — по своему расписанию', () => {
   const d = freshData();
   const t = tasksForDate(d, '2026-11-29');
-  assert.ok(!t.some((x) => x.kind === 'meal' || x.kind === 'training' || x.kind === 'cooking' || x.kind === 'containers'));
+  assert.ok(!t.some((x) => x.kind === 'meal' || x.kind === 'cooking' || x.kind === 'containers'));
+  assert.equal(t.find((x) => x.kind === 'training')?.templateId, 'recovery', 'воскресенье — восстановление');
 });
 
-test('после 01.12 план не копируется', () => {
+test('после 01.12 меню не копируется, тренировки продолжаются по расписанию', () => {
   const d = freshData();
   assert.equal(d.planDays['2026-12-02'], undefined);
   const t = tasksForDate(d, '2026-12-02');
-  assert.ok(!t.some((x) => x.kind === 'meal' || x.kind === 'training'));
+  assert.ok(!t.some((x) => x.kind === 'meal'));
+  assert.ok(t.some((x) => x.kind === 'training' && x.templateId?.startsWith('strength')), 'среда — силовая');
   // взвешивания и фото работают бессрочно
   assert.ok(baseTasksForDate(d, '2027-06-07').some((x) => x.kind === 'weigh'));
   assert.ok(baseTasksForDate(d, '2027-06-07').some((x) => x.kind === 'photo'), 'фото — каждый понедельник');

@@ -41,10 +41,23 @@ export function prescription(it: TemplateItem): string {
   return it.note || `${it.sets} подход`;
 }
 
+/** «гиря 12 кг», «гиря 16 кг (при нарушении техники — 12 кг)», «без гири»; для степпера — null. */
 export function weightText(it: TemplateItem): string | null {
-  if (!it.weightKg) return null;
-  const [a, b] = it.weightKg;
-  return a === b ? `${fmtNum(a)} кг` : `${fmtNum(a)}–${fmtNum(b)} кг`;
+  if (it.kettlebellKg != null) return `гиря ${fmtNum(it.kettlebellKg)} кг${it.fallbackKg ? ` (при нарушении техники — ${fmtNum(it.fallbackKg)} кг)` : ''}`;
+  if (it.weightKg) {
+    const [a, b] = it.weightKg;
+    return a === b ? `гиря ${fmtNum(a)} кг` : `гиря ${fmtNum(a)}–${fmtNum(b)} кг`;
+  }
+  const ex = EXERCISES[it.exerciseId];
+  if (!ex || ex.kind === 'cardio' || !ex.steps.length) return null;
+  return 'без гири';
+}
+
+/** Вес по плану для записи в журнал (12, 16 или null — без гири). */
+export function plannedKg(it: TemplateItem): number | null {
+  if (it.kettlebellKg != null) return it.kettlebellKg;
+  if (it.weightKg && it.weightKg[0] === it.weightKg[1]) return it.weightKg[0];
+  return null;
 }
 
 export function exerciseName(id: string): string {
@@ -56,6 +69,5 @@ export function plannedSets(t: WorkoutTemplate): number {
 }
 
 export function itemSummary(it: TemplateItem): string {
-  const w = weightText(it);
-  return [prescription(it), w ? `ориентир ${w}` : null].filter(Boolean).join(', ');
+  return [prescription(it), weightText(it)].filter(Boolean).join(', ');
 }

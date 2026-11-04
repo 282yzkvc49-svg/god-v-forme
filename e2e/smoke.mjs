@@ -48,15 +48,28 @@ async function go(page, hash) {
 
 const ctx = await browser.newContext({ viewport: { width: 1180, height: 820 }, acceptDownloads: true, locale: 'ru-RU', timezoneId: 'Europe/Moscow' });
 const page = await newPage(ctx);
+ctx.setDefaultTimeout(12000);
 active = page;
 const downloads = {};
 
-await step('1. Первый запуск: онбординг и задачи сегодняшнего дня', async () => {
+await step('1. Первый запуск: дата старта питания и тренировок, день с граммовками', async () => {
   await page.goto(`${BASE}?today=2026-11-02#/today`);
-  await page.getByRole('button', { name: 'Понятно, начать' }).click();
+  await page.getByRole('heading', { name: 'Когда начинаем программу питания?' }).waitFor();
+  await page.locator('.sheet').getByRole('button', { name: 'Сегодня', exact: true }).click();
+  await page.getByText(/первую закупку и готовку нужно сделать сегодня до обеда/).first().waitFor();
+  assert(await page.getByText(/Релакс-день/).count() > 0, 'нет релакс-дня в предпросмотре');
+  await page.screenshot({ path: path.join(shots, '00-onboarding-start.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Дальше' }).click();
+  await page.getByRole('heading', { name: 'Когда начать тренировки?' }).waitFor();
+  await page.locator('.sheet input[type=date]').fill('2026-11-02');
+  await page.getByRole('button', { name: 'Начать', exact: true }).click();
   await page.getByText('Понедельник, 2 ноября').first().waitFor();
-  assert(await page.getByText('Овсянка на ночь: йогурт, банан, лён, грецкий орех').count() > 0, 'нет завтрака из seed');
+  assert(await page.locator('.task.k-shopping').count() === 1 && await page.locator('.task.k-cooking').count() === 1, 'старт сегодня — закупка и готовка сегодня');
+  await go(page, '/day/2026-11-02');
+  await page.getByText('Овсянка на ночь с бананом').first().waitFor();
+  assert(await page.getByText('Овсяные хлопья «Геркулес» (долгой варки)').count() > 0, 'нет состава с граммами');
   assert(await page.locator('.task').count() >= 7, 'мало задач');
+  await page.screenshot({ path: path.join(shots, '01-day-ipad.png'), fullPage: true });
   await page.screenshot({ path: path.join(shots, '01-today-ipad.png'), fullPage: true });
 });
 
@@ -70,10 +83,11 @@ await step('2. 02.11 → Силовая А → техника → подходы
   const sets = page.locator('.set-btn');
   const n = await sets.count();
   for (let i = 0; i < n; i++) await sets.nth(i).click();
-  // вес и сложность для приседа
-  const weightInput = page.getByLabel('Вес гири', { exact: true }).first();
-  await weightInput.fill('12');
-  await weightInput.blur();
+  // вес и сложность для приседа: только гири 12 и 16 кг
+  const bells = page.getByRole('group', { name: 'Вес гири' }).first();
+  assert(await bells.getByRole('button').count() === 2, 'выбор только из двух гирь');
+  await bells.getByRole('button', { name: /12 кг/ }).click();
+  await page.getByLabel('Подход 1: фактически').nth(1).fill('8');
   await page.getByRole('group', { name: 'Сложность' }).first().getByRole('button', { name: 'легко' }).click();
   await page.getByText('Таймер отдыха').or(page.getByText('Отдых')).first().waitFor();
   await page.getByRole('button', { name: /Завершить тренировку/ }).click();
@@ -92,26 +106,30 @@ await step('2. 02.11 → Силовая А → техника → подходы
 await step('3. 04.11 → готовка: блюда, продукты, пошаговые рецепты', async () => {
   await go(page, '/day/2026-11-04');
   await page.locator('.task.k-cooking .task-main').click();
-  await page.getByRole('heading', { name: /Готовка, 4 ноября/ }).waitFor();
-  assert(await page.getByText('Тефтели индейки').count() > 0, 'нет блюд готовки');
-  assert(await page.getByText('Нужные продукты').count() === 1, 'нет продуктов');
+  await page.getByRole('heading', { name: /Основная готовка, 4 ноября/ }).waitFor();
+  assert(await page.getByText('Тефтели из индейки').count() > 0, 'нет блюд готовки');
+  assert(await page.getByText('Продукты на всю партию').count() >= 3, 'нет продуктов на партию');
+  assert(await page.getByText('3 порции').count() > 0, 'порции партии');
+  assert(await page.getByText(/Контейнеры: \d+/).count() === 1, 'нет контейнеров');
   await page.screenshot({ path: path.join(shots, '03-cooking.png'), fullPage: true });
-  await page.locator('a.chip', { hasText: 'Тефтели из индейки' }).first().click();
+  await page.locator('a', { hasText: 'Карточка рецепта' }).first().click();
   await page.getByRole('heading', { name: 'Пошагово' }).waitFor();
   await page.locator('.step-item .check').first().click();
   assert(await page.locator('.step-item.on').count() === 1, 'шаг не отметился');
 });
 
-await step('4. 16.11 → закупка: отметки и бюджет', async () => {
-  await go(page, '/day/2026-11-16');
+await step('4. 15.11 → вторая закупка: количества из меню, отметки, «есть дома», бюджет', async () => {
+  await go(page, '/day/2026-11-15');
   await page.locator('.task.k-shopping .task-main').click();
-  await page.getByRole('heading', { name: 'Закупка на 16–30 дни' }).waitFor();
+  await page.getByRole('heading', { name: 'Основная закупка 2' }).waitFor();
   await page.locator('.shop-item .check').nth(0).click();
   await page.locator('.shop-item .check').nth(1).click();
-  await page.getByText('2 из 51').waitFor();
-  assert(await page.getByText(/14\s474\s₽/).count() > 0, 'нет ориентира бюджета');
+  assert(await page.locator('.shop-item.bought').count() === 2, 'отметки «куплено»');
+  await page.locator('.shop-item button.chip', { hasText: 'есть дома' }).nth(2).click();
+  assert(await page.locator('.shop-item.bought').count() === 3, '«есть дома»');
+  assert(await page.getByText('Ориентир по списку').count() === 1, 'нет ориентира бюджета');
   await page.getByRole('button', { name: 'Вписать фактические цены' }).click();
-  const price = page.getByLabel('Фактическая цена: Куриная грудка');
+  const price = page.locator('.price-input').first();
   await price.fill('799,90');
   await price.blur();
   await page.getByText(/Фактически \(1 поз\.\)/).waitFor();
@@ -122,7 +140,7 @@ await step('5. 29.11 → релакс-день без обязательных �
   await go(page, '/day/2026-11-29');
   await page.getByRole('heading', { name: 'Релакс-день' }).waitFor();
   assert(await page.locator('.task.k-meal').count() === 0, 'в релакс-день есть приёмы пищи');
-  assert(await page.locator('.task.k-training').count() === 0, 'в релакс-день есть тренировка');
+  assert(await page.locator('.task.k-cooking').count() === 0, 'в релакс-день есть готовка');
   await page.screenshot({ path: path.join(shots, '05-relax.png'), fullPage: true });
 });
 
@@ -196,7 +214,7 @@ await step('9. Импорт plan_update.json → «Было → Станет» �
   await go(page, '/day/2026-11-02');
   assert(await page.locator('.task.k-training .status-tag.done').count() === 1, 'история тренировки 02.11 исчезла');
   await go(page, '/workout/train%3A2026-12-04');
-  await page.getByText('3 × 8, ориентир 12–16 кг').waitFor();
+  await page.getByText('3 × 8, гиря 12 кг').waitFor();
 });
 
 await step('10. Офлайн: приложение, техника, меню и чек-листы доступны', async () => {
@@ -209,9 +227,9 @@ await step('10. Офлайн: приложение, техника, меню и 
   await go(page, '/exercise/kb_rdl');
   assert(await page.locator('svg.fig-svg').count() >= 2, 'нет схем офлайн');
   await go(page, '/nutrition?d=2026-11-05');
-  await page.getByText('Тефтели из индейки + булгур + кабачок + морковь').first().waitFor();
-  await go(page, '/shop/shop-2026-11-16');
-  await page.getByText('2 из 51').waitFor();
+  await page.getByText('Тефтели из индейки + булгур + кабачок с морковью').first().waitFor();
+  await go(page, '/shop/shop-p20261102-m2');
+  await page.locator('.shop-item.bought').nth(2).waitFor();
   await ctx.setOffline(false);
 });
 
@@ -225,8 +243,8 @@ await step('11. Резервная копия → восстановление �
   const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true, hasTouch: true, locale: 'ru-RU' });
   const p2 = await newPage(ctx2);
   active = p2;
-  await p2.goto(`${BASE}?today=2026-11-02#/analysis?tab=backup`);
-  await p2.getByRole('button', { name: 'Понятно, начать' }).click();
+  await p2.goto(`${BASE}?today=2026-11-02#/today`);
+  await p2.getByRole('button', { name: /есть резервная копия/ }).click();
   await p2.locator('.card', { hasText: 'Восстановить из копии' }).locator('input[type=file]').setInputFiles(file);
   await p2.getByText('Целостность проверена').waitFor();
   await p2.getByRole('button', { name: 'Восстановить' }).click();

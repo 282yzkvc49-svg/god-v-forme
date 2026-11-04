@@ -11,6 +11,9 @@ import { parseIngredientLine, scaleRecipe, stepChips } from '../domain/scale';
 import { MEAL_LABELS, MEAL_SLOTS, type MealSlot, type Recipe, type RecipeType } from '../state/types';
 import { CheckButton, Disclosure, Empty, Note, PageHead, Seg, toast } from '../ui/kit';
 import { MealParts, NoPlanCard, RelaxCard } from './shared';
+import { MealCardView } from './planViews';
+import { dayNutrition, planPosition, PLAN_LENGTH } from '../domain/plan';
+import { DISHES, dishNutrition, ingredientLines, kcalText, TEMPLATE } from '../domain/catalog';
 import { PiBookOpen, PiCaretLeft, PiCaretRight, PiCheck, PiMagnifyingGlass, PiSnowflake, PiThermometer, PiClock, PiTrash, PiPackage } from '../ui/icons';
 
 const BOX_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'snack'];
@@ -45,7 +48,13 @@ export function NutritionScreen() {
           {p?.relax && <RelaxCard date={date} />}
           {!p && <NoPlanCard date={date} />}
           {p && !p.relax && isWeekend(date) && <Note kind="plain">{PROFILE.weekend_note}</Note>}
-          {tasks.map((t) => {
+          {p?.mealCards && (() => {
+            const n = dayNutrition(p);
+            const pos = planPosition(data.settings.plan, date);
+            return n ? <Note kind={n.labelProducts.length ? 'plain' : 'ok'}>{pos ? `День ${pos} из ${PLAN_LENGTH}. ` : ''}За день ≈{Math.round(n.kcal / 10) * 10} ккал, Б {Math.round(n.p)} · Ж {Math.round(n.f)} · У {Math.round(n.c)} г (справочные данные){n.labelProducts.length ? `; калорийность требует уточнения по этикетке: ${n.labelProducts.join(', ')}` : ''}.</Note> : null;
+          })()}
+          {p?.mealCards && MEAL_SLOTS.map((s) => <MealCardView key={s} date={date} slot={s} card={p.mealCards![s]} task={tasks.find((t) => t.slot === s) ?? null} />)}
+          {!p?.mealCards && tasks.map((t) => {
             const parts = resolveMeal(data, t.slot!, t.dish!);
             const st = statusOf(data, t);
             return (
@@ -80,7 +89,7 @@ export function NutritionScreen() {
                 {BOX_SLOTS.map((s) => {
                   const id = `box:${date}:${s}`;
                   const on = !!data.checks[id];
-                  const dish = tp!.meals![s];
+                  const dish = tp!.mealCards?.[s] ? tp!.mealCards[s].parts.map((x) => `${DISHES[x.dishId]?.short ?? x.dishId} ${DISHES[x.dishId]?.unit === 'g' ? `${Math.round(x.qty)} г` : ''}`.trim()).join(', ') : tp!.meals![s];
                   return (
                     <div className="li" key={s}>
                       <CheckButton small state={on ? 'on' : 'off'} label={`${MEAL_LABELS[s]} упакован`} onClick={() => A.setCheck(id, !on)} />
@@ -99,7 +108,7 @@ export function NutritionScreen() {
             <p className="small mt0">{PROFILE.drinks}</p>
             <p className="small muted">{PROFILE.exclusions} {PROFILE.kitchen}</p>
             <Disclosure summary="Справка о калорийности">
-              <p className="small mt0">{PROFILE.kcal_note} Калории и БЖУ в приложении не ведутся; по блюдам цифры не выводятся, чтобы не создавать ложной точности.</p>
+              <p className="small mt0">{PROFILE.kcal_note} {TEMPLATE.nutrition_sources} Если в блюде есть такой продукт, вместо числа написано «Калорийность требует уточнения», а оценка без учёта марки — мелким шрифтом.</p>
             </Disclosure>
           </div>
         </div>
@@ -174,7 +183,13 @@ export function RecipePage({ id }: { id: string }) {
     const out: { date: ISODate; slot: MealSlot }[] = [];
     for (const d of Object.values(data.planDays).sort((a, b) => (a.date < b.date ? -1 : 1))) {
       if (!d.meals) continue;
-      for (const s of MEAL_SLOTS) if (resolveMeal(data, s, d.meals[s]).some((p) => p.recipe?.id === r.id && p.status === 'recipe')) out.push({ date: d.date, slot: s });
+      for (const s of MEAL_SLOTS) {
+        const card = d.mealCards?.[s];
+        const used = card
+          ? card.parts.some((p) => p.dishId === r.id || DISHES[p.dishId]?.ingredients.some((i) => i.product === r.id))
+          : resolveMeal(data, s, d.meals[s]).some((p) => p.recipe?.id === r.id && p.status === 'recipe');
+        if (used) out.push({ date: d.date, slot: s });
+      }
     }
     return out;
   }, [data, r]);
@@ -182,6 +197,8 @@ export function RecipePage({ id }: { id: string }) {
   const scaled = scaleRecipe(r, servings);
   const storage = STORAGE_GUIDE.filter((s) => r.storage_ids.includes(s.id));
   const anyChecked = r.steps.some((_, i) => data.checks[`recipe:${r.id}:${i}`]);
+  const dish = DISHES[r.id];
+  const kt = dish ? kcalText(dishNutrition(r.id, dish.unit === 'g' ? 100 : servings)) : null;
   return (
     <div className="page">
       <PageHead title={r.title} sub={`${r.type_label}. Выход: ${r.yield_text}`} backTo={route.query.get('d') ? '/nutrition' : '/recipes'} />
@@ -190,8 +207,18 @@ export function RecipePage({ id }: { id: string }) {
           <div className="card">
             <div className="card-head">
               <h2>Ингредиенты</h2>
-              <Seg value={servings} onChange={setServings} label="Порции" options={[1, 2, 3, 4].map((n) => ({ value: n, label: `${n} порц.` }))} />
+              <Seg value={servings} onChange={setServings} label="Порции" options={[1, 2, 3, 4].map((n) => ({ value: n, label: dish?.unit === 'g' ? `${n * 100} г` : `${n} порц.` }))} />
             </div>
+            {kt && <p className="small mt0"><span className={`chip ${kt.verified ? 'accent' : 'warn'}`}>{kt.main}</span> {dish.unit === 'g' ? 'на 100 г' : `на ${servings} порц.`}{kt.detail ? ` · ${kt.detail}` : ''}</p>}
+            {dish && <p className="hint mt0">Способ: {dish.method}. {dish.unit === 'portion' && dish.serving_g ? `Готовая порция ≈${dish.serving_g} г. ` : ''}Мясо и рыба — масса до приготовления; крупы — сухой вес; фрукты — съедобная часть.</p>}
+            {dish ? (
+              <ul className="ing-list">
+                {ingredientLines(r.id, dish.unit === 'g' ? 100 * servings : servings, servings > 1).map((l, i) => (
+                  <li key={i}><span className={`ing-dot${l.dishId ? ' text' : ''}`} /><span className="grow">{l.name}{l.note ? <span className="orig"> — {l.note}</span> : null}</span><span className="num">{l.amount}</span></li>
+                ))}
+                {dish.spices.map((t, i) => <li key={`s${i}`}><span className="ing-dot text" /><span className="grow muted">{t}</span></li>)}
+              </ul>
+            ) : <>
             {!scaled.canScale && <Note kind="plain">{scaled.reason ?? 'Пересчёт недоступен.'} Показан исходный текст.</Note>}
             {scaled.canScale && servings !== r.servings && <p className="hint mt0">Пересчитано с {r.servings} на {servings}. Количества без цифр в источнике («лук», «чеснок») остаются по вкусу.</p>}
             <ul className="ing-list">
@@ -202,6 +229,7 @@ export function RecipePage({ id }: { id: string }) {
                 </li>
               ))}
             </ul>
+            </>}
           </div>
           <div className="card">
             <div className="card-head">

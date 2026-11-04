@@ -1,9 +1,7 @@
 // Стартовый план из src/data/initial_seed.json → записи хранилища.
 import seedJson from '../data/initial_seed.json';
-import type {
-  CookingEvent, Exercise, MealMapEntry, PlanDay, Recipe, Settings, ShoppingEvent, TemplateId, TemplateVersion,
-  TrainingKind, WorkoutTemplate,
-} from '../state/types';
+import type { Exercise, MealMapEntry, Recipe, RecipeType, Settings, TemplateId, TemplateVersion, WorkoutTemplate } from '../state/types';
+import { DISHES, PRODUCTS, TEMPLATE, fmtAmount, type Dish } from '../domain/catalog';
 
 export const SEED: any = seedJson;
 export const SEED_ID: string = SEED.seed_id;
@@ -24,7 +22,7 @@ export interface SeedProfile {
   exclusions: string;
   kitchen: string;
   training_equipment: string[];
-  kettlebell_max_kg: number;
+  kettlebells_kg: number[];
   control: string;
 }
 
@@ -32,16 +30,55 @@ export const PROFILE: SeedProfile = SEED.profile;
 export const MEMO: { label: string; text: string }[] = SEED.memo;
 export const STORAGE_GUIDE: { id: string; text: string; source: string }[] = SEED.storage_guide;
 export const EXERCISES: Record<string, Exercise> = Object.fromEntries((SEED.exercise_library as Exercise[]).map((e) => [e.id, e]));
-export const SEED_RECIPES: Recipe[] = SEED.recipes;
-export const SEED_MEAL_MAP: MealMapEntry[] = SEED.meal_recipe_map;
-export const SHOPPING_META: {
-  budget_limit_rub: number;
-  model_total_rub: number;
-  price_warning: string;
-  categories_order: string[];
-} = SEED.shopping;
+/** Старые id рецептов (первая версия плана) → блюда нового меню: для своих связей и импорта. */
+export const LEGACY_RECIPE_IDS: Record<string, string> = Object.fromEntries(
+  [...TEMPLATE.dishes.filter((d) => d.legacy && !DISHES[d.legacy]).map((d) => [d.legacy as string, d.id]),
+    ['grains', 'grain_rice']] as [string, string][],
+);
 
-export const KETTLEBELL_MAX_KG: number = PROFILE.kettlebell_max_kg ?? 24;
+const TYPE_OF: Record<Dish['category'], RecipeType> = { main: 'main', side: 'side', veg: 'side', protein: 'main', breakfast: 'breakfast', snack: 'snack', other: 'other' };
+const TYPE_LABEL: Record<RecipeType, string> = { main: 'Основное', side: 'Гарнир', breakfast: 'Завтрак', snack: 'Перекус', other: 'Заготовка' };
+
+/** Блюдо меню → карточка рецепта (на 1 порцию; крупы и заготовки — на 100 г). */
+export function dishToRecipe(d: Dish): Recipe {
+  const per = d.unit === 'g' ? 100 : 1;
+  const ingredients = d.ingredients.map((i) => {
+    const q = i.qty * per;
+    const p = PRODUCTS[i.product];
+    const sub = DISHES[i.product];
+    const unit = p ? (p.unit === 'g' ? 'г' : p.unit === 'ml' ? 'мл' : 'шт.') : 'г';
+    const name = p ? p.name : sub ? `${sub.title} (из готовки)` : i.product;
+    const amount = p ? fmtAmount(q, p.unit) : `${Math.round(q)} г`;
+    return { source_text: `${name} — ${amount}`, qty: Math.round(q * 100) / 100, qty_max: null, unit, name };
+  });
+  const spices = d.spices.map((t) => ({ source_text: t, qty: null, qty_max: null, unit: null, name: t }));
+  const type = TYPE_OF[d.category];
+  return {
+    id: d.id, title: d.title, type, type_label: TYPE_LABEL[type],
+    yield_text: d.unit === 'g' ? `на 100 ${d.unit_label ?? 'г'}` : `1 порция${d.serving_g ? ` (≈${d.serving_g} г)` : ''}`,
+    servings: 1, scalable: true,
+    ingredients_text: [...ingredients, ...spices].map((x) => x.source_text).join('; '),
+    ingredients: [...ingredients, ...spices],
+    method_text: d.steps.map((x) => x.text).join(' '),
+    steps: d.steps,
+    storage_ids: d.kind === 'batch' ? ['portion', 'cool_fast', 'freeze', 'veg_separate', 'reheat'] : ['work_fridge'],
+    source: 'Меню на 30 дней',
+  };
+}
+
+export const SEED_RECIPES: Recipe[] = TEMPLATE.dishes.map(dishToRecipe);
+export const SEED_MEAL_MAP: MealMapEntry[] = (SEED.meal_recipe_map ?? []).map((e: MealMapEntry) => ({
+  ...e, recipe_id: e.recipe_id ? (LEGACY_RECIPE_IDS[e.recipe_id] ?? (DISHES[e.recipe_id] ? e.recipe_id : null)) : null,
+  kind: e.recipe_id && !DISHES[LEGACY_RECIPE_IDS[e.recipe_id] ?? e.recipe_id] ? 'unknown' : e.kind,
+}));
+export const SHOPPING_META = {
+  budget_limit_rub: TEMPLATE.budget_rub,
+  price_warning: TEMPLATE.price_note,
+  categories_order: TEMPLATE.categories,
+};
+
+/** Гири, которые есть у пользователя. Других весов в программе нет. */
+export const AVAILABLE_KETTLEBELLS: number[] = PROFILE.kettlebells_kg ?? [12, 16];
 
 export function seedTemplate(raw: any): WorkoutTemplate {
   return {
@@ -59,26 +96,14 @@ export function seedTemplate(raw: any): WorkoutTemplate {
       minutes: it.minutes ?? null,
       perSide: it.per_side ?? null,
       weightKg: it.weight_kg ?? null,
+      kettlebellKg: it.kettlebell_kg ?? null,
+      fallbackKg: it.fallback_kg ?? null,
+      alternative: it.alternative ? { exerciseId: it.alternative.exercise_id, reps: it.alternative.reps ?? null, note: it.alternative.note ?? null } : null,
+      condition: it.condition ?? null,
       weightNote: it.weight_note ?? null,
       note: it.note ?? null,
     })),
   };
-}
-
-export function seedPlanDays(): PlanDay[] {
-  return (SEED.calendar as any[]).map((d) => ({
-    date: d.date,
-    source: 'seed',
-    patchId: null,
-    dayNumber: d.day_number,
-    relax: !!d.relax_day,
-    meals: d.meals,
-    relaxMealsText: d.relax_meals_text ?? null,
-    training: d.training ? { templateId: d.training.template_id as TrainingKind, label: d.training.label, time: null } : null,
-    drinks: d.drinks,
-    note: d.note,
-    kcalNote: d.kcal_note,
-  }));
 }
 
 export const SEED_EFFECTIVE_FROM = '1970-01-01';
@@ -95,43 +120,6 @@ export function seedTemplateVersions(now: string): TemplateVersion[] {
   }));
 }
 
-export function seedShoppingEvents(): ShoppingEvent[] {
-  return (SEED.shopping.shopping_events as any[]).map((e) => ({
-    id: e.id,
-    date: e.date,
-    title: e.title,
-    forDatesText: e.for_dates_text,
-    source: 'seed',
-    patchId: null,
-    items: e.items.map((it: any) => ({
-      itemId: it.item_id,
-      category: it.category,
-      name: it.name,
-      unit: it.unit,
-      qty: it.qty,
-      pricePerUnit: it.price_per_unit_rub,
-      priceEstimate: it.price_estimate_rub,
-      note: it.note,
-    })),
-  }));
-}
-
-export function seedCookingEvents(): CookingEvent[] {
-  return (SEED.cooking_events as any[]).map((e) => ({
-    id: e.id,
-    date: e.date,
-    eventType: e.event_type,
-    title: e.title,
-    sourceText: e.source_text,
-    forDaysText: e.for_days_text,
-    forDates: e.for_dates,
-    storage: e.storage,
-    dishes: e.dishes.map((d: any) => ({ text: d.text, recipeIds: d.recipe_ids, comment: d.comment })),
-    source: 'seed',
-    patchId: null,
-  }));
-}
-
 export function defaultSettings(): Settings {
   return {
     key: 'main',
@@ -145,6 +133,8 @@ export function defaultSettings(): Settings {
     containersEnabled: true,
     trainingStartDate: null,
     postponeCardio: false,
+    plan: null,
+    training: { startDate: TEMPLATE.base_start, strengthDays: [1, 3, 5], cardioDays: [2, 6] },
     restDefaultSec: 75,
     restAutoStart: true,
     restSound: true,
@@ -157,5 +147,5 @@ export function defaultSettings(): Settings {
   };
 }
 
-export const PLAN_START: string = SEED.period.from;
-export const PLAN_END: string = SEED.period.to;
+/** Базовая дата шаблона меню (день 1). Реальную дату старта выбирает пользователь. */
+export const PLAN_START: string = TEMPLATE.base_start;

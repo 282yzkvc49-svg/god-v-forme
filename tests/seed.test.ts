@@ -1,76 +1,75 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SEED } from '../src/lib/seed';
+import { SEED, SEED_RECIPES, AVAILABLE_KETTLEBELLS, seedTemplateVersions } from '../src/lib/seed';
+import { DISHES, PRODUCTS, TEMPLATE, dishNutrition } from '../src/domain/catalog';
 import { freshData } from './helpers';
-import { resolveMeal } from '../src/domain/meals';
 import { MEAL_SLOTS } from '../src/state/types';
 
-test('seed: 30 дней 02.11–01.12, 28 рецептов без дублей', () => {
-  assert.equal(SEED.calendar.length, 30);
-  assert.equal(SEED.calendar[0].date, '2026-11-02');
-  assert.equal(SEED.calendar[29].date, '2026-12-01');
-  assert.equal(new Set(SEED.calendar.map((d: any) => d.date)).size, 30);
-  assert.equal(SEED.recipes.length, 28);
-  assert.equal(new Set(SEED.recipes.map((r: any) => r.id)).size, 28);
-  assert.equal(new Set(SEED.recipes.map((r: any) => r.title)).size, 28);
+test('шаблон меню: 30 дней, релакс-день 28, 116 приёмов пищи с конкретными блюдами', () => {
+  assert.equal(TEMPLATE.days.length, 30);
+  assert.equal(TEMPLATE.base_start, '2026-11-02');
+  assert.equal(TEMPLATE.relax_day, 28);
+  const menuDays = TEMPLATE.days.filter((d) => !d.relax);
+  assert.equal(menuDays.length, 29);
+  let meals = 0;
+  for (const d of menuDays) for (const s of MEAL_SLOTS) { assert.ok(d.meals![s].parts.length >= 1); meals++; }
+  assert.equal(meals, 116);
 });
 
-test('seed: закупки 01.11 и 16.11, модельный бюджет 29 668 ₽', () => {
-  const ev = SEED.shopping.shopping_events;
-  assert.deepEqual(ev.map((e: any) => e.date), ['2026-11-01', '2026-11-16']);
-  const total = ev.flatMap((e: any) => e.items).reduce((s: number, i: any) => s + i.price_estimate_rub, 0);
-  assert.equal(Math.round(total), 29668);
-});
-
-test('seed: готовка только meal_prep, 28.11 — сдвинутая, 29.11 — не готовка', () => {
-  const prep = SEED.cooking_events.filter((e: any) => e.event_type === 'meal_prep').map((e: any) => e.date);
-  assert.ok(prep.includes('2026-11-28'));
-  assert.ok(!prep.includes('2026-11-29'));
-  assert.equal(SEED.cooking_events.find((e: any) => e.date === '2026-11-29').event_type, 'relax_day');
-});
-
-test('seed: в упражнениях нет гантелей, штанг, скамей', () => {
-  for (const e of SEED.exercise_library) for (const eq of e.equipment) assert.ok(!/гантел|штанг|скам|тренаж/i.test(eq), eq);
-});
-
-test('seed: исходные блюда сохранены дословно (без подмены)', () => {
-  const d = freshData();
-  assert.equal(d.planDays['2026-11-02'].meals!.breakfast, 'Овсянка на ночь: йогурт, банан, лён, грецкий орех');
-  assert.equal(d.planDays['2026-11-29'].relax, true);
-  assert.equal(d.planDays['2026-11-29'].meals, null);
-});
-
-test('сопоставление блюд: каждое блюдо разобрано, без придуманных рецептов', () => {
-  const d = freshData();
-  let unknown = 0, recipe = 0;
-  for (const day of Object.values(d.planDays)) {
-    if (!day.meals) continue;
-    for (const s of MEAL_SLOTS) {
-      const parts = resolveMeal(d, s, day.meals[s]);
-      assert.ok(parts.length >= 1);
-      for (const p of parts) {
-        if (p.status === 'recipe') { recipe++; assert.ok(p.recipe); }
-        if (p.status === 'unknown') { unknown++; assert.equal(p.recipe, null); }
-      }
+test('блюда: у каждого ингредиенты с количеством, известные продукты и шаги рецепта', () => {
+  for (const d of TEMPLATE.dishes) {
+    assert.ok(d.steps.length > 0, d.id);
+    assert.ok(d.ingredients.length > 0, d.id);
+    for (const i of d.ingredients) {
+      assert.ok(i.qty > 0, `${d.id}: ${i.product}`);
+      assert.ok(PRODUCTS[i.product] || DISHES[i.product], `${d.id}: ${i.product}`);
     }
   }
-  assert.ok(recipe > 50);
-  assert.ok(unknown > 0, 'есть блюда «Нужно уточнить рецепт»');
+  assert.equal(new Set(TEMPLATE.dishes.map((d) => d.id)).size, TEMPLATE.dishes.length);
+  assert.equal(SEED_RECIPES.length, TEMPLATE.dishes.length, 'каждое блюдо — карточка рецепта');
 });
 
-test('миграции данных: примечание у «Апельсинов», старое поле настроек, фото раз в неделю', async () => {
-  const { dataMigrationOps, applyOps } = await import('../src/state/model');
-  let d = freshData();
-  const ev = d.shoppingEvents['shop-2026-11-01'];
-  d = applyOps(d, [
-    { store: 'shoppingEvents', put: { ...ev, items: ev.items.map((it) => (it.itemId === 'p46' ? { ...it, note: 'старое примечание' } : it)) } },
-    { store: 'settings', put: { ...d.settings, medicalAck: true, photo: { enabled: true, dayOfMonth: 2 } } as any },
-    { store: 'meta', put: { ...d.meta!, dataVersion: 1 } },
-  ]);
-  const d2 = applyOps(d, dataMigrationOps(d));
-  assert.deepEqual(d2.settings.photo, { enabled: true, weekday: 1 }, 'v3: фото раз в неделю');
-  assert.equal(d2.shoppingEvents['shop-2026-11-01'].items.find((it) => it.itemId === 'p46')!.note, null);
-  assert.equal('medicalAck' in d2.settings, false);
-  assert.equal(d2.meta!.dataVersion, 3);
-  assert.equal(dataMigrationOps(d2).length, 0, 'повторная миграция ничего не меняет');
+test('меню: нет общих слов «гарнир», «салат», «фрукты» без состава', () => {
+  for (const d of TEMPLATE.dishes) assert.ok(!/^(гарнир|салат|фрукты|овощи)$/i.test(d.title.trim()), d.title);
+  for (const p of TEMPLATE.products) assert.ok(!/^(овощи|фрукты|ягоды|орехи|рыба|мясо|сыр|творог)$/i.test(p.name), p.name);
+});
+
+test('исключённые продукты отсутствуют', () => {
+  const names = TEMPLATE.products.map((p) => p.name.toLowerCase()).join('|') + TEMPLATE.dishes.map((d) => d.title.toLowerCase()).join('|');
+  for (const bad of ['мёд', 'мед ', 'дорад', 'сардин', 'алкогол', 'вино', 'пиво', 'кофе', 'энергетик', 'лимонад']) assert.ok(!names.includes(bad), bad);
+});
+
+test('калорийность дня ≈2450 ккал по справочным данным', () => {
+  for (const d of TEMPLATE.days) {
+    if (d.relax) continue;
+    let k = 0;
+    for (const s of MEAL_SLOTS) for (const p of d.meals![s].parts) k += dishNutrition(p.dish, p.qty).kcal;
+    assert.ok(k > 2300 && k < 2600, `день ${d.day}: ${Math.round(k)}`);
+  }
+});
+
+test('тренировки: только гири 12 и 16 кг, без весов 6, 8, 10, 14 кг', () => {
+  assert.deepEqual(AVAILABLE_KETTLEBELLS, [12, 16]);
+  const json = JSON.stringify(SEED.workout_templates);
+  assert.ok(!/"weight_kg"/.test(json), 'старые диапазоны весов убраны');
+  for (const v of seedTemplateVersions('x')) for (const it of v.template.items) {
+    if (it.kettlebellKg != null) assert.ok([12, 16].includes(it.kettlebellKg));
+    if (it.fallbackKg != null) assert.ok([12, 16].includes(it.fallbackKg));
+  }
+  const b = seedTemplateVersions('x').find((v) => v.templateId === 'strength_b')!.template;
+  assert.equal(b.items.find((i) => i.exerciseId === 'kb_rdl')!.kettlebellKg, 16);
+  assert.equal(b.items.find((i) => i.exerciseId === 'kb_rdl')!.fallbackKg, 12);
+  assert.equal(b.items.find((i) => i.exerciseId === 'kb_floor_press')!.alternative!.exerciseId, 'incline_push_up');
+  for (const e of SEED.exercise_library) for (const eq of e.equipment) assert.ok(!/гантел|штанг|скам|тренаж|разборн/i.test(eq), eq);
+});
+
+test('план со стартом 02.11: дни, релакс 29.11, карточки с граммовками', () => {
+  const d = freshData();
+  assert.equal(d.planDays['2026-11-02'].dayNumber, 1);
+  assert.equal(d.planDays['2026-11-29'].relax, true);
+  assert.equal(d.planDays['2026-11-29'].meals, null);
+  const card = d.planDays['2026-11-02'].mealCards!.lunch;
+  assert.equal(card.parts[0].dishId, 'chicken_lemon_paprika');
+  assert.ok(card.parts[0].cookEventId, 'порция из готовки');
+  assert.equal(d.planDays['2026-12-02'], undefined);
 });

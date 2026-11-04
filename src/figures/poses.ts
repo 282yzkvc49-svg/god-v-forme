@@ -7,7 +7,7 @@ export const FLOOR = 262;
 export interface Arrow { pts: Pt[] }
 export interface FigureDef {
   frames: [Pose, Pose];
-  props?: 'mat' | 'stepper' | null;
+  props?: 'mat' | 'stepper' | 'box' | null;
   /** Педали мини-степпера: высота переднего края [ближняя, дальняя] для каждого кадра. */
   pedals?: [[number, number], [number, number]];
   arrows?: [Arrow[], Arrow[]];
@@ -90,6 +90,29 @@ const pushUp: FigureDef = {
     [{ pts: [[236, 196], [236, 172], [236, 148]] }],
   ],
   guides: [[{ pts: [[80, 252], [312, 146]] }], [{ pts: [[80, 251], [328, 219]] }]],
+};
+
+// ------------------------------------------------------------------ отжимания от устойчивого возвышения
+
+const inclinePushUp: FigureDef = {
+  props: 'box',
+  frames: [
+    {
+      hip: [203, 163], torso: -45,
+      legs: [{ target: [118, 248], hint: DOWN }, { target: [120, 248], hint: DOWN }], feet: [52, 52],
+      arms: [{ target: [266, 196], hint: BACK }, { target: [260, 196], hint: BACK }],
+    },
+    {
+      hip: [216, 179], torso: -35,
+      legs: [{ target: [118, 248], hint: DOWN }, { target: [120, 248], hint: DOWN }], feet: [52, 52],
+      arms: [{ target: [266, 196], hint: [-1, -0.6] }, { target: [260, 196], hint: [-1, -0.6] }],
+    },
+  ],
+  arrows: [
+    [{ pts: [[316, 92], [326, 114], [330, 136]] }],
+    [{ pts: [[336, 142], [330, 118], [320, 96]] }],
+  ],
+  guides: [[{ pts: [[106, 254], [270, 90]] }], [{ pts: [[106, 254], [296, 124]] }]],
 };
 
 // ------------------------------------------------------------------ ягодичный мостик
@@ -267,6 +290,7 @@ export const FIGURES: Record<string, FigureDef> = {
   goblet_squat: goblet,
   kb_row: row,
   push_up: pushUp,
+  incline_push_up: inclinePushUp,
   glute_bridge: bridge,
   plank,
   kb_rdl: rdl,

@@ -16,8 +16,11 @@ import { CheckButton, Empty, Note, Sheet, Switch, toast, type CheckState } from 
 import {
   KettlebellIcon, PiArrowsLeftRight, PiCamera, PiCheck, PiCookingPot, PiDotsThreeBold, PiForkKnife, PiListChecks,
   PiPackage, PiPersonSimpleWalk, PiScales, PiShoppingCart, PiSkipForward, PiArrowCounterClockwise, PiTrash, PiUploadSimple,
-  PiPlus, PiSun, PiBookOpen, StepperIcon,
+  PiPlus, PiSun, PiBookOpen, PiSnowflake, StepperIcon,
 } from '../ui/icons';
+import { DayPlanSections, MealCardView, PlanStartSheet, ThawSheet } from './planViews';
+import { DISHES, cookedWeight, dishAmount } from '../domain/catalog';
+import { planEnd } from '../domain/plan';
 import { TEMPLATE_NAMES } from '../domain/templates';
 
 export function KindIcon({ t }: { t: Pick<DayTask, 'kind' | 'templateId'> }) {
@@ -30,6 +33,7 @@ export function KindIcon({ t }: { t: Pick<DayTask, 'kind' | 'templateId'> }) {
     case 'cooking': return <PiCookingPot />;
     case 'shopping': return <PiShoppingCart />;
     case 'containers': return <PiPackage />;
+    case 'thaw': return <PiSnowflake />;
     case 'weigh': return <PiScales />;
     case 'photo': return <PiCamera />;
     default: return <PiListChecks />;
@@ -56,19 +60,21 @@ export function TaskList({ date, compact }: { date: ISODate; compact?: boolean }
   const [meal, setMeal] = useState<DayTask | null>(null);
   const [weigh, setWeigh] = useState<DayTask | null>(null);
   const [box, setBox] = useState<DayTask | null>(null);
+  const [thaw, setThaw] = useState<DayTask | null>(null);
   if (!tasks.length) return null;
   return (
     <>
       <div className="tasks">
         {tasks.map((t) => (
           <TaskRow key={t.id} t={t} compact={compact}
-            onMenu={() => setMenu(t)} onOpenMeal={() => setMeal(t)} onOpenWeigh={() => setWeigh(t)} onOpenBox={() => setBox(t)} />
+            onMenu={() => setMenu(t)} onOpenMeal={() => setMeal(t)} onOpenWeigh={() => setWeigh(t)} onOpenBox={() => (t.kind === 'thaw' ? setThaw(t) : setBox(t))} />
         ))}
       </div>
       <TaskMenu task={menu} onClose={() => setMenu(null)} />
       <MealSheet task={meal} onClose={() => setMeal(null)} />
       <WeightSheet open={!!weigh} date={weigh?.date ?? date} task={weigh} onClose={() => setWeigh(null)} />
       <ContainersSheet task={box} onClose={() => setBox(null)} />
+      <ThawSheet task={thaw} onClose={() => setThaw(null)} />
     </>
   );
 }
@@ -89,6 +95,7 @@ function TaskRow({ t, compact, onMenu, onOpenMeal, onOpenWeigh, onOpenBox }: {
       case 'weigh': return onOpenWeigh();
       case 'photo': return go('/progress', { tab: 'photos', add: t.date });
       case 'containers': return onOpenBox();
+      case 'thaw': return onOpenBox();
       default: return onMenu();
     }
   };
@@ -189,7 +196,7 @@ export function TaskMenu({ task, onClose }: { task: DayTask | null; onClose: () 
             <button onClick={() => { onClose(); go(`/workout/${encodeURIComponent(t.id)}`, { d: t.date }); }}><KettlebellIcon /> Открыть тренировку</button>
           )}
           {raw !== 'done' && <button onClick={done}><PiCheck /> Отметить выполненным</button>}
-          {raw !== 'skipped' && t.kind !== 'containers' && <button onClick={skip}><PiSkipForward /> Пропустить</button>}
+          {raw !== 'skipped' && t.kind !== 'containers' && t.kind !== 'thaw' && <button onClick={skip}><PiSkipForward /> Пропустить</button>}
           {raw !== 'planned' && <button onClick={reset}><PiArrowCounterClockwise /> Снять отметку</button>}
           {t.movable && <button onClick={() => { setTo(addDays(t.date, 1)); setMoving(true); }}><PiArrowsLeftRight /> Перенести на другой день</button>}
           {t.movable && data.taskMoves[t.id] && (
@@ -242,6 +249,15 @@ export function MealParts({ parts, date }: { parts: MealPart[]; date?: ISODate }
 export function MealSheet({ task, onClose }: { task: DayTask | null; onClose: () => void }) {
   const data = useApp();
   if (!task || !task.slot || !task.dish) return null;
+  const card = planDay(data, task.originDate)?.mealCards?.[task.slot];
+  if (card) {
+    return (
+      <Sheet open onClose={onClose} title={`${MEAL_LABELS[task.slot]}${task.time ? ` в ${task.time}` : ''}`} wide>
+        <p className="muted mt0">{fmtLong(task.date)}</p>
+        <MealCardView date={task.originDate} slot={task.slot} card={card} task={task} />
+      </Sheet>
+    );
+  }
   const parts = resolveMeal(data, task.slot, task.dish);
   const recipes = mealRecipes(parts);
   const needs = needsRecipe(parts);
@@ -331,12 +347,22 @@ export function ContainersSheet({ task, onClose }: { task: DayTask | null; onClo
           const on = !!data.checks[id];
           const dish = tp?.meals?.[s];
           if (!dish) return null;
+          const card = tp?.mealCards?.[s];
           return (
             <div className="li" key={s}>
               <CheckButton small state={on ? 'on' : 'off'} label={`${MEAL_LABELS[s]} упакован`} onClick={() => A.setCheck(id, !on)} />
               <div className="grow">
                 <div style={{ fontWeight: 600 }}>{MEAL_LABELS[s]} <span className="muted small">{data.settings.mealTimes[s]}</span></div>
-                <div className="small muted">{dish}</div>
+                {card ? (
+                  <ul className="small muted" style={{ margin: '2px 0 0', paddingLeft: 18 }}>
+                    {card.parts.map((p, i) => {
+                      const d = DISHES[p.dishId];
+                      const cw = cookedWeight(p.dishId, p.qty);
+                      const src = p.fresh ? (d?.method === 'без готовки' ? 'собрать' : 'приготовить') : p.storage === 'freeze' ? 'из морозилки (разморозить сегодня)' : 'из готовки';
+                      return <li key={i}>{d?.short ?? p.dishId} — {dishAmount(p.dishId, p.qty)}{cw ? ` (≈${cw} г)` : ''}, {src}{d?.category === 'veg' ? ', отдельный контейнер' : ''}</li>;
+                    })}
+                  </ul>
+                ) : <div className="small muted">{dish}</div>}
               </div>
             </div>
           );
@@ -365,23 +391,30 @@ export function RelaxCard({ date }: { date: ISODate }) {
       <p>Еда по желанию, без подсчёта и без обязательных отметок. Специально переедать или «отрабатывать» потом не нужно.</p>
       {p?.note && <p className="small">{p.note}</p>}
       <p className="small">Напитки: {p?.drinks ?? 'вода, травяной чай, морс без сахара'}.</p>
-      {date === '2026-11-29' && <p className="small">Готовка на 30.11–01.12 перенесена на субботу 28.11.</p>}
+      {p?.dayNumber && <p className="small">День {p.dayNumber} плана. Готовка на следующие дни запланирована заранее — смотрите календарь.</p>}
     </div>
   );
 }
 
 export function NoPlanCard({ date, onAdd }: { date: ISODate; onAdd?: () => void }) {
+  const data = useApp();
+  const [starting, setStarting] = useState(false);
+  const cfg = data.settings.plan;
+  const after = cfg && date > planEnd(cfg);
+  const next = cfg ? addDays(planEnd(cfg), 1) : todayFn();
   return (
     <div className="card">
       <Empty
-        title="План на этот день пока не добавлен"
+        title={after ? 'Месяц плана питания закончился' : 'План питания на этот день не выбран'}
         actions={<>
-          <a className="btn primary" href={href('/analysis', { tab: 'import' })}><PiUploadSimple /> Загрузить план от ChatGPT</a>
+          <button className="btn primary" onClick={() => setStarting(true)}><PiPlus /> {after ? `Следующий месяц с ${fmtShort(next < todayFn() ? todayFn() : next)}` : 'Выбрать дату старта'}</button>
+          <a className="btn" href={href('/analysis', { tab: 'import' })}><PiUploadSimple /> Загрузить план от ChatGPT</a>
           {onAdd && <button className="btn" onClick={onAdd}><PiPlus /> Добавить задачу</button>}
         </>}
       >
-        Предыдущий месяц не копируется автоматически. Загрузите обновлённый план или добавьте задачу вручную — взвешивания, фото и отметки работают в любой день.
+        {after ? 'Можно начать следующий месяц по этому же меню (даты, закупки и готовки пересчитаются) или загрузить обновлённый план от ChatGPT.' : 'Выберите дату старта — меню, закупки и готовка встанут на свои даты.'} Тренировки, взвешивания, фото и отметки работают в любой день.
       </Empty>
+      <PlanStartSheet open={starting} onClose={() => setStarting(false)} initialDate={next < todayFn() ? todayFn() : next} />
     </div>
   );
 }
@@ -450,6 +483,7 @@ export function DayDetail({ date, header }: { date: ISODate; header?: ReactNode 
       {!p && <NoPlanCard date={date} onAdd={() => setAdding(true)} />}
       {tasks.length > 0 && <TaskList date={date} />}
       {p && !p.relax && p.note && <Note kind="plain">{p.note}</Note>}
+      <DayPlanSections date={date} />
       <DayNoteField key={date} date={date} initial={note} />
       {p && <button className="btn ghost" onClick={() => setAdding(true)}><PiPlus /> Добавить задачу на этот день</button>}
       <AddTaskSheet open={adding} date={date} onClose={() => setAdding(false)} />

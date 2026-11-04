@@ -45,7 +45,7 @@ test('отчёт: только введённые данные, фото по у
   assert.equal(done[0].sets_marked, 6, 'отмечен только первый подход каждого упражнения');
   const sq = done[0].exercises.find((e: any) => e.exercise_id === 'goblet_squat')!;
   assert.equal(sq.weight_kg_used, 12);
-  assert.deepEqual(sq.planned.weight_kg_range, [12, 16]);
+  assert.deepEqual(sq.planned.weight_kg_range, [12, 12], 'присед — гиря 12 кг');
   const kbRow = done[0].exercises.find((e: any) => e.exercise_id === 'kb_row')!;
   assert.equal(kbRow.weight_kg_used, null, 'плановый вес не выдаётся за фактический');
   assert.equal(json.nutrition_adherence.done, 1);

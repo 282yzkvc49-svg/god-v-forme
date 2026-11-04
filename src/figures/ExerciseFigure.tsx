@@ -89,6 +89,7 @@ export function FigureSVG({ def, pose, pedals, frameIndex, viewBox, title, marks
       <line x1={vx + 6} y1={FLOOR + 1} x2={vx + vw - 6} y2={FLOOR + 1} className="floor" />
       {def.props === 'mat' && <rect x={60} y={FLOOR - 6} width={272} height={6} rx={3} className="mat" />}
       {def.props === 'stepper' && pedals && stepperProp(pedals)}
+      {def.props === 'box' && <rect x={232} y={202} width={86} height={FLOOR - 202} rx={4} className="gear" />}
       {limb(s, 1, 'arm', 'limb far')}
       {limb(s, 1, 'leg', 'limb far')}
       {line(s.hip, s.shoulder, 'torso', W_TORSO)}
@@ -113,6 +114,7 @@ function computeViewBox(def: FigureDef): string {
   for (const fr of [...(def.arrows ?? []), ...(def.guides ?? [])]) for (const a of fr) pts.push(...a.pts);
   if (def.props === 'mat') pts.push([60, FLOOR], [332, FLOOR]);
   if (def.props === 'stepper') pts.push([136, FLOOR], [270, 210]);
+  if (def.props === 'box') pts.push([232, 202], [318, FLOOR]);
   pts.push([0, FLOOR + 6]);
   const b = bounds(pts.filter((p) => p[0] !== 0));
   const pad = 14;

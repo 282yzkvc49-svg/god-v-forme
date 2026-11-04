@@ -5,7 +5,9 @@ import { useToday, isTodayOverridden } from '../lib/clock';
 import { href, useRoute } from '../app/router';
 import { fmtDayMonth, fmtFull, isISODate, isTime, WEEKDAYS_FULL } from '../lib/dates';
 import { fmtBytes } from '../lib/util';
-import { PLAN_END, PLAN_START, SEED_ID } from '../lib/seed';
+import { SEED_ID } from '../lib/seed';
+import { PlanCheckCard, PlanStartForm } from './planViews';
+import { planEnd, relaxDate } from '../domain/plan';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
 import { isStandalone } from '../lib/files';
 import { NumberStepper, Note, PageHead, Seg, Switch, toast } from '../ui/kit';
@@ -50,11 +52,47 @@ export function SettingsScreen() {
     <div className="page narrow">
       <PageHead title="Настройки" />
       <div className="stack">
+        <Group id="plan" title="Программа питания">
+          {s.plan ? (
+            <p className="mt0">Сейчас: с {fmtFull(s.plan.startDate)} по {fmtFull(planEnd(s.plan))}, релакс-день — {fmtDayMonth(relaxDate(s.plan))} (день {s.plan.relaxDay}).</p>
+          ) : <p className="mt0">Дата старта ещё не выбрана.</p>}
+          <PlanStartForm submitLabel="Применить" />
+          <p className="hint">02.11.2026 — только базовая дата шаблона. При смене даты меню, закупки, готовка, контейнеры и релакс-день переносятся по номеру дня плана. После 30-го дня можно начать следующий месяц по этому же меню или загрузить новый план от ChatGPT.</p>
+        </Group>
+
+        <Group id="training" title="Расписание тренировок">
+          <p className="mt0 small muted">Не зависит от даты старта питания. Силовые чередуются: А, Б, А… начиная с первого дня тренировок.</p>
+          <label className="field">
+            <span>Первый день тренировок</span>
+            <input className="input" type="date" value={s.training.startDate} onChange={(e) => isISODate(e.target.value) && A.updateSettings({ training: { ...s.training, startDate: e.target.value } })} />
+          </label>
+          {(['strengthDays', 'cardioDays'] as const).map((k) => (
+            <div className="field" key={k}>
+              <span className="field-label">{k === 'strengthDays' ? 'Силовые' : 'Степпер'}</span>
+              <div className="seg" role="group" aria-label={k === 'strengthDays' ? 'Дни силовых' : 'Дни степпера'}>
+                {[1, 2, 3, 4, 5, 6, 7].map((wd) => {
+                  const on = s.training[k].includes(wd);
+                  const other = k === 'strengthDays' ? 'cardioDays' : 'strengthDays';
+                  return (
+                    <button key={wd} type="button" aria-pressed={on} onClick={() => {
+                      const next = on ? s.training[k].filter((x) => x !== wd) : [...s.training[k], wd].sort();
+                      A.updateSettings({ training: { ...s.training, [k]: next, [other]: s.training[other].filter((x) => x !== wd) } });
+                    }}>{['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'][wd - 1]}</button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <p className="hint">Остальные дни — восстановление (прогулка по самочувствию). Записанные тренировки не меняются и не переносятся.</p>
+        </Group>
+
+        <div id="check"><PlanCheckCard /></div>
+
         <Group id="start" title="Начало силовых">
           <label className="field">
             <span>Начать силовые тренировки с</span>
             <div className="row nowrap">
-              <input className="input" type="date" value={s.trainingStartDate ?? ''} min={PLAN_START} onChange={(e) => A.updateSettings({ trainingStartDate: isISODate(e.target.value) ? e.target.value : null })} />
+              <input className="input" type="date" value={s.trainingStartDate ?? ''} onChange={(e) => A.updateSettings({ trainingStartDate: isISODate(e.target.value) ? e.target.value : null })} />
               {s.trainingStartDate && <button className="btn" onClick={() => A.updateSettings({ trainingStartDate: null })}>По плану</button>}
             </div>
             <span className="hint">{s.trainingStartDate ? `Силовые до ${fmtDayMonth(s.trainingStartDate)} показываются как «отложено» и не считаются пропусками.` : 'Сейчас — по плану, с первого дня.'}</span>
@@ -67,7 +105,7 @@ export function SettingsScreen() {
             <div className="field"><span className="field-label">Стартовый вес</span><NumberStepper label="Стартовый вес" value={s.goals.startWeightKg} step={0.5} min={40} max={300} unit="кг" onChange={(v) => v != null && A.updateSettings({ goals: { ...s.goals, startWeightKg: v } })} /></div>
             <div className="field"><span className="field-label">Цель</span><NumberStepper label="Целевой вес" value={s.goals.targetWeightKg} step={0.5} min={40} max={300} unit="кг" onChange={(v) => v != null && A.updateSettings({ goals: { ...s.goals, targetWeightKg: v } })} /></div>
           </div>
-          <p className="hint">Ориентир энергии: ≈{s.goals.kcalReference} ккал/сутки — оценочный стартовый ориентир, не проверенная калорийность блюд. Калории и БЖУ в приложении не ведутся.</p>
+          <p className="hint">Ориентир энергии: ≈{s.goals.kcalReference} ккал/сутки. Калорийность приёмов пищи считается по справочным данным; вручную калории и БЖУ вводить не нужно.</p>
         </Group>
 
         <Group title="Расписание">
@@ -184,7 +222,7 @@ export function SettingsScreen() {
         <Group title="О приложении">
           <table className="table"><tbody>
             <tr><td>Версия</td><td className="n">{__APP_VERSION__} ({__BUILD_ID__})</td></tr>
-            <tr><td>Стартовый план</td><td className="n">{fmtFull(PLAN_START)} — {fmtFull(PLAN_END)}</td></tr>
+            <tr><td>План питания</td><td className="n">{s.plan ? `${fmtFull(s.plan.startDate)} — ${fmtFull(planEnd(s.plan))}` : 'не выбран'}</td></tr>
             <tr><td>Набор данных</td><td className="n">{SEED_ID}</td></tr>
             <tr><td>Дней плана загружено</td><td className="n">{Object.keys(data.planDays).length}</td></tr>
             <tr><td>Установлено</td><td className="n">{data.meta ? fmtFull(data.meta.installDate) : '—'}</td></tr>

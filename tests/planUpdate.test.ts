@@ -78,7 +78,11 @@ test('ошибки проверки: ничего не меняется, оши�
   r = bad({ ...base, changes: [{ type: 'workout_template', template_id: 'strength_a', effective_from: '2026-12-02', item_updates: [{ exercise_id: 'dumbbell_press', sets: 3 }] }] });
   assert.ok(!r.ok && r.errors.some((e) => /неизвестное упражнение/.test(e.message)));
   r = bad({ ...base, changes: [{ type: 'workout_template', template_id: 'strength_a', effective_from: '2026-12-02', item_updates: [{ exercise_id: 'goblet_squat', weight_kg: 32 }] }] });
-  assert.ok(!r.ok && r.errors.some((e) => /24/.test(e.message)));
+  assert.ok(!r.ok && r.errors.some((e) => /12 и 16/.test(e.message)));
+  for (const w of [6, 8, 10, 14, 24, [12, 14]]) {
+    r = bad({ ...base, changes: [{ type: 'workout_template', template_id: 'strength_a', effective_from: '2026-12-02', item_updates: [{ exercise_id: 'kb_row', weight_kg: w }] }] });
+    assert.ok(!r.ok, `вес ${JSON.stringify(w)} отклоняется: есть только гири 12 и 16 кг`);
+  }
   r = bad({ ...base, changes: [{ type: 'meal_plan', days: [{ date: '02.12.2026', breakfast: 'x' }] }] });
   assert.ok(!r.ok && r.errors.some((e) => /ГГГГ-ММ-ДД/.test(e.message)));
   r = bad({ ...base, changes: [{ type: 'meal_plan', days: [{ date: '2026-12-02', breakfast: '<script>alert(1)</script>' }] }] });
@@ -109,8 +113,9 @@ test('резкий рост нагрузки подсвечивается и н�
   assert.ok(loadJump({ exerciseId: 'goblet_squat', sets: 2, reps: 8, weightKg: [12, 16] }, { exerciseId: 'goblet_squat', sets: 4, reps: 8, weightKg: [12, 16] }));
   assert.ok(loadJump({ exerciseId: 'goblet_squat', sets: 2, reps: 8, weightKg: [12, 16] }, { exerciseId: 'goblet_squat', sets: 2, reps: 8, weightKg: [22, 22] }));
   assert.equal(loadJump({ exerciseId: 'goblet_squat', sets: 2, reps: 8, weightKg: [12, 16] }, { exerciseId: 'goblet_squat', sets: 3, reps: 8, weightKg: [14, 16] }), null);
+  assert.ok(loadJump({ exerciseId: 'goblet_squat', sets: 2, reps: 8, kettlebellKg: 12 }, { exerciseId: 'goblet_squat', sets: 2, reps: 8, kettlebellKg: 16 }), 'переход 12 → 16 кг требует подтверждения');
   const r = parsePlanUpdate(JSON.stringify({ schema_version: '1.0.0', update_type: 'plan_update', changes: [
-    { type: 'workout_template', template_id: 'strength_b', effective_from: '2026-12-02', item_updates: [{ exercise_id: 'kb_rdl', sets: 4, reps: 10, weight_kg: 24 }] },
+    { type: 'workout_template', template_id: 'strength_b', effective_from: '2026-12-02', item_updates: [{ exercise_id: 'kb_floor_press', sets: 2, reps: 8, weight_kg: 16 }] },
   ] }), d, TODAY);
-  assert.ok(r.ok && r.changes[0].danger);
+  assert.ok(r.ok && r.changes[0].danger, 'жим 12 → 16 кг подсвечен');
 });
