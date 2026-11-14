@@ -668,3 +668,7 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 .av-link a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .av-link a:hover, .av-link a:focus-visible { text-decoration: underline; }
 .ing-list .ing-main { display: grid; min-width: 0; }
+
+/* товар недоступен по адресу — заблокирован до подтверждения замены */
+.shop-item.blocked { opacity: 0.75; background: var(--warn-soft); border-radius: 12px; }
+.shop-item.blocked .name { text-decoration: line-through; text-decoration-color: var(--warn); }

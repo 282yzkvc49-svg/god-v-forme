@@ -12,7 +12,7 @@ import {
   BASE_START, BUDGET_RUB, PLAN_LENGTH, buildInstance, buyText, cardNutrition, dayNutrition,
   makePlanSettings, planContext, planEnd, planPosition, portionsLeft,
 } from '../domain/plan';
-import { checkEquipment, checkInstance, checkSeedPlan, checkShift, checkUserData, kcalSummary } from '../domain/planCheck';
+import { checkActiveData, checkEquipment, checkInstance, checkSeedPlan, checkShift, checkUserData, kcalSummary } from '../domain/planCheck';
 import { planDay, statusOf, tasksForDate, thawList, type DayTask } from '../domain/tasks';
 import { templateFor, prescription, weightText, exerciseName } from '../domain/templates';
 import { TEMPLATE_IDS } from '../state/types';
@@ -369,7 +369,7 @@ export function PlanCheckCard() {
     const ctx = { ...planContext(data, null) };
     const inst = buildInstance(cfg, ctx);
     const tpls = TEMPLATE_IDS.map((id) => templateFor(data, id, todayFn())).filter(Boolean) as any[];
-    return { checks: [...checkInstance(inst), checkEquipment(tpls), checkShift(cfg, ctx), ...checkSeedPlan(inst), ...checkUserData(data)], kcal: kcalSummary(inst), inst };
+    return { checks: [...checkInstance(inst), checkEquipment(tpls), checkShift(cfg, ctx), ...checkSeedPlan(inst), checkActiveData(data, todayFn()), ...checkUserData(data)], kcal: kcalSummary(inst), inst };
   }, [cfg.startDate, data.trips, data.settings.relaxOverrides, data.templateVersions]);
   const failed = result.checks.filter((c) => !c.ok).length;
   return (

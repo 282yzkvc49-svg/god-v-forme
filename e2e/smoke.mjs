@@ -278,19 +278,45 @@ async function step13(p3) {
   }));
   await p3.goto(`${BASE}?today=2026-11-14#/today`);
   await p3.reload();
-  await p3.getByText(/Новое меню «Азбука вкуса»/).first().waitFor();
-  await p3.screenshot({ path: path.join(shots, '13-menu-banner-iphone.png'), fullPage: false });
-  await p3.getByRole('link', { name: 'Посмотреть' }).click();
+  // после обновления приложение само открывает экран миграции
   await p3.getByRole('heading', { name: 'Новое меню «Азбука вкуса»' }).waitFor();
   assert(await p3.locator('input[type=date]').first().inputValue() === '2026-11-16', 'старт по комплекту — 16.11');
+  await p3.getByRole('heading', { name: '1. Резервная копия' }).waitFor();
+  await p3.getByRole('heading', { name: '2. Сводка замен' }).waitFor();
+  await p3.getByText(/Петелинка, 865 г/).waitFor();
   await p3.getByText('всё сходится').waitFor();
   await p3.getByText(/48 из 48 обедов и ужинов/).waitFor();
-  await p3.getByText(/не собранная корзина/).waitFor();
+  await p3.getByText(/В активном меню нет скумбрии/).waitFor();
   await p3.screenshot({ path: path.join(shots, '13-menu-preview-iphone.png'), fullPage: true });
-  await p3.getByRole('button', { name: 'Применить новое меню' }).click();
-  await p3.getByText(/Новое меню применено/).waitFor();
+  await p3.getByRole('button', { name: 'Создать резервную копию и применить' }).click();
+  await p3.getByRole('heading', { name: 'Отчёт о миграции' }).waitFor();
+  await p3.getByText(/Резервная копия: /).waitFor();
+  await p3.screenshot({ path: path.join(shots, '13-migration-report-iphone.png'), fullPage: true });
+  await go(p3, '/today');
   await p3.waitForTimeout(300);
   assert(await p3.getByText(/Новое меню «Азбука вкуса»: старт/).count() === 0, 'после применения баннер исчез');
+  // проверка товаров на av.ru: адрес, «есть в корзине», недоступный — блок, замена — пересчёт
+  await go(p3, '/av-check');
+  await p3.getByRole('heading', { name: 'Проверка товаров на av.ru' }).waitFor();
+  await p3.getByText('Корзина ещё не проверена.').first().waitFor();
+  await p3.getByLabel(/Адрес доставки выбран/).check();
+  const row = (name) => p3.locator('.shop-item', { hasText: name }).first();
+  await row('Филе грудки цыплёнка-бройлера').getByRole('button', { name: 'Недоступен' }).click();
+  await p3.getByRole('heading', { name: /Замена: Филе грудки цыплёнка/ }).waitFor();
+  await p3.locator('.sheet label', { hasText: 'Филе грудки индейки «Просто Азбука»' }).first().locator('input[type=radio]').check();
+  await p3.getByText(/Граммовка в рецептах ×1,05/).waitFor();
+  await p3.getByLabel(/Я проверил: этот товар есть в моей корзине/).check();
+  await p3.getByRole('button', { name: 'Подтвердить замену' }).click();
+  await p3.getByText(/Замена подтверждена/).first().waitFor();
+  await row('Киви').getByRole('button', { name: 'Недоступен' }).click();
+  await p3.locator('.sheet .btn.ghost', { hasText: 'Закрыть' }).click();
+  await row('Бананы').getByRole('button', { name: 'Есть в корзине' }).click();
+  await p3.getByText(/Недоступны без замены \(в закупке заблокированы\): Киви/).first().waitFor();
+  await p3.screenshot({ path: path.join(shots, '13-av-check-iphone.png'), fullPage: true });
+  await go(p3, '/shop/shop-p20261116-m1');
+  await p3.locator('.shop-item.blocked', { hasText: 'Киви' }).waitFor();
+  await p3.getByText(/замена вместо «Филе грудки цыплёнка/).first().waitFor();
+  await p3.screenshot({ path: path.join(shots, '13-shop-blocked-iphone.png'), fullPage: true });
 }
 
 await step('12–13. Ноябрь 2026: старт 16.11, командировки, релакс 29.11, меню «Азбука вкуса» с av.ru; обновление меню через предпросмотр', async () => {
@@ -333,8 +359,8 @@ await step('12–13. Ноябрь 2026: старт 16.11, командировк
   await go(p3, '/day/2026-11-28');
   await p3.getByText('Курица с нутом, кабачком и рисом').first().waitFor();
   await go(p3, '/recipe/D05');
-  await p3.getByText('Филе грудки цыплёнка без кожи «Просто Азбука»').first().waitFor();
-  assert(await p3.locator('a[href="https://av.ru/i/306330"]').count() > 0, 'ссылка на товар av.ru');
+  await p3.getByText('Филе грудки цыплёнка-бройлера охлаждённое «Петелинка», Россия').first().waitFor();
+  assert(await p3.locator('a[href="https://av.ru/i/572843"]').count() > 0, 'ссылка на индивидуальную карточку av.ru');
   assert(await p3.getByText(/уп\./).count() > 0, 'доля упаковки');
   await p3.screenshot({ path: path.join(shots, '12-av-recipe-iphone.png'), fullPage: true });
   await go(p3, '/recipes');

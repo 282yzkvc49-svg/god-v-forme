@@ -5,8 +5,8 @@ import { DISHES, PRODUCTS, TEMPLATE, dishNutrition } from '../src/domain/catalog
 import { freshData } from './helpers';
 import { MEAL_SLOTS } from '../src/state/types';
 
-test('шаблон меню «Азбука вкуса»: 24 дня меню по 4 рецепта, 61 рецепт, 8 партий, старт 16.11', () => {
-  assert.equal(TEMPLATE.id, 'azbuka-2026-11-16-30days-v1');
+test('шаблон меню «Азбука вкуса» v2: 24 дня меню по 4 рецепта, 61 рецепт, 8 партий, старт 16.11', () => {
+  assert.equal(TEMPLATE.id, 'azbuka-2026-11-16-30days-v2-catalog-audited');
   assert.equal(TEMPLATE.base_start, '2026-11-16');
   assert.equal(TEMPLATE.length, 30);
   assert.equal(TEMPLATE.budget_rub, 50000);
@@ -19,19 +19,23 @@ test('шаблон меню «Азбука вкуса»: 24 дня меню по
   assert.equal(portions, 48, '48 обедов и ужинов из партий');
   const src = TEMPLATE.source!;
   assert.equal(src.calendar.length, 30);
-  assert.equal(src.orders.reduce((x, o) => x + o.subtotal, 0).toFixed(2), '38653.20');
+  assert.equal(src.orders.reduce((x, o) => x + o.subtotal, 0).toFixed(2), '40023.36');
+  assert.equal(src.orders.length, 2);
+  assert.equal(src.audit!.length, 10, 'сводка замен карточек');
 });
 
-test('товары av.ru: ссылка, статус ссылки, фасовка и цена упаковки; наличие не проверено', () => {
+test('товары av.ru: только индивидуальные карточки, фасовка и цена упаковки; наличие не проверено', () => {
   const av = TEMPLATE.products.filter((p) => !p.archived);
-  assert.equal(av.length, 49);
+  assert.equal(av.length, 48);
   for (const p of av) {
-    assert.match(p.url!, /^https:\/\/av\.ru\//, p.id);
-    assert.ok(['individual_product_page', 'category_listing'].includes(p.listing_status!), p.id);
+    assert.match(p.url!, /^https:\/\/av\.ru\/i\/\d+\/?$/, p.id);
+    assert.equal(p.listing_status, 'individual_product_page', p.id);
     assert.equal(p.availability, 'not_verified');
     assert.ok(p.pack.size > 0 && p.pack_price! > 0, p.id);
   }
-  assert.equal(av.filter((p) => p.listing_status === 'category_listing').length, 2);
+  assert.ok(!av.some((p) => p.id === 'pumpkinseeds'), 'тыквенные семечки без подтверждённой карточки убраны');
+  assert.equal(PRODUCTS.chicken.url, 'https://av.ru/i/572843');
+  assert.equal(PRODUCTS.chicken.pack.size, 865);
   for (const d of TEMPLATE.dishes.filter((x) => !x.archived)) for (const i of d.ingredients) assert.ok(PRODUCTS[i.product]?.url, `${d.id}: ${i.product}`);
 });
 
@@ -59,7 +63,7 @@ test('исключённые продукты отсутствуют', () => {
   for (const bad of ['мёд', 'мед ', 'дорад', 'сардин', 'алкогол', 'вино', 'пиво', 'кофе', 'энергетик', 'лимонад']) assert.ok(!names.includes(bad), bad);
 });
 
-test('калорийность: расчёт по продуктам совпадает с оценками комплекта (≈2389 ккал в среднем, 2139–2559)', () => {
+test('калорийность: расчёт по продуктам совпадает с оценками комплекта (≈2391 ккал в среднем, 2141–2596)', () => {
   const ks: number[] = [];
   for (const d of TEMPLATE.days) {
     let k = 0;
@@ -67,9 +71,9 @@ test('калорийность: расчёт по продуктам совпа�
     ks.push(k);
   }
   const avg = ks.reduce((a, b) => a + b, 0) / ks.length;
-  assert.ok(Math.abs(avg - 2389.2) < 1, `${avg}`);
-  assert.equal(Math.round(Math.min(...ks)), 2139);
-  assert.equal(Math.round(Math.max(...ks)), 2559);
+  assert.ok(Math.abs(avg - 2391.06) < 1, `${avg}`);
+  assert.ok(Math.abs(Math.min(...ks) - 2141.5) < 1);
+  assert.ok(Math.abs(Math.max(...ks) - 2596.5) < 1);
   for (const d of TEMPLATE.dishes.filter((x) => !x.archived)) assert.ok(Math.abs(dishNutrition(d.id, 1).kcal - d.nutrition_estimate!.kcal) < 1.5, d.id);
 });
 

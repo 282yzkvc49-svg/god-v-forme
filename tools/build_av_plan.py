@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Сборка шаблона плана питания из комплекта «Азбука вкуса»: python3 -I tools/build_av_plan.py [--report]
+Сборка шаблона плана питания из проверенного комплекта «Азбука вкуса» v2: python3 -I tools/build_av_plan.py [--report]
 
-Вход:  tools/source/av_30day_seed.json — комплект на 16.11–15.12.2026 (61 рецепт, 49 товаров av.ru,
-       календарь, 8 партий готовки, 2 закупки), tools/legacy/legacy_catalog.json — прежнее меню (только для истории).
+Вход:  tools/source/av_verified_menu_v2.json — комплект на 16.11–15.12.2026 (61 рецепт, 48 товаров av.ru —
+       только индивидуальные карточки av.ru/i/…, календарь, 8 партий готовки, 2 закупки),
+       tools/source/av_catalog_audit_v2.csv — замены товарных карточек по сравнению с прошлой версией,
+       tools/legacy/legacy_catalog.json — прежнее меню (только для истории; скумбрия — только там).
 Выход: src/data/plan_template.json, меню-часть src/data/initial_seed.json (памятка, соответствие блюд рецептам).
 
 Что делает:
@@ -27,7 +29,9 @@ from datetime import date
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-SRC = os.path.join(HERE, "source", "av_30day_seed.json")
+SRC = os.path.join(HERE, "source", "av_verified_menu_v2.json")
+AUDIT = os.path.join(HERE, "source", "av_catalog_audit_v2.csv")
+AV_CARD = re.compile(r"^https://av\.ru/i/\d+/?$")
 LEGACY = os.path.join(HERE, "legacy", "legacy_catalog.json")
 OUT = os.path.join(ROOT, "src", "data", "plan_template.json")
 SEED_PATH = os.path.join(ROOT, "src", "data", "initial_seed.json")
@@ -51,9 +55,9 @@ CATEGORIES = ["Мясо и птица", "Рыба и морепродукты", 
 #  примечание к массе в рецептах, масса 1 шт. съедобной части для подсказки «≈N шт.»)
 F, Z, P = "fridge", "freezer", "pantry"
 META = {
-    "chicken": ("Мясо и птица", F, 3, True, "лоток 800 г", "сырое филе", None),
+    "chicken": ("Мясо и птица", F, 3, True, "лоток 865 г", "сырое филе", None),
     "turkey": ("Мясо и птица", F, 3, True, "лоток 700 г", "сырое филе", None),
-    "turkey_mince": ("Мясо и птица", F, 2, True, "лоток 700 г", "сырой фарш", None),
+    "turkey_mince": ("Мясо и птица", F, 2, True, "лоток 450 г", "сырой фарш", None),
     "beef_mince": ("Мясо и птица", F, 2, True, "лоток 500 г", "сырой фарш", None),
     "pollock": ("Рыба и морепродукты", Z, 180, False, "упаковка 300 г", "сырое филе", None),
     "trout": ("Рыба и морепродукты", F, 2, True, "стейк ≈300 г", "масса стейка с костью; съедобная часть ≈82%", None),
@@ -75,7 +79,7 @@ META = {
     "potato": ("Овощи свежие", P, 30, False, "сетка 2 кг", "очищенный", 150),
     "carrot": ("Овощи свежие", F, 30, False, "пакет 1,5 кг", "очищенная", 100),
     "onion": ("Овощи свежие", P, 60, False, "сетка 500 г", "очищенный", 90),
-    "garlic": ("Овощи свежие", P, 60, False, "упаковка 150 г", "очищенный", 5),
+    "garlic": ("Овощи свежие", P, 60, False, "упаковка 50 г", "очищенный", 5),
     "tomato": ("Овощи свежие", F, 7, False, "упаковка 500 г", None, 110),
     "cucumber": ("Овощи свежие", F, 7, False, "упаковка 500 г", None, 110),
     "pepper": ("Овощи свежие", F, 10, False, "упаковка ≈400 г", "без семян", 150),
@@ -93,13 +97,12 @@ META = {
     "strawberry": ("Ягоды и фрукты замороженные", Z, 180, False, "пакет 300 г", "замороженная", None),
     "cherry": ("Ягоды и фрукты замороженные", Z, 180, False, "пакет 300 г", "замороженная", None),
     "walnuts": ("Орехи и семена", P, 90, False, "пакет 200 г", None, None),
-    "almonds": ("Орехи и семена", P, 90, False, "пакет 150 г", None, None),
-    "pumpkinseeds": ("Орехи и семена", P, 90, False, "пакет 150 г", None, None),
+    "almonds": ("Орехи и семена", P, 90, False, "пакет 120 г", None, None),
     "oliveoil": ("Масла и соусы", P, 365, False, "бутылка 500 мл", "1 ч. л. ≈ 5 мл, 1 ст. л. ≈ 15 мл", None),
-    "paprika": ("Специи", P, 365, False, "упаковка 20 г", None, None),
+    "paprika": ("Специи", P, 365, False, "упаковка 25 г", None, None),
     "cinnamon": ("Специи", P, 365, False, "упаковка 20 г", None, None),
     "curry": ("Специи", P, 365, False, "упаковка 30 г", None, None),
-    "salt": ("Специи", P, 3650, False, "пачка 1 кг", None, None),
+    "salt": ("Специи", P, 3650, False, "пачка 500 г", None, None),
 }
 UNIT = {"g": "g", "мл": "ml", "ml": "ml", "шт.": "pcs", "pcs": "pcs"}
 RUNIT = {"г": "g", "мл": "ml", "шт.": "pcs"}
@@ -111,6 +114,8 @@ for p in seed["product_catalog"]:
     if pid not in META:
         err("нет описания хранения для товара", pid)
         continue
+    if not AV_CARD.match(p["product_url"]) or p.get("listing_status") != "individual_product_page":
+        err(pid, "не индивидуальная карточка av.ru:", p["product_url"])
     cat, storage, shelf, freezable, label, note, piece = META[pid]
     unit = UNIT[p["pack_unit"]]
     n = p["nutrition_per_100"]
@@ -132,13 +137,43 @@ for p in seed["product_catalog"]:
         pantry=False,
         url=p["product_url"], listing_status=p["listing_status"], availability="not_verified",
         pack_price=p["listed_price_rub"], av_category=p["category"], av_note=p.get("notes") or None,
+        checked_date=p.get("catalog_page_checked_date"),
     )
     products.append(prod)
     P_BY[pid] = prod
+for pid in META:
+    if pid not in P_BY:
+        err("лишнее описание хранения для товара, которого нет в комплекте:", pid)
 # прежние продукты — только для истории (совпадающие id берутся из комплекта)
 for p in legacy["products"]:
     if p["id"] not in P_BY:
         products.append(p)
+# замены товарных карточек по сравнению с прошлой версией комплекта
+audit = []
+with open(AUDIT, encoding="utf-8-sig") as f:
+    for line in f.read().splitlines()[1:]:
+        if not line.strip():
+            continue
+        pid, old, new, note = (line.split(";") + ["", "", "", ""])[:4]
+        by = [x["id"] for x in P_BY.values() if x["url"].rstrip("/") == new.rstrip("/")]
+        if not by or (pid in P_BY and pid not in by):
+            err("замена из аудита не совпадает с каталогом:", pid, new)
+        # товар убран из комплекта (тыквенные семечки) — в рецептах его заменил другой товар каталога
+        rec = dict(id=pid, old=old if old.startswith("http") else None, new=new, note=note,
+                   removed=pid not in P_BY, now=by[0] if by else None, name=P_BY[pid]["name"] if pid in P_BY else None, recipes=[])
+        if pid == "pumpkinseeds":
+            # в v2 семечки заменены миндалём в этих рецептах (сверено с прошлой версией комплекта)
+            rec["name"] = "Тыквенные семечки (убраны из комплекта)"
+            rec["recipes"] = ["B05", "B14", "B24", "S03", "S07", "S12"]
+            for rid in rec["recipes"]:
+                r = next(x for x in seed["recipes"] if x["id"] == rid)
+                if not any(i["product_id"] == "almonds" for i in r["ingredients"]):
+                    err(rid, "ожидался миндаль вместо тыквенных семечек")
+        audit.append(rec)
+for r in seed["recipes"]:
+    for i in r["ingredients"]:
+        if i["product_id"] not in P_BY:
+            err(r["id"], "ингредиент ссылается на товар не из каталога:", i["product_id"])
 
 # ------------------------------------------------------------------ рецепты
 REC = {r["id"]: r for r in seed["recipes"]}
@@ -330,7 +365,7 @@ out = dict(
         cooking=[dict(id=e["id"], date=e["date"], items=[dict(dish=r["recipe_id"], servings=r["cook_servings"],
                                                               uses=[[a["date"], a["meal"]] for a in r["allocations"]])
                                                          for r in e["recipes"]]) for e in seed["cooking_events"]],
-        orders=orders,
+        orders=orders, audit=audit,
         kcal=dict(avg=avg[0], min=round(min(ks)), max=round(max(ks)), protein=avg[1]),
     ),
 )
@@ -376,7 +411,7 @@ memo["Важно про бюджет"] = (f"Бюджет домашней еды
 iseed["memo"] = [{"label": k, "text": v} for k, v in memo.items()]
 iseed["meal_recipe_map"] = [dict(match=r["title"].lower(), scope="whole", kind="exact", recipe_id=r["id"], comment=None)
                             for r in seed["recipes"]]
-iseed["sources"] = [f"Комплект «Азбука вкуса» {seed['seed_id']}: tools/source/av_30day_seed.json → tools/build_av_plan.py → src/data/plan_template.json",
+iseed["sources"] = [f"Комплект «Азбука вкуса» {seed['seed_id']}: tools/source/av_verified_menu_v2.json + av_catalog_audit_v2.csv → tools/build_av_plan.py → src/data/plan_template.json",
                     "Прежнее меню (до 14.11.2026) — только для истории: tools/legacy/",
                     "ТЗ «Мой год в форме» и корректировки: оборудование, командировки, релакс-дни, дата старта"]
 with open(SEED_PATH, "w", encoding="utf-8") as f:

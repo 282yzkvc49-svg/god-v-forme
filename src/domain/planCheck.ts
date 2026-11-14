@@ -312,6 +312,55 @@ export function checkSeedPlan(inst: PlanInstance): CheckResult[] {
   return res;
 }
 
+const AV_CARD = /^https:\/\/av\.ru\/i\/\d+\/?$/;
+const MACKEREL = /скумбри|mackerel/i;
+
+/**
+ * Активные данные (каталог, рецепты, план с сегодняшнего дня, готовки, закупки) — без скумбрии,
+ * без ссылок на удалённые или архивные товары и только с индивидуальными карточками av.ru.
+ */
+export function checkActiveData(data: AppData, today: string): CheckResult {
+  const d: string[] = [];
+  const products = TEMPLATE.products.filter((p) => !p.archived);
+  for (const p of products) {
+    if (!p.url || !AV_CARD.test(p.url)) d.push(`${p.name}: нет индивидуальной карточки av.ru`);
+    if (MACKEREL.test(`${p.id} ${p.name}`)) d.push(`каталог: ${p.name}`);
+  }
+  const dishes = TEMPLATE.dishes.filter((x) => !x.archived);
+  for (const x of dishes) {
+    if (MACKEREL.test(`${x.id} ${x.title} ${x.steps.map((s) => s.text).join(' ')} ${x.note ?? ''}`)) d.push(`рецепт ${x.id}: скумбрия`);
+    for (const i of x.ingredients) {
+      const p = PRODUCTS[i.product];
+      if (!p || p.archived) d.push(`рецепт ${x.id}: ингредиент «${i.product}» ссылается на удалённый товар`);
+      else if (!p.url || !AV_CARD.test(p.url)) d.push(`рецепт ${x.id}: «${p.name}» без карточки av.ru`);
+    }
+  }
+  const okDish = (id: string) => !!DISHES[id] && !DISHES[id].archived;
+  for (const day of Object.values(data.planDays)) {
+    if (day.date < today) continue;
+    if (MACKEREL.test(JSON.stringify(day.meals ?? {}) + JSON.stringify(day.mealCards ?? {}))) d.push(`${fmtShort(day.date)}: скумбрия в меню`);
+    for (const sl of MEAL_SLOTS) for (const p of day.mealCards?.[sl]?.parts ?? []) if (!okDish(p.dishId)) d.push(`${fmtShort(day.date)}: блюдо «${p.dishId}» не из текущего меню`);
+  }
+  for (const e of Object.values(data.cookingEvents)) {
+    if (e.date < today) continue;
+    if (MACKEREL.test(`${e.sourceText ?? ''} ${(e.dishes ?? []).map((x) => x.text).join(' ')}`)) d.push(`готовка ${fmtShort(e.date)}: скумбрия`);
+    for (const it of e.items ?? []) if (!okDish(it.dishId)) d.push(`готовка ${fmtShort(e.date)}: блюдо «${it.dishId}» не из текущего меню`);
+  }
+  for (const e of Object.values(data.shoppingEvents)) {
+    if (e.date < today || e.kind === 'trip') continue;
+    for (const l of e.lines ?? []) {
+      const p = PRODUCTS[l.productId];
+      if (!p || p.archived) d.push(`закупка ${fmtShort(e.date)}: товар «${l.productId}» удалён из каталога`);
+      else if (!p.url || !AV_CARD.test(p.url)) d.push(`закупка ${fmtShort(e.date)}: «${p.name}» без карточки av.ru`);
+    }
+    if ((e.items ?? []).some((i) => MACKEREL.test(i.name))) d.push(`закупка ${fmtShort(e.date)}: скумбрия`);
+  }
+  return {
+    id: 18, title: 'В активном меню нет скумбрии и ссылок на удалённые товары', ok: !d.length,
+    details: d.length ? d.slice(0, 12) : [`Каталог: ${products.length} товаров, у всех — индивидуальная карточка av.ru/i/…; ${dishes.length} рецептов — все ингредиенты ссылаются на действующие товары; в плане с ${fmtShort(today)}, готовках и закупках скумбрии нет.`],
+  };
+}
+
 /** Калорийность по дням (для отчёта проверки). */
 export function kcalSummary(inst: PlanInstance): { min: number; max: number; avg: number; unverifiedDays: number } {
   const ks: number[] = [];

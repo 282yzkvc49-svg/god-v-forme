@@ -64,7 +64,7 @@ export function SettingsScreen() {
               <a className="btn small" href={href('/menu-update')}>Посмотреть и применить</a>
             </Note>
           ) : (
-            <p className="mt0">Меню: {TEMPLATE.title}. <a href={href('/menu-update')}>Проверки и сверка с комплектом</a></p>
+            <p className="mt0">Меню: {TEMPLATE.title}. <a href={href('/menu-update')}>Отчёт об обновлении, резервная копия и проверки</a> · <a href={href('/av-check')}>Проверка товаров на av.ru</a></p>
           )}
           {s.plan ? (
             <p className="mt0">Сейчас: первый цикл с {fmtFull(s.plan.startDate)} по {fmtFull(planEnd(s.plan))}.</p>

@@ -2,10 +2,13 @@
 import { commit, forgetPhotoURL, getData, putPhotoBlob } from './store';
 import type { Op } from './idb';
 import type {
+  AvProductRec, ProductSub,
   CustomTask, Difficulty, ExerciseLog, ExportRecord, Feeling, MealMapEntry, PhotoMeta, PhotoPose, PlanSettings, Recipe, Settings,
   TaskStatus, TemplateId, TrainingLog,
 } from './types';
 import { replanOps } from '../domain/plan';
+import { productCheckOps, resetChecksOps } from '../domain/avCheck';
+import { menuUpdateOps, rollbackMenuOps } from './model';
 import { today as todayFn } from '../lib/clock';
 import type { DayTask } from '../domain/tasks';
 import { templateVersionFor } from '../domain/templates';
@@ -308,3 +311,30 @@ export function deleteDataForPeriod(from: ISODate, to: ISODate) {
   }
   return commit(ops).then(() => ops.length);
 }
+
+// ------------------------------------------------------------------ проверка товаров av.ru и замены
+
+export function setAvStatus(productId: string, status: 'available' | 'unavailable' | null) {
+  return commit(productCheckOps(getData(), productId, { status }, todayFn(), nowStamp()));
+}
+
+export function setAvSub(productId: string, sub: ProductSub | null) {
+  const patch: Partial<Pick<AvProductRec, 'status' | 'sub'>> = sub ? { sub } : { sub: null };
+  return commit(productCheckOps(getData(), productId, patch, todayFn(), nowStamp()));
+}
+
+export function resetAvChecks(ids: string[]) {
+  return commit(resetChecksOps(getData(), ids, nowStamp()));
+}
+
+// ------------------------------------------------------------------ обновление меню с резервной копией
+
+export function applyMenuUpdate(startDate: ISODate) {
+  const res = menuUpdateOps(getData(), startDate, todayFn(), nowStamp(), __APP_VERSION__);
+  return commit(res.ops).then(() => res);
+}
+
+export function rollbackMenuUpdate(backupId: string) {
+  return commit(rollbackMenuOps(getData(), backupId));
+}
+

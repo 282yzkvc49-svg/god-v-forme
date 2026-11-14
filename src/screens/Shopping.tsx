@@ -16,6 +16,8 @@ import { copyText, shareText } from '../lib/files';
 import { PiBookOpen, PiCheck, PiCookingPot, PiCopy, PiPrinter, PiShareNetwork, PiShoppingCart, PiSnowflake, PiPackage, PiListChecks, PiHouse } from '../ui/icons';
 import { containersFor } from './planViews';
 import { AvLink } from '../ui/AvLink';
+import { AvStateChip, BasketSummary } from './AvCheck';
+import { isBlocked, orderProductIds } from '../domain/avCheck';
 
 type Data = ReturnType<typeof useApp>;
 
@@ -63,6 +65,12 @@ export function ShoppingHub() {
   return (
     <div className="page">
       <PageHead title="Закупки и готовка" sub={`${PROFILE.shopping_text} ${PROFILE.cooking_days_text}`} />
+      {cfg && (
+        <div className="card flat" style={{ marginBottom: 12 }}>
+          <div className="card-head"><h3 className="mt0">Товары av.ru: проверка по вашему адресу</h3><a className="btn small primary" href={href('/av-check')}>Проверить на av.ru</a></div>
+          <BasketSummary ids={Array.from(new Set(current.filter((e) => e.date >= today).flatMap((e) => orderProductIds(e))))} compact />
+        </div>
+      )}
       {cfg && <p className="muted mt0">План питания: {fmtDayMonth(cfg.startDate)} — {fmtDayMonth(planEnd(cfg))}. <a href={href('/settings', { s: 'plan' })}>Изменить дату старта</a></p>}
       <div className="cols even">
         <div className="stack">
@@ -176,7 +184,7 @@ export function ShopPage({ id }: { id: string }) {
   const d = effDate(data, `shop:${e.id}`, e.date);
   const ids = e.lines ? e.lines.map((l) => l.productId) : e.items.map((i) => i.itemId);
   const markAll = () => {
-    const left = ids.filter((pid) => !data.shoppingChecks[`${e.id}:${pid}`]?.bought && !data.shoppingChecks[`${e.id}:${pid}`]?.atHome);
+    const left = ids.filter((pid) => !data.shoppingChecks[`${e.id}:${pid}`]?.bought && !data.shoppingChecks[`${e.id}:${pid}`]?.atHome && !isBlocked(data, pid));
     if (!left.length) return;
     if (!confirm(`Отметить купленными ещё ${left.length} позиций? Отметки можно будет снять по одной или все сразу.`)) return;
     A.setAllBought(e.id, left, true);
@@ -198,7 +206,15 @@ export function ShopPage({ id }: { id: string }) {
       <div className="print-only"><h2>{e.title}, {fmtLong(d)}</h2></div>
       {e.kind === 'trip' && <Note kind="info">Перекусы в командировку: купить в обычном супермаркете на месте, готовить не нужно. Варианты чередуются по дням — можно взять любой доступный. Сумма не входит в домашний бюджет на продукты.</Note>}
       {e.kind === 'topup' && <Note kind="info">Небольшая докупка свежего: молочные продукты, грибы, огурцы, помидоры, бананы и т. п. не хранятся до следующей основной закупки — их лучше купить ближе к дате. Фрукты и овощи — поштучно, в ближайшем магазине или заказом на av.ru; часть можно заменить замороженными.</Note>}
-      {e.lines?.some((l) => PRODUCTS[l.productId]?.url) && <Note kind="plain">Ссылки ведут на товары av.ru (у некоторых — на подборку категории). Цены — ориентир на 14.11.2026, а не собранная корзина: наличие и доставка по адресу не проверены, итог будет известен при оформлении заказа.</Note>}
+      {e.kind !== 'trip' && e.lines?.some((l) => PRODUCTS[l.productId]?.url) && (
+        <div className="no-print">
+          <BasketSummary ids={orderProductIds(e)} />
+          <div className="btn-row" style={{ marginBottom: 12 }}>
+            <a className="btn primary" href={href('/av-check', { shop: e.id })}>Проверить на av.ru</a>
+            <span className="small muted">Цены — ориентир на 14.11.2026, не собранная корзина.</span>
+          </div>
+        </div>
+      )}
       {e.lines && <p className="hint">Количество посчитано из меню и готовок этого периода; учтены остатки прошлых закупок и несъедобная часть (кожура, сердцевина). Отметьте «есть дома», если продукт уже есть — он не войдёт в сумму.</p>}
       <div className="cols">
         <div className="card">
@@ -263,12 +279,15 @@ function ShopLineRow({ e, l, editPrices }: { e: ShoppingEvent; l: ShopLine; edit
   const chk = data.shoppingChecks[`${e.id}:${l.productId}`];
   const bought = !!chk?.bought;
   const atHome = !!chk?.atHome;
+  const blocked = e.kind !== 'trip' && isBlocked(data, l.productId) && !bought;
   return (
-    <div className={`shop-item${bought || atHome ? ' bought' : ''}`}>
-      <CheckButton small state={bought ? 'on' : 'off'} label={`${p.name}: ${bought ? 'снять отметку' : 'куплено'}`} onClick={() => A.setBought(e.id, l.productId, !bought)} />
+    <div className={`shop-item${bought || atHome ? ' bought' : ''}${blocked ? ' blocked' : ''}`}>
+      <CheckButton small state={bought ? 'on' : 'off'} label={`${p.name}: ${bought ? 'снять отметку' : blocked ? 'заблокировано до замены' : 'куплено'}`} onClick={() => { if (blocked) { toast('Товар недоступен по вашему адресу — сначала подтвердите замену'); return; } A.setBought(e.id, l.productId, !bought); }} />
       <div style={{ minWidth: 0 }}>
         <div className="name">{p.name}</div>
+        {p.substituteFor && <div className="small" style={{ color: 'var(--sea)' }}>замена вместо «{p.substituteFor}»</div>}
         <AvLink productId={l.productId} />
+        {e.kind !== 'trip' && <div style={{ marginTop: 2 }}><AvStateChip productId={l.productId} />{blocked && <a className="small" style={{ marginLeft: 8 }} href={href('/av-check', { shop: e.id })}>выбрать замену</a>}</div>}
         <div className="small muted">
           Нужно {needText(l)}{l.needs.length ? ` к ${fmtShort(l.needs.reduce((m, n) => (n.date < m ? n.date : m), l.needs[0].date))}` : ''}{l.fromStock > 0 ? `, из остатков ${fmtAmount(l.fromStock, p.unit)}` : ''}{l.leftover > 0 && l.buy > 0 ? `, останется ${fmtAmount(l.leftover, p.unit)}` : ''}. Ориентир {fmtRub(atHome ? 0 : l.cost)}.
         </div>

@@ -7,7 +7,9 @@ import {
 import { SEED_ID, defaultSettings, seedTemplateVersions } from '../lib/seed';
 import type { ISODate } from '../lib/dates';
 import { BASE_START, buildInstance, makePlanSettings, replanOps } from '../domain/plan';
-import type { Trip } from './types';
+import type { BackupRec, CookingEvent, MealCard, MealSlot, MigrationReport, PlanDay, ShoppingEvent, Trip } from './types';
+import { MEAL_SLOTS } from './types';
+import { DISHES, PRODUCTS, TEMPLATE } from '../domain/catalog';
 
 export const DATA_VERSION = 6;
 
@@ -233,16 +235,155 @@ export function planV6Ops(_data: AppData, _today: ISODate, _now: string): Op[] {
  * Переход на новое меню (шаблон с другим id) после предпросмотра: план пересобирается с выбранной датой старта.
  * Прошедшие дни — история; тренировки, вес, фото, отметки, командировки и релакс-дни не меняются.
  */
-export function menuUpdateOps(data: AppData, startDate: ISODate, today: ISODate, now: string) {
-  return replanOps(data, makePlanSettings(startDate, now, true), today, { now });
+export function menuUpdateOps(data: AppData, startDate: ISODate, today: ISODate, now: string, appVersion = 'test') {
+  const res = replanOps(data, makePlanSettings(startDate, now, true), today, { now });
+  const after = applyOps(data, res.ops);
+  const purge = purgeRemovedOps(after, today);
+  const newDays = new Set(res.instance.planDays.map((d) => d.date));
+  const replacedDays = res.instance.planDays.filter((d) => d.date >= today && JSON.stringify(data.planDays[d.date]?.meals ?? null) !== JSON.stringify(d.meals)).length;
+  const newIds = new Set([...res.instance.cookingEvents.map((e) => e.id), ...res.instance.shoppingEvents.map((e) => e.id)]);
+  const gone = (store: 'cookingEvents' | 'shoppingEvents') => Object.values(data[store]).filter((e) => e.source === 'seed' && e.date >= today && !newIds.has(e.id)).length;
+  const futureMackerel = Object.values(data.planDays).filter((d) => d.date >= today && dayHasRemoved(d)).length
+    + Object.values(data.cookingEvents).filter((e) => e.date >= today && cookHasRemoved(e)).length
+    + Object.values(data.shoppingEvents).filter((e) => e.date >= today && shopHasRemoved(e)).length;
+  const keptMarks: string[] = [];
+  for (const s of Object.values(data.taskStatus)) {
+    if (s.status === 'planned' || !s.taskId.startsWith('meal:')) continue;
+    const [, date, slot] = s.taskId.split(':');
+    if (date >= today && newDays.has(date) && data.planDays[date]?.meals?.[slot as MealSlot] !== res.instance.planDays.find((d) => d.date === date)?.meals?.[slot as MealSlot]) {
+      keptMarks.push(`${date} ${slot}: отметка «${s.status}» сохранена, блюдо меняется`);
+    }
+  }
+  const report: MigrationReport = {
+    appliedAt: now, startDate, replacedDays, removedFutureCooks: gone('cookingEvents'), removedFutureShops: gone('shoppingEvents'),
+    mackerel: { removedPast: purge.removed, keptHistory: purge.kept, future: futureMackerel }, unknownRefsFixed: purge.unknown, keptMarks,
+  };
+  // резервная копия всех данных (кроме самих фото) — до изменения базы, в той же транзакции
+  const backup: BackupRec = {
+    id: `menu-${now.replace(/[^0-9]/g, '').slice(0, 14)}`, createdAt: now, reason: `Перед обновлением меню на «${TEMPLATE.id}»`, appVersion,
+    fromMenu: data.settings.plan?.menuId ?? null, toMenu: TEMPLATE.id, stores: dataToStores(data), report,
+  };
+  const old = Object.values(data.backups ?? {}).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).slice(1);
+  const ops: Op[] = [{ store: 'backups', put: backup }, ...old.map((b) => ({ store: 'backups', del: b.id }) as Op), ...res.ops, ...purge.ops];
+  return { ...res, ops, report, backupId: backup.id };
+}
+
+// ------------------------------------------------------------------ удалённые продукты (скумбрия) в старых данных
+
+/** Блюда и продукты, убранные из меню навсегда: в активных данных их быть не должно. */
+export const REMOVED_DISHES = ['mackerel'];
+export const REMOVED_PRODUCTS = ['mackerel_fillet'];
+export const REMOVED_TEXT = /скумбри/i;
+
+function partRemoved(dishId: string): boolean {
+  if (REMOVED_DISHES.includes(dishId)) return true;
+  const d = DISHES[dishId];
+  if (!d) return true; // ссылка на блюдо, которого нет в справочнике
+  return d.ingredients.some((i) => REMOVED_PRODUCTS.includes(i.product));
+}
+
+function slotRemoved(day: PlanDay, slot: MealSlot): boolean {
+  const card = day.mealCards?.[slot];
+  if (card && (card.parts.some((p) => partRemoved(p.dishId)) || REMOVED_TEXT.test(card.title))) return true;
+  return REMOVED_TEXT.test(day.meals?.[slot] ?? '');
+}
+
+export function dayHasRemoved(day: PlanDay): boolean {
+  return MEAL_SLOTS.some((s) => slotRemoved(day, s));
+}
+
+export function cookHasRemoved(e: CookingEvent): boolean {
+  return (e.items ?? []).some((i) => partRemoved(i.dishId)) || REMOVED_TEXT.test(`${e.sourceText ?? ''} ${(e.dishes ?? []).map((x) => x.text).join(' ')}`);
+}
+
+function lineRemoved(productId: string, name?: string): boolean {
+  return REMOVED_PRODUCTS.includes(productId) || !PRODUCTS[productId] || REMOVED_TEXT.test(name ?? '');
+}
+
+export function shopHasRemoved(e: ShoppingEvent): boolean {
+  return (e.lines ?? []).some((l) => lineRemoved(l.productId)) || (e.items ?? []).some((i) => REMOVED_TEXT.test(i.name));
+}
+
+const REMOVED_CARD: MealCard = { title: 'Блюдо прежнего меню удалено', parts: [] };
+
+/**
+ * Убирает скумбрию (и ссылки на удалённые товары) из сохранённых данных прежних меню.
+ * Отмеченное пользователем (съедено, приготовлено, куплено) остаётся историей; неотмеченное — удаляется.
+ */
+export function purgeRemovedOps(data: AppData, today: ISODate): { ops: Op[]; removed: string[]; kept: string[]; unknown: string[] } {
+  const ops: Op[] = [];
+  const removed: string[] = [], kept: string[] = [], unknown: string[] = [];
+  const marked = (taskId: string) => { const st = data.taskStatus[taskId]?.status; return !!st && st !== 'planned'; };
+  for (const day of Object.values(data.planDays)) {
+    const slots = MEAL_SLOTS.filter((s) => slotRemoved(day, s));
+    if (!slots.length) continue;
+    const anyMark = MEAL_SLOTS.some((s) => marked(`meal:${day.date}:${s}`)) || marked(`box:${day.date}`);
+    if (!anyMark) { ops.push({ store: 'planDays', del: day.date }); removed.push(`${day.date}: день прежнего меню без отметок удалён`); continue; }
+    const cards = day.mealCards ? { ...day.mealCards } : null;
+    const meals = day.meals ? { ...day.meals } : null;
+    let changed = false;
+    for (const s of slots) {
+      const title = day.mealCards?.[s]?.title ?? day.meals?.[s] ?? '';
+      if (marked(`meal:${day.date}:${s}`)) { kept.push(`${day.date} ${s}: «${title}» — отмечено, осталось в истории`); continue; }
+      if (cards) cards[s] = REMOVED_CARD;
+      if (meals) meals[s] = REMOVED_CARD.title;
+      changed = true;
+      removed.push(`${day.date} ${s}: «${title}» без отметки — убрано`);
+    }
+    if (changed) ops.push({ store: 'planDays', put: { ...day, mealCards: cards, meals } });
+  }
+  for (const e of Object.values(data.cookingEvents)) {
+    if (!cookHasRemoved(e)) continue;
+    if (marked(`cook:${e.id}`)) { kept.push(`${e.date} готовка «${e.title}» — отмечена, осталась в истории`); continue; }
+    const items = (e.items ?? []).filter((i) => !partRemoved(i.dishId));
+    const dishes = (e.dishes ?? []).filter((x) => !REMOVED_TEXT.test(x.text) && !x.recipeIds.some((r) => REMOVED_DISHES.includes(r)));
+    if (!items.length && !dishes.length) ops.push({ store: 'cookingEvents', del: e.id });
+    else ops.push({ store: 'cookingEvents', put: { ...e, items, dishes, sourceText: dishes.map((x) => x.text).join('; ') } });
+    removed.push(`${e.date} готовка: блюда со скумбрией убраны`);
+  }
+  for (const e of Object.values(data.shoppingEvents)) {
+    if (!shopHasRemoved(e)) continue;
+    const check = (id: string) => { const c = data.shoppingChecks[`${e.id}:${id}`]; return !!(c?.bought || c?.atHome); };
+    const lines = (e.lines ?? []).filter((l) => !lineRemoved(l.productId) || check(l.productId));
+    const items = (e.items ?? []).filter((i) => !(REMOVED_TEXT.test(i.name) || lineRemoved(i.itemId, i.name) && !!e.lines) || check(i.itemId));
+    for (const l of e.lines ?? []) if (lineRemoved(l.productId)) {
+      if (check(l.productId)) kept.push(`${e.date} закупка: «${PRODUCTS[l.productId]?.name ?? l.productId}» — отмечено, осталось в истории`);
+      else (PRODUCTS[l.productId] ? removed : unknown).push(`${e.date} закупка: ${PRODUCTS[l.productId]?.name ?? l.productId} — строка убрана`);
+    }
+    if (!lines.length && !items.length && !marked(`shop:${e.id}`)) ops.push({ store: 'shoppingEvents', del: e.id });
+    else ops.push({ store: 'shoppingEvents', put: { ...e, lines: e.lines ? lines : e.lines, items } });
+  }
+  for (const m of Object.values(data.mealLinks ?? {})) {
+    if (m.recipe_id && REMOVED_DISHES.includes(m.recipe_id)) { ops.push({ store: 'mealLinks', del: (m as any).id }); removed.push(`связь «${m.match}» → рецепт со скумбрией убрана`); }
+  }
+  for (const c of Object.values(data.checks ?? {})) if (REMOVED_DISHES.some((d) => c.id.startsWith(`recipe:${d}:`))) ops.push({ store: 'checks', del: c.id });
+  return { ops, removed, kept, unknown };
+}
+
+/** Откат обновления меню: план (дни, готовки, закупки, дата старта) — как в копии; записи пользователя не трогаются. */
+export function rollbackMenuOps(data: AppData, backupId: string): Op[] {
+  const b = data.backups?.[backupId];
+  if (!b) return [];
+  const ops: Op[] = [];
+  for (const store of ['planDays', 'cookingEvents', 'shoppingEvents'] as const) {
+    ops.push({ store, clear: true });
+    for (const r of b.stores[store] ?? []) ops.push({ store, put: r });
+  }
+  const s = (b.stores.settings ?? [])[0];
+  if (s) ops.push({ store: 'settings', put: { ...data.settings, plan: s.plan ?? null } });
+  return ops;
 }
 
 export { buildInstance };
 
 /** Состояние → массивы записей по хранилищам (для резервной копии). */
-export function dataToStores(data: AppData): Record<string, any[]> {
+/** Все хранилища для копии; внутренние копии (backups) не вкладываются в новые. */
+export function dataToStores(data: AppData, withBackups = false): Record<string, any[]> {
   const out: Record<string, any[]> = {};
-  for (const s of RECORD_STORES) out[s] = Object.values(data[s] as Record<string, unknown>);
+  for (const s of RECORD_STORES) {
+    if (s === 'backups' && !withBackups) continue;
+    out[s] = Object.values((data[s] ?? {}) as Record<string, unknown>);
+  }
   out.settings = [data.settings];
   out.meta = data.meta ? [data.meta] : [];
   return out;

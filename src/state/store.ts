@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { deleteDB, getAll, getOne, openDB, write, type Op } from './idb';
 import { applyOps, dataMigrationOps, emptyData, seedOps, seedUpgradeOps } from './model';
 import { RECORD_STORES, type AppData, type PhotoBlobRec } from './types';
+import { applyProductSubs } from '../domain/catalog';
 import { localDate } from '../lib/dates';
 import { today } from '../lib/clock';
 import { nowStamp } from '../lib/util';
@@ -17,7 +18,10 @@ interface Status { mode: StorageMode; error: string | null; saveError: string | 
 let status: Status = { mode: 'loading', error: null, saveError: null, persisted: null };
 const statusListeners = new Set<() => void>();
 
+let subsRef: unknown = null;
 function emit() {
+  // подтверждённые замены товаров — сразу в справочник (рецепты, закупки, калорийность)
+  if (data.avProducts !== subsRef) { subsRef = data.avProducts; applyProductSubs(data.avProducts); }
   for (const l of listeners) l();
 }
 function setStatus(s: Partial<Status>) {

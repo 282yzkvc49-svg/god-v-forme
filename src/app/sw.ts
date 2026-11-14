@@ -29,7 +29,9 @@ export function registerSW() {
     location.reload();
   });
   navigator.serviceWorker.register('sw.js').then((reg) => {
-    if (reg.waiting && navigator.serviceWorker.controller) announce(reg.waiting);
+    // новая версия уже скачана при прошлом запуске — включить сразу, чтобы не открывалась старая
+    // (со старым меню из кэша); данные в IndexedDB не затрагиваются
+    if (reg.waiting && navigator.serviceWorker.controller) { announce(reg.waiting); reg.waiting.postMessage('skipWaiting'); }
     reg.addEventListener('updatefound', () => {
       const nw = reg.installing;
       if (!nw) return;
@@ -39,7 +41,10 @@ export function registerSW() {
     });
     // проверять обновления при возвращении в приложение
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      if (document.visibilityState !== 'visible') return;
+      // вернулись в приложение: если новая версия ждёт и вы не посреди тренировки — включить её
+      if (reg.waiting && navigator.serviceWorker.controller && !/^#\/workout/.test(location.hash)) reg.waiting.postMessage('skipWaiting');
+      reg.update().catch(() => {});
     });
   }).catch(() => { /* офлайн-режим просто не включится */ });
 }

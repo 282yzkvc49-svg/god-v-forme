@@ -1,17 +1,18 @@
-// Предпросмотр нового меню перед применением: что изменится в меню, готовках и закупках,
-// какие проверки пройдены и что остаётся непроверенным (цены, наличие и доставка av.ru).
+// Обновление меню как миграция: резервная копия, сводка замен товаров, удаление скумбрии из старых данных,
+// что изменится в меню, готовках и закупках, проверки и отчёт. Применяется только по кнопке.
 import { useMemo, useState } from 'react';
 import { useApp } from '../state/store';
 import * as A from '../state/actions';
 import { useToday } from '../lib/clock';
-import { DISHES, TEMPLATE } from '../domain/catalog';
+import { BASE_PRODUCTS, DISHES, TEMPLATE } from '../domain/catalog';
 import { BUDGET_RUB, KCAL_TARGET, dayNutrition, menuUpdatePending, planEnd } from '../domain/plan';
-import { checkInstance, checkSeedPlan, checkUserData, kcalSummary } from '../domain/planCheck';
-import { menuUpdateOps } from '../state/model';
+import { checkActiveData, checkInstance, checkSeedPlan, checkUserData, kcalSummary } from '../domain/planCheck';
+import { applyOps, menuUpdateOps } from '../state/model';
+import type { MigrationReport } from '../state/types';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
-import { fmtDayMonth, fmtShort, weekdayShort, type ISODate } from '../lib/dates';
+import { fmtDayMonth, fmtLong, fmtShort, weekdayShort, type ISODate } from '../lib/dates';
 import { fmtRub } from '../lib/util';
-import { go, href } from '../app/router';
+import { href } from '../app/router';
 import { Disclosure, Note, PageHead, toast } from '../ui/kit';
 import { PiCheckBold, PiCookingPot, PiShoppingCart, PiSuitcase, PiWarning } from '../ui/icons';
 
@@ -24,9 +25,10 @@ export function MenuUpdateScreen() {
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(date);
-  const res = useMemo(() => (valid ? menuUpdateOps(data, date, today, new Date().toISOString()) : null), [date, today, data]);
+  const res = useMemo(() => (valid ? menuUpdateOps(data, date, today, new Date().toISOString(), __APP_VERSION__) : null), [date, today, data]);
   const inst = res?.instance ?? null;
-  const checks = useMemo(() => (inst ? [...checkInstance(inst), ...checkSeedPlan(inst), ...checkUserData(data)] : []), [inst]);
+  const checks = useMemo(() => (inst && res ? [...checkInstance(inst), ...checkSeedPlan(inst), checkActiveData(applyOps(data, res.ops), today), ...checkUserData(data)] : []), [inst]);
+  const lastBackup = Object.values(data.backups ?? {}).filter((b) => b.report).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const kcal = useMemo(() => (inst ? kcalSummary(inst) : null), [inst]);
   if (!res || !inst) {
     return (
@@ -58,16 +60,52 @@ export function MenuUpdateScreen() {
   const apply = () => {
     if (conflicts && !ack) return;
     setBusy(true);
-    A.applyOps(res.ops).then(() => {
-      toast(`Новое меню применено: старт ${fmtDayMonth(cfg.startDate)}`);
-      go('/today');
+    A.applyMenuUpdate(date).then(() => {
+      toast(`Резервная копия создана, новое меню применено: старт ${fmtDayMonth(cfg.startDate)}`);
+      window.scrollTo(0, 0);
     }).finally(() => setBusy(false));
   };
+  const rep = res.report;
 
   return (
     <div className="page narrow">
-      <PageHead title="Новое меню «Азбука вкуса»" sub={`${fmtDayMonth(cfg.startDate)} — ${fmtDayMonth(end)} · предпросмотр перед применением`} backTo="/today" />
-      {!pending && <Note kind="ok">Это меню уже применено. Здесь можно сверить проверки или выбрать другую дату старта.</Note>}
+      <PageHead title="Новое меню «Азбука вкуса»" sub={`${fmtDayMonth(cfg.startDate)} — ${fmtDayMonth(end)} · ${pending ? 'обновление базы — после резервной копии и вашего подтверждения' : 'меню применено'}`} backTo="/today" />
+      {!pending && lastBackup?.report && <ReportCard report={lastBackup.report} backupId={lastBackup.id} createdAt={lastBackup.createdAt} />}
+      {!pending && !lastBackup?.report && <Note kind="ok">Это меню уже применено. Здесь можно сверить проверки или выбрать другую дату старта.</Note>}
+
+      {pending && (
+        <div className="card">
+          <h2>1. Резервная копия</h2>
+          <p className="small mt0">Перед изменением базы приложение само сохранит внутреннюю копию всех данных (кроме фотографий — их обновление не трогает). Из неё можно вернуть прежнее меню одной кнопкой.</p>
+          <p className="small">Рекомендуем ещё сохранить файл-копию в «Файлы» (с фото): {data.settings.lastBackupAt ? `последняя — ${fmtLong(data.settings.lastBackupAt.slice(0, 10))}.` : 'файловой копии ещё нет.'}</p>
+          <a className="btn" href={href('/analysis', { tab: 'backup' })}>Сохранить копию в «Файлы»</a>
+        </div>
+      )}
+
+      {pending && src?.audit && (
+        <div className="card">
+          <h2>2. Сводка замен</h2>
+          <p className="small mt0">Меню и каталог заменяются целиком данными комплекта {TEMPLATE.id}; старые рецепты с новыми не смешиваются. Все {Object.values(BASE_PRODUCTS).filter((p) => !p.archived && p.url).length} товаров — индивидуальные карточки av.ru. Заменены карточки:</p>
+          <table className="table small">
+            <tbody>
+              {src.audit.map((a) => (
+                <tr key={a.id}>
+                  <td>{a.name ?? BASE_PRODUCTS[a.id]?.name ?? a.id}</td>
+                  <td>{a.note}{a.recipes.length ? ` — в рецептах ${a.recipes.join(', ')}` : ''}{a.old ? '' : ' (раньше — ссылка на подборку категории)'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <h3>Скумбрия</h3>
+          <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
+            <li>В новом меню, рецептах, каталоге и закупках скумбрии нет.</li>
+            <li>В будущих днях прежнего меню записей со скумбрией: {rep.mackerel.future} — заменятся новым меню.</li>
+            <li>В прошедших данных без ваших отметок: {rep.mackerel.removedPast.length ? `${rep.mackerel.removedPast.length} — будут убраны` : 'нет'}.</li>
+            <li>Отмеченное вами (съедено, куплено, приготовлено) остаётся историей: {rep.mackerel.keptHistory.length ? rep.mackerel.keptHistory.join('; ') : 'таких записей нет'}.</li>
+            {rep.unknownRefsFixed.length > 0 && <li>Ссылки на удалённые товары в старых закупках: {rep.unknownRefsFixed.length} — будут убраны.</li>}
+          </ul>
+        </div>
+      )}
 
       <div className="card">
         <h2>Что будет</h2>
@@ -88,11 +126,12 @@ export function MenuUpdateScreen() {
       </div>
 
       <div className="card">
-        <h2>Что изменится</h2>
+        <h2>{pending ? '3. Что изменится' : 'Что изменится при другой дате'}</h2>
         <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
           <li>Меню на {changed} {changed === 1 ? 'день' : 'дн.'} с {fmtDayMonth(today > cfg.startDate ? today : cfg.startDate)} заменится новым; прошедшие дни останутся историей.</li>
           <li>Готовки и закупки прежнего меню на будущие даты ({removedCooks} готовок, {removedShops} закупок) заменятся новыми; выполненные — останутся в истории.</li>
           <li>Не меняются: тренировки (гири 12 и 16 кг, мини-степпер, техника, журнал), вес, фото, месячные отчёты, импорт корректировок, командировки и релакс-день.</li>
+          {rep.keptMarks.length > 0 && <li>Ваши отметки на днях, где меняется блюдо, сохраняются: {rep.keptMarks.join('; ')}.</li>}
         </ul>
         {conflicts && (
           <Note kind="warn">
@@ -160,7 +199,7 @@ export function MenuUpdateScreen() {
       <div className="card">
         <h2>Что не проверено</h2>
         <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
-          <li>Цены — опубликованные на av.ru на 14.11.2026. Это не собранная корзина: итог, наличие и доставка в Лосино-Петровский станут известны только после выбора адреса и оформления заказа.</li>
+          <li>Цены — опубликованные на av.ru на 14.11.2026. Это не собранная корзина: итог, наличие и доставка в Лосино-Петровский станут известны только после выбора адреса и оформления заказа. После применения — «Проверить на av.ru»: откройте каждый товар, отметьте, есть ли он в вашей корзине; недоступный заблокируется в закупке до подтверждённой замены.</li>
           <li>{src ? src.orders.length : 2} основные закупки рассчитаны на две недели вперёд, но скоропортящееся (молочное, грибы, огурцы, помидоры, бананы, авокадо) столько не хранится — поэтому есть небольшие докупки: {homeShops.filter((e) => e.kind === 'topup').map((e) => fmtShort(e.date)).join(', ')}. Часть можно заменить замороженным.</li>
           <li>Калорийность — расчётная по справочным значениям комплекта, а не по этикеткам av.ru.</li>
           {inst.cookingEvents.some((e) => e.time === '07:00') && <li>В {inst.cookingEvents.filter((e) => e.time === '07:00').map((e) => fmtShort(e.date)).join(', ')} обед — из партии того же дня, поэтому готовка утром до работы (так в комплекте).</li>}
@@ -168,9 +207,32 @@ export function MenuUpdateScreen() {
       </div>
 
       <div className="btn-row" style={{ marginBottom: 24 }}>
-        <button className="btn primary big" disabled={busy || (conflicts && !ack)} onClick={apply}><PiCheckBold /> {pending ? 'Применить новое меню' : 'Применить с этой датой'}</button>
-        <a className="btn big" href={href('/today')}>Позже</a>
+        <button className="btn primary big" disabled={busy || (conflicts && !ack)} onClick={apply}><PiCheckBold /> {pending ? 'Создать резервную копию и применить' : 'Применить с этой датой'}</button>
+        <a className="btn big" href={href(pending ? '/today' : '/av-check')}>{pending ? 'Позже' : 'Проверить товары на av.ru'}</a>
       </div>
     </div>
   );
 }
+
+function ReportCard({ report, backupId, createdAt }: { report: MigrationReport; backupId: string; createdAt: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="card">
+      <h2>Отчёт о миграции</h2>
+      <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
+        <li>Резервная копия: {fmtLong(createdAt.slice(0, 10))}, {createdAt.slice(11, 16)} (внутренняя, все данные кроме фото).</li>
+        <li>Старт меню: {fmtLong(report.startDate)}; дней с новым меню: {report.replacedDays}; заменено будущих готовок прежнего меню: {report.removedFutureCooks}, закупок: {report.removedFutureShops}.</li>
+        <li>Скумбрия: в будущих данных — {report.mackerel.future} записей заменено новым меню; в прошедших без отметок убрано — {report.mackerel.removedPast.length}; осталось историей (отмечено вами) — {report.mackerel.keptHistory.length}.</li>
+        {report.mackerel.keptHistory.map((x, i) => <li key={i} className="muted">{x}</li>)}
+        {report.unknownRefsFixed.length > 0 && <li>Ссылки на удалённые товары убраны: {report.unknownRefsFixed.length}.</li>}
+        {report.keptMarks.length > 0 && <li>Отметки на днях со сменой блюда сохранены: {report.keptMarks.length}.</li>}
+        <li>Тренировки, вес, фото, отметки, командировки и релакс-день — без изменений.</li>
+      </ul>
+      <div className="btn-row" style={{ marginTop: 10 }}>
+        <a className="btn primary" href={href('/av-check')}>Проверить товары на av.ru</a>
+        <button className="btn ghost" disabled={busy} onClick={() => { if (!confirm('Вернуть прежнее меню из резервной копии? Отметки, вес, фото и тренировки останутся.')) return; setBusy(true); A.rollbackMenuUpdate(backupId).then(() => toast('Прежнее меню восстановлено из копии')).finally(() => setBusy(false)); }}>Вернуть прежнее меню</button>
+      </div>
+    </div>
+  );
+}
+

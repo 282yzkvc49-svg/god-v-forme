@@ -2,7 +2,7 @@
 // из комплекта «Азбука вкуса»; прежнее меню — только для истории, помечено archived).
 // Здесь — пищевая ценность, развёртка блюда в продукты и форматирование количеств.
 import tpl from '../data/plan_template.json';
-import type { MealSlot } from '../state/types';
+import type { AvProductRec, MealSlot, ProductSub } from '../state/types';
 
 export interface Nutr { kcal: number; p: number; f: number; c: number }
 
@@ -34,6 +34,9 @@ export interface Product {
   pack_price?: number;
   av_category?: string;
   av_note?: string | null;
+  checked_date?: string | null;
+  /** Название исходного товара, если этот заменён по подтверждению пользователя. */
+  substituteFor?: string | null;
 }
 
 export interface DishIngr { product: string; qty: number; note: string | null }
@@ -83,6 +86,8 @@ export interface SeedSource {
   cooking: { id: string; date: string; items: { dish: string; servings: number; uses: [string, string][] }[] }[];
   orders: { id: string; date: string; title: string; period: [string, string]; subtotal: number; note: string | null; lines: SeedOrderLine[] }[];
   kcal: { avg: number; min: number; max: number; protein: number };
+  /** Замены товарных карточек по сравнению с прошлой версией комплекта. */
+  audit?: { id: string; old: string | null; new: string; note: string; removed: boolean; now: string | null; name: string | null; recipes: string[] }[];
 }
 
 export interface PlanTemplate {
@@ -107,6 +112,62 @@ export interface PlanTemplate {
 export const TEMPLATE: PlanTemplate = tpl as any;
 export const PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.products.map((p) => [p.id, p]));
 export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.map((d) => [d.id, d]));
+
+// ------------------------------------------------------------------ замены недоступных товаров
+
+/** Товары комплекта без замен — исходные данные для сброса. */
+export const BASE_PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.products.map((p) => [p.id, { ...p }]));
+const QTY_FACTOR: Record<string, number> = {};
+const SUBBED = new Set<string>();
+const PROTEIN_CATS = ['Мясо и птица', 'Рыба и морепродукты', 'Яйца', 'Молочные продукты'];
+
+/** Граммовка в рецептах при замене: сохраняет белок (мясо, рыба, яйца, молочное) или калорийность. */
+export function subQtyFactor(base: Product, nutr: ProductSub['nutr']): number {
+  if (!nutr) return 1;
+  const protein = PROTEIN_CATS.includes(base.category);
+  const a = protein ? base.nutr.p : base.nutr.kcal;
+  const b = protein ? nutr.p : nutr.kcal;
+  if (!(a > 0) || !(b > 0)) return 1;
+  const f = Math.min(1.5, Math.max(0.67, a / b));
+  return Math.round(f * 20) / 20;
+}
+
+function packLabel(base: Product, size: number): string {
+  return `упаковка ${size} ${base.unit === 'pcs' ? 'шт.' : base.unit === 'ml' ? 'мл' : 'г'}`;
+}
+
+/** Товар с заменой (для предпросмотра и для каталога). */
+export function substitutedProduct(base: Product, sub: ProductSub): Product {
+  const from = sub.catalogId ? BASE_PRODUCTS[sub.catalogId] : null;
+  return {
+    ...base,
+    name: sub.name, url: sub.url, listing_status: 'individual_product_page', availability: 'not_verified',
+    pack: { size: sub.packSize, label: from && from.pack.size === sub.packSize ? from.pack.label : packLabel(base, sub.packSize) },
+    pack_price: sub.packPrice, price: Math.round(sub.packPrice / sub.packSize * (base.unit === 'pcs' ? 1 : 1000) * 100) / 100,
+    nutr: sub.nutr ?? base.nutr, edible_ratio: sub.edibleRatio ?? (from ? from.edible_ratio : base.edible_ratio),
+    storage: from ? from.storage : base.storage, shelf_days: from ? from.shelf_days : base.shelf_days, freezable: from ? from.freezable : base.freezable,
+    piece_g: from ? from.piece_g : base.piece_g, note: `замена вместо «${base.name}»`, av_note: null, substituteFor: base.name, checked_date: sub.confirmedAt.slice(0, 10),
+  };
+}
+
+/**
+ * Применяет подтверждённые замены к справочнику: рецепты, готовки, закупки и калорийность считаются уже
+ * по заменённому товару (граммовка × коэффициент). Вызывается при каждом изменении данных.
+ */
+export function applyProductSubs(recs: Record<string, AvProductRec> | undefined): void {
+  for (const id of SUBBED) { PRODUCTS[id] = { ...BASE_PRODUCTS[id] }; delete QTY_FACTOR[id]; }
+  SUBBED.clear();
+  for (const r of Object.values(recs ?? {})) {
+    const base = BASE_PRODUCTS[r.productId];
+    if (!r.sub || !base || base.archived) continue;
+    PRODUCTS[r.productId] = substitutedProduct(base, r.sub);
+    if (r.sub.qtyFactor !== 1) QTY_FACTOR[r.productId] = r.sub.qtyFactor;
+    SUBBED.add(r.productId);
+  }
+}
+
+export function qtyFactor(productId: string): number { return QTY_FACTOR[productId] ?? 1; }
+export function isSubstituted(productId: string): boolean { return SUBBED.has(productId); }
 
 /**
  * Ингредиент — вложенное блюдо из партии (прежнее меню) или продукт. В рецептах комплекта все ингредиенты —
@@ -136,16 +197,15 @@ export function dishNutrition(dishId: string, qty: number): DishNutrition {
   const d = DISHES[dishId];
   if (!d) return out;
   for (const i of d.ingredients) {
-    const q = i.qty * qty;
     if (subDishOf(d, i.product)) {
-      const n = dishNutrition(i.product, q);
+      const n = dishNutrition(i.product, i.qty * qty);
       out.kcal += n.kcal; out.p += n.p; out.f += n.f; out.c += n.c;
       for (const l of n.labelProducts) if (!out.labelProducts.includes(l)) out.labelProducts.push(l);
       continue;
     }
     const p = PRODUCTS[i.product];
     if (!p) continue;
-    const g = grams(p, q) / 100;
+    const g = grams(p, i.qty * qty * qtyFactor(i.product)) / 100;
     out.kcal += p.nutr.kcal * g; out.p += p.nutr.p * g; out.f += p.nutr.f * g; out.c += p.nutr.c * g;
     if (p.nutr_src === 'label' && !out.labelProducts.includes(p.name)) out.labelProducts.push(p.name);
   }
@@ -185,7 +245,7 @@ export function dishProducts(dishId: string, qty: number, includeNested: boolean
       for (const [k, v] of dishProducts(i.product, q, true)) out.set(k, (out.get(k) ?? 0) + v);
       continue;
     }
-    out.set(i.product, (out.get(i.product) ?? 0) + q);
+    out.set(i.product, (out.get(i.product) ?? 0) + q * qtyFactor(i.product));
   }
   return out;
 }
@@ -248,7 +308,7 @@ export function ingredientLines(dishId: string, qty: number, batchRound = false)
   if (!d) return [];
   const out: IngrLine[] = [];
   for (const i of d.ingredients) {
-    const q = i.qty * qty;
+    const q = i.qty * qty * (subDishOf(d, i.product) ? 1 : qtyFactor(i.product));
     const sub = subDishOf(d, i.product);
     if (sub) {
       out.push({ productId: null, dishId: sub.id, name: sub.title, amount: sub.unit === 'g' ? `${Math.round(q)} г` : dishAmount(sub.id, q), note: 'из готовки', qty: q });

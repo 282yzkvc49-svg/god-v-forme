@@ -1,5 +1,5 @@
 {
-"note": "Снимок справочника прежнего меню (до 14.11.2026). Нужен только для истории прошедших дней: все записи помечены archived.",
+"note": "Снимок справочника прежних меню (до 14.11.2026 и комплект v1). Нужен только для истории прошедших дней: все записи помечены archived и не попадают в рецепты, закупки и поиск.",
 "products": [
 {
 "id": "chicken_breast",
@@ -2105,6 +2105,33 @@
 "piece_label": null,
 "note": null,
 "pantry": true,
+"archived": true
+},
+{
+"id": "pumpkinseeds",
+"name": "Семечки тыквенные очищенные (комплект v1, убраны)",
+"category": "Орехи и семена",
+"unit": "g",
+"nutr": {
+"kcal": 556,
+"p": 24.6,
+"f": 46,
+"c": 14
+},
+"nutr_src": "ref",
+"price": 1793.33,
+"pack": {
+"size": 150,
+"label": "пакет 150 г"
+},
+"shelf_days": 90,
+"storage": "pantry",
+"freezable": false,
+"edible_ratio": 1,
+"piece_g": null,
+"piece_label": null,
+"note": null,
+"pantry": false,
 "archived": true
 }
 ],

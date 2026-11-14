@@ -452,6 +452,8 @@ export interface Settings {
   onboarded: boolean;
   installHintDismissed: boolean;
   lastBackupAt: string | null;
+  /** Пользователь выбрал свой адрес доставки на av.ru перед проверкой товаров. */
+  avAddressConfirmedAt?: string | null;
 }
 
 export interface PlanSettings {
@@ -481,6 +483,55 @@ export interface Meta {
   dataVersion: number;
 }
 
+/** Замена товара, подтверждённая пользователем (товар есть в его корзине av.ru по его адресу). */
+export interface ProductSub {
+  /** Товар из каталога меню, который заменяет недоступный; null — свой товар av.ru. */
+  catalogId: string | null;
+  name: string;
+  url: string; // только https://av.ru/i/<номер>
+  packSize: number;
+  packPrice: number;
+  /** На 100 г (100 мл, для штучных — на 100 г при 1 шт. ≈ piece_g); null — как у исходного товара. */
+  nutr: { kcal: number; p: number; f: number; c: number } | null;
+  edibleRatio: number | null;
+  /** Коэффициент граммовки в рецептах: сохраняет белок (мясо, рыба, молочное) или калорийность. */
+  qtyFactor: number;
+  confirmedAt: string;
+}
+
+/** Проверка товара в корзине av.ru по адресу пользователя. */
+export interface AvProductRec {
+  productId: string;
+  status: 'available' | 'unavailable' | null;
+  checkedAt: string | null;
+  sub: ProductSub | null;
+  updatedAt: string;
+}
+
+/** Внутренняя резервная копия перед изменением базы (обновление меню). */
+export interface BackupRec {
+  id: string;
+  createdAt: string;
+  reason: string;
+  appVersion: string;
+  fromMenu: string | null;
+  toMenu: string | null;
+  stores: Record<string, any[]>;
+  /** Итог миграции для отчёта. */
+  report?: MigrationReport | null;
+}
+
+export interface MigrationReport {
+  appliedAt: string;
+  startDate: ISODate;
+  replacedDays: number;
+  removedFutureCooks: number;
+  removedFutureShops: number;
+  mackerel: { removedPast: string[]; keptHistory: string[]; future: number };
+  unknownRefsFixed: string[];
+  keptMarks: string[];
+}
+
 export interface AppData {
   ready: boolean;
   settings: Settings;
@@ -504,13 +555,15 @@ export interface AppData {
   mealLinks: Record<string, MealMapEntry>;
   exportHistory: Record<string, ExportRecord>;
   patches: Record<string, PatchRecord>;
+  avProducts: Record<string, AvProductRec>;
+  backups: Record<string, BackupRec>;
 }
 
 /** Хранилища-коллекции (в памяти — Record по ключу). */
 export const RECORD_STORES = [
   'planDays', 'templateVersions', 'shoppingEvents', 'cookingEvents', 'taskStatus', 'taskMoves', 'customTasks',
   'trainingLogs', 'weights', 'measurements', 'photos', 'shoppingChecks', 'checks', 'dayNotes', 'userRecipes',
-  'mealLinks', 'exportHistory', 'patches', 'trips',
+  'mealLinks', 'exportHistory', 'patches', 'trips', 'avProducts', 'backups',
 ] as const;
 export type RecordStore = (typeof RECORD_STORES)[number];
 
@@ -530,6 +583,8 @@ export const STORE_KEYS: Record<RecordStore | 'settings' | 'meta' | 'photoBlobs'
   shoppingChecks: 'id',
   checks: 'id',
   trips: 'id',
+  avProducts: 'productId',
+  backups: 'id',
   dayNotes: 'date',
   userRecipes: 'id',
   mealLinks: 'id',
@@ -547,5 +602,5 @@ export type PlanStore = (typeof PLAN_STORES)[number];
 /** Хранилища пользователя: импорт плана их никогда не трогает. */
 export const USER_STORES = [
   'taskStatus', 'taskMoves', 'customTasks', 'trainingLogs', 'weights', 'measurements', 'photos',
-  'shoppingChecks', 'checks', 'dayNotes', 'userRecipes', 'mealLinks', 'exportHistory', 'patches', 'trips',
+  'shoppingChecks', 'checks', 'dayNotes', 'userRecipes', 'mealLinks', 'exportHistory', 'patches', 'trips', 'avProducts',
 ] as const;

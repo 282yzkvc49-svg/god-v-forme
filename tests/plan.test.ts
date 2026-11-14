@@ -7,12 +7,13 @@ import {
 } from '../src/domain/plan';
 import { relaxDatesBetween } from '../src/domain/trips';
 import { previewChange, tripOps } from '../src/domain/planDiff';
-import { checkEquipment, checkInstance, checkSeedPlan, checkShift, checkUserData } from '../src/domain/planCheck';
+import { checkActiveData, checkEquipment, checkInstance, checkSeedPlan, checkShift, checkUserData } from '../src/domain/planCheck';
 import { scheduledTraining, tasksForDate, thawList } from '../src/domain/tasks';
-import { applyOps, dataMigrationOps, DATA_VERSION, emptyData, menuUpdateOps, NOV_2026_TRIPS, seedOps } from '../src/state/model';
+import { applyOps, dataMigrationOps, DATA_VERSION, emptyData, menuUpdateOps, NOV_2026_TRIPS, rollbackMenuOps, seedOps } from '../src/state/model';
+import { alternativesFor, basketState, isBlocked, makeSub, orderProductIds, productCheckOps } from '../src/domain/avCheck';
 import { SEED_RECIPES, seedTemplateVersions } from '../src/lib/seed';
 import { addDays, diffDays, isoWeekday } from '../src/lib/dates';
-import { DISHES, PRODUCTS, TEMPLATE } from '../src/domain/catalog';
+import { DISHES, PRODUCTS, TEMPLATE, applyProductSubs, dishNutrition, ingredientLines } from '../src/domain/catalog';
 import type { AppData } from '../src/state/types';
 
 const cfg = (start: string) => makePlanSettings(start, NOW);
@@ -277,13 +278,24 @@ function v4State(): AppData {
     { store: 'customTasks', put: { id: 'c26', date: '2026-11-26', title: 'Командировка в СПб', kind: 'custom', createdAt: NOW } },
     { store: 'customTasks', put: { id: 'c27', date: '2026-11-27', title: 'Позвонить маме', kind: 'custom', createdAt: NOW } },
   ]);
-  // прошедший день прежнего меню — блюдо, которого в новом меню нет
-  const day = d.planDays['2026-11-09'];
-  d = applyOps(d, [{ store: 'planDays', put: { ...day, mealCards: { ...day.mealCards!, dinner: { title: 'Скумбрия + салат', parts: [{ dishId: 'mackerel', qty: 1, fresh: false, cookEventId: null, storage: null, thawOn: null }] } } } }]);
+  // прежнее меню со скумбрией: прошедшие дни (без отметок и с отметкой), будущий день, закупки
+  const mk = { title: 'Скумбрия + салат', parts: [{ dishId: 'mackerel', qty: 1, fresh: false, cookEventId: null, storage: null, thawOn: null }] };
+  const day9 = d.planDays['2026-11-09'], day10 = d.planDays['2026-11-10'], day28 = d.planDays['2026-11-28'];
+  const line = (productId: string) => ({ productId, need: 340, fromStock: 0, buy: 500, packs: 1, cost: 325, leftover: 160, freezeNow: 0, notes: [], needs: [] });
+  d = applyOps(d, [
+    { store: 'planDays', put: { ...day9, mealCards: { ...day9.mealCards!, dinner: mk } } },
+    { store: 'planDays', put: { ...day10, mealCards: { ...day10.mealCards!, lunch: mk, dinner: mk } } },
+    { store: 'planDays', put: { ...day28, mealCards: { ...day28.mealCards!, dinner: mk } } },
+    { store: 'taskStatus', put: { taskId: 'meal:2026-11-10:lunch', date: '2026-11-10', kind: 'meal', status: 'done', updatedAt: NOW } },
+    { store: 'shoppingEvents', put: { id: 'old-shop', date: '2026-11-08', title: 'Докупка', kind: 'topup', items: [], lines: [line('mackerel_fillet'), line('potato'), line('tomato')], source: 'seed' } },
+    { store: 'shoppingChecks', put: { id: 'old-shop:mackerel_fillet', eventId: 'old-shop', itemId: 'mackerel_fillet', bought: true, updatedAt: NOW } },
+    { store: 'shoppingChecks', put: { id: 'old-shop:potato', eventId: 'old-shop', itemId: 'potato', bought: true, updatedAt: NOW } },
+    { store: 'shoppingEvents', put: { id: 'old-shop-2', date: '2026-11-12', title: 'Докупка', kind: 'topup', items: [], lines: [line('mackerel_fillet')], source: 'seed' } },
+  ]);
   return d;
 }
 
-test('обновление меню: после миграции — только предпросмотр; меню меняется после подтверждения, данные целы', () => {
+test('обновление меню: после миграции — только предпросмотр; меню меняется после подтверждения и резервной копии', () => {
   const before = v4State();
   const d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
   assert.equal(menuUpdatePending(d), true, 'новое меню ждёт предпросмотра');
@@ -292,25 +304,96 @@ test('обновление меню: после миграции — тольк�
   assert.equal(Object.keys(d.trips).length, 2, 'командировки добавлены');
   assert.equal(d.customTasks.c26, undefined, 'старое событие командировки на 26.11 убрано');
   assert.ok(d.customTasks.c27);
-  // применение
-  const res = menuUpdateOps(d, '2026-11-16', '2026-11-14', NOW);
+  // применение: в той же транзакции — резервная копия всех данных до изменения
+  const res = menuUpdateOps(d, '2026-11-16', '2026-11-14', NOW, '1.4.0');
+  assert.equal(res.ops[0].store, 'backups', 'копия — первой операцией');
   const after = applyOps(d, res.ops);
+  const bk = after.backups[res.backupId];
+  assert.equal(bk.stores.planDays.length, Object.keys(d.planDays).length, 'в копии все дни прежнего плана');
+  assert.equal(bk.stores.weights.length, 1);
+  assert.equal(bk.fromMenu, null);
+  assert.equal(bk.toMenu, TEMPLATE.id);
   assert.equal(menuUpdatePending(after), false);
   assert.equal(after.settings.plan!.startDate, '2026-11-16');
   assert.equal(after.settings.plan!.menuId, TEMPLATE.id);
   assert.equal(after.planDays['2026-11-16'].mealCards!.lunch.parts[0].dishId, 'L01');
   okAll(checkInstance(res.instance));
   okAll(checkSeedPlan(res.instance));
-  // прежние данные: отметки, тренировки, вес, фото, история прошедших дней
+  // прежние данные: отметки, тренировки, вес, фото
   assert.equal(after.taskStatus['meal:2026-11-03:breakfast'].status, 'done');
   assert.equal(after.trainingLogs['train:2026-11-04'].status, 'done');
   assert.equal(after.weights.w1.kg, 106.1);
   assert.ok(after.photos.ph1);
-  assert.equal(after.planDays['2026-11-09'].mealCards!.dinner.parts[0].dishId, 'mackerel', 'история не переписана');
-  assert.ok(DISHES.mackerel?.archived, 'прежнее блюдо доступно для истории');
-  assert.ok(!SEED_RECIPES.some((r) => r.id === 'mackerel'), 'но не в списке рецептов');
   assert.ok(checkUserData(after).every((c) => c.ok));
   assert.equal(dataMigrationOps(after, '2026-11-14', NOW).length, 0);
+});
+
+test('скумбрия: убрана из активных и неотмеченных старых данных, отмеченное осталось историей; проверка активных данных', () => {
+  const before = v4State();
+  const d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
+  assert.equal(checkActiveData(d, '2026-11-14').ok, false, 'до миграции в будущих днях прежнего меню есть скумбрия');
+  const res = menuUpdateOps(d, '2026-11-16', '2026-11-14', NOW);
+  const after = applyOps(d, res.ops);
+  const check = checkActiveData(after, '2026-11-14');
+  assert.ok(check.ok, check.details.join('; '));
+  // 09.11 — день прежнего меню без отметок: удалён; 10.11 обед со скумбрией отмечен съеденным — история
+  assert.equal(after.planDays['2026-11-09'], undefined);
+  assert.equal(after.planDays['2026-11-10'].mealCards!.lunch.parts[0].dishId, 'mackerel');
+  assert.equal(after.planDays['2026-11-10'].mealCards!.dinner.title, 'Блюдо прежнего меню удалено', 'неотмеченный ужин со скумбрией убран');
+  assert.ok(res.report.mackerel.keptHistory.some((x) => x.startsWith('2026-11-10 lunch')));
+  assert.ok(res.report.mackerel.removedPast.length >= 2);
+  assert.ok(res.report.mackerel.future > 0);
+  // прошлая закупка: купленная скумбрия — история, не купленная — убрана
+  const shop = after.shoppingEvents['old-shop'];
+  assert.deepEqual(shop.lines!.map((l) => l.productId), ['mackerel_fillet', 'potato', 'tomato'], 'прочие строки не трогаются');
+  assert.equal(after.shoppingEvents['old-shop-2'], undefined, 'неотмеченная закупка только со скумбрией удалена');
+  // нигде в активном меню, рецептах и каталоге
+  assert.ok(!SEED_RECIPES.some((r) => /скумбри/i.test(r.title + r.ingredients_text)));
+  assert.ok(!TEMPLATE.products.some((p) => !p.archived && /скумбри/i.test(p.name)));
+  for (const x of Object.values(after.planDays)) if (x.date >= '2026-11-14') assert.ok(!/скумбри|mackerel/i.test(JSON.stringify(x)), x.date);
+  for (const e of [...Object.values(after.cookingEvents), ...Object.values(after.shoppingEvents)]) if (e.date >= '2026-11-14') assert.ok(!/скумбри|mackerel/i.test(JSON.stringify(e)), e.id);
+  // откат из копии возвращает прежнее меню, записи пользователя не трогаются
+  const back = applyOps(after, rollbackMenuOps(after, res.backupId));
+  assert.equal(back.settings.plan!.startDate, '2026-11-02');
+  assert.equal(menuUpdatePending(back), true);
+  assert.equal(back.weights.w1.kg, 106.1);
+  assert.ok(back.planDays['2026-11-09']);
+});
+
+test('проверка av.ru: недоступный товар блокируется; замена пересчитывает граммовки, упаковки, цены и калорийность', () => {
+  let d = freshData('2026-11-14', '2026-11-16', true);
+  const ids = orderProductIds(Object.values(d.shoppingEvents).find((e) => e.kind === 'main')!);
+  assert.equal(basketState(d, ids).verified, false, 'без проверки корзина не проверена');
+  const kcal0 = dishNutrition('L01', 1).kcal;
+  d = applyOps(d, productCheckOps(d, 'chicken', { status: 'unavailable' }, '2026-11-14', NOW));
+  assert.equal(isBlocked(d, 'chicken'), true);
+  assert.deepEqual(basketState(d, ids).unavailable, ['chicken']);
+  // замена из каталога меню — только товары той же категории с карточками av.ru
+  assert.deepEqual(alternativesFor(d, 'chicken').map((p) => p.id), ['turkey', 'turkey_mince', 'beef_mince']);
+  const { sub } = makeSub('chicken', { catalogId: 'turkey', name: '', url: '', packSize: 0, packPrice: 0 }, NOW);
+  d = applyOps(d, productCheckOps(d, 'chicken', { sub }, '2026-11-14', NOW));
+  applyProductSubs(d.avProducts);
+  try {
+    assert.equal(isBlocked(d, 'chicken'), false);
+    assert.equal(PRODUCTS.chicken.url, 'https://av.ru/i/461436');
+    assert.equal(sub!.qtyFactor, 1.05, 'граммовка сохраняет белок');
+    assert.equal(ingredientLines('L01', 1).find((l) => l.productId === 'chicken')!.amount, '189 г');
+    assert.ok(Math.abs(dishNutrition('L01', 1).kcal - kcal0) > 1, 'калорийность пересчитана');
+    const line = Object.values(d.shoppingEvents).find((e) => e.kind === 'main')!.lines!.find((l) => l.productId === 'chicken')!;
+    assert.deepEqual([line.need, line.packs, line.cost], [378, 1, 681], 'закупка — по упаковке замены');
+    const inst = buildInstance(d.settings.plan!, { trips: Object.values(d.trips), relaxOverrides: d.settings.relaxOverrides, today: '2026-11-14' });
+    okAll(checkInstance(inst));
+    // «корзина проверена» — только после адреса и всех товаров
+    for (const id of ids) if (id !== 'chicken') d = applyOps(d, productCheckOps(d, id, { status: 'available' }, '2026-11-14', NOW));
+    assert.equal(basketState(d, ids).verified, false, 'адрес ещё не выбран');
+    d = applyOps(d, [{ store: 'settings', put: { ...d.settings, avAddressConfirmedAt: NOW } }]);
+    assert.equal(basketState(d, ids).verified, true);
+    // своя замена — только индивидуальная карточка av.ru
+    assert.ok(makeSub('curd', { name: 'Творог', url: 'https://av.ru/catalog/moloko', packSize: 200, packPrice: 120 }, NOW).errors.length);
+    assert.ok(makeSub('curd', { name: 'Творог 5%', url: 'https://av.ru/i/123456', packSize: 180, packPrice: 120 }, NOW).sub);
+  } finally {
+    applyProductSubs({});
+  }
 });
 
 test('ноябрь 2026 после применения меню: командировки, тренировки, релакс, порции, закупки, продолжение программы', () => {

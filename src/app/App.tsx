@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useApp, useStorageStatus } from '../state/store';
-import { useRoute, href } from './router';
+import { useRoute, href, go } from './router';
+import { menuUpdatePending } from '../domain/plan';
 import { Toasts } from '../ui/kit';
 import {
   KettlebellIcon, PiCalendarBlank, PiChartLineUp, PiChatsCircle, PiCloudSlash, PiForkKnife, PiGear, PiHouse, PiShoppingCart, PiSquaresFour,
@@ -17,6 +18,7 @@ import { AnalysisScreen } from '../screens/Analysis';
 import { SettingsScreen, MoreScreen } from '../screens/Settings';
 import { TripsScreen } from '../screens/Trips';
 import { MenuUpdateScreen } from '../screens/MenuUpdate';
+import { AvCheckScreen } from '../screens/AvCheck';
 import { Onboarding } from '../screens/Onboarding';
 import { onUpdateReady, applyUpdate } from './sw';
 
@@ -26,10 +28,10 @@ const NAV: NavItem[] = [
   { path: '/calendar', label: 'Календарь', icon: <PiCalendarBlank />, match: ['calendar', 'day'] },
   { path: '/training', label: 'Тренировки', icon: <KettlebellIcon />, match: ['training', 'workout', 'exercise'] },
   { path: '/nutrition', label: 'Питание', icon: <PiForkKnife />, match: ['nutrition', 'recipes', 'recipe', 'recipe-needed'] },
-  { path: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart />, match: ['shopping', 'shop', 'cook'] },
+  { path: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart />, match: ['shopping', 'shop', 'cook', 'av-check'] },
   { path: '/progress', label: 'Прогресс', icon: <PiChartLineUp />, match: ['progress'] },
   { path: '/analysis', label: 'Анализ с ChatGPT', icon: <PiChatsCircle />, match: ['analysis'] },
-  { path: '/settings', label: 'Настройки', icon: <PiGear />, match: ['settings', 'trips'] },
+  { path: '/settings', label: 'Настройки', icon: <PiGear />, match: ['settings', 'trips', 'menu-update'] },
 ];
 const TABS = [NAV[0], NAV[1], NAV[2], NAV[3]];
 
@@ -52,6 +54,8 @@ function useTheme(theme: 'auto' | 'light' | 'dark') {
   }, [theme]);
 }
 
+let menuPromptShown = false;
+
 export function App() {
   const data = useApp();
   const route = useRoute();
@@ -60,6 +64,12 @@ export function App() {
   const [update, setUpdate] = useState(false);
   useTheme(data.settings.theme);
   useEffect(() => onUpdateReady(() => setUpdate(true)), []);
+  // новое меню после обновления приложения: сразу показать экран с резервной копией и сводкой изменений
+  useEffect(() => {
+    if (!data.ready || menuPromptShown || !menuUpdatePending(data)) return;
+    menuPromptShown = true;
+    if (!route.path[0] || route.path[0] === 'today') go('/menu-update');
+  }, [data.ready]);
 
   if (!data.ready) return <div className="boot">Загрузка…</div>;
 
@@ -87,6 +97,7 @@ export function App() {
     case 'settings': screen = <SettingsScreen />; break;
     case 'trips': screen = <TripsScreen />; break;
     case 'menu-update': screen = <MenuUpdateScreen />; break;
+    case 'av-check': screen = <AvCheckScreen />; break;
     case 'more': screen = <MoreScreen />; break;
     default: screen = <Today />;
   }
