@@ -1,7 +1,7 @@
 // Стартовый план из src/data/initial_seed.json → записи хранилища.
 import seedJson from '../data/initial_seed.json';
 import type { Exercise, MealMapEntry, Recipe, RecipeType, Settings, TemplateId, TemplateVersion, WorkoutTemplate } from '../state/types';
-import { DISHES, PRODUCTS, TEMPLATE, fmtAmount, type Dish } from '../domain/catalog';
+import { subDishOf, DISHES, PRODUCTS, TEMPLATE, fmtAmount, type Dish } from '../domain/catalog';
 
 export const SEED: any = seedJson;
 export const SEED_ID: string = SEED.seed_id;
@@ -36,8 +36,8 @@ export const LEGACY_RECIPE_IDS: Record<string, string> = Object.fromEntries(
     ['grains', 'grain_rice']] as [string, string][],
 );
 
-const TYPE_OF: Record<Dish['category'], RecipeType> = { main: 'main', side: 'side', veg: 'side', protein: 'main', breakfast: 'breakfast', snack: 'snack', other: 'other' };
-const TYPE_LABEL: Record<RecipeType, string> = { main: 'Основное', side: 'Гарнир', breakfast: 'Завтрак', snack: 'Перекус', other: 'Заготовка' };
+const TYPE_OF: Record<Dish['category'], RecipeType> = { main: 'main', side: 'side', veg: 'side', protein: 'main', breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner', snack: 'snack', other: 'other' };
+const TYPE_LABEL: Record<RecipeType, string> = { main: 'Основное', side: 'Гарнир', breakfast: 'Завтрак', lunch: 'Обед', dinner: 'Ужин', snack: 'Перекус', other: 'Заготовка' };
 
 /** Блюдо меню → карточка рецепта (на 1 порцию; крупы и заготовки — на 100 г). */
 export function dishToRecipe(d: Dish): Recipe {
@@ -45,7 +45,7 @@ export function dishToRecipe(d: Dish): Recipe {
   const ingredients = d.ingredients.map((i) => {
     const q = i.qty * per;
     const p = PRODUCTS[i.product];
-    const sub = DISHES[i.product];
+    const sub = subDishOf(d, i.product);
     const unit = p ? (p.unit === 'g' ? 'г' : p.unit === 'ml' ? 'мл' : 'шт.') : 'г';
     const name = p ? p.name : sub ? `${sub.title} (из готовки)` : i.product;
     const amount = p ? fmtAmount(q, p.unit) : `${Math.round(q)} г`;
@@ -55,7 +55,7 @@ export function dishToRecipe(d: Dish): Recipe {
   const type = TYPE_OF[d.category];
   return {
     id: d.id, title: d.title, type, type_label: TYPE_LABEL[type],
-    yield_text: d.unit === 'g' ? `на 100 ${d.unit_label ?? 'г'}` : `1 порция${d.serving_g ? ` (≈${d.serving_g} г)` : ''}`,
+    yield_text: d.unit === 'g' ? `на 100 ${d.unit_label ?? 'г'}` : `1 порция${d.serving_g ? ` (≈${d.serving_g} г)` : ''}${d.active_minutes ? `, ≈${d.active_minutes} мин` : ''}`,
     servings: 1, scalable: true,
     ingredients_text: [...ingredients, ...spices].map((x) => x.source_text).join('; '),
     ingredients: [...ingredients, ...spices],
@@ -64,7 +64,7 @@ export function dishToRecipe(d: Dish): Recipe {
     storage_ids: d.kind !== 'batch' ? ['work_fridge']
       : d.storage.freezable ? ['portion', 'cool_fast', 'freeze', 'veg_separate', 'reheat']
         : [...(d.ingredients.some((i) => PRODUCTS[i.product]?.storage === 'freezer') ? ['fish_thaw'] : []), 'veg_separate'],
-    source: 'Меню на 30 дней',
+    source: d.archived ? 'Прежнее меню' : TEMPLATE.title,
   };
 }
 

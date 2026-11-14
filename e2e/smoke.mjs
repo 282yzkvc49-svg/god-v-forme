@@ -66,8 +66,8 @@ await step('1. Первый запуск: дата старта питания �
   await page.getByText('Понедельник, 2 ноября').first().waitFor();
   assert(await page.locator('.task.k-shopping').count() === 1 && await page.locator('.task.k-cooking').count() === 1, 'старт сегодня — закупка и готовка сегодня');
   await go(page, '/day/2026-11-02');
-  await page.getByText('Овсянка на ночь с бананом').first().waitFor();
-  assert(await page.getByText('Овсяные хлопья «Геркулес» (долгой варки)').count() > 0, 'нет состава с граммами');
+  await page.getByText('Ночная овсянка с бананом, клубникой и орехами').first().waitFor();
+  assert(await page.getByText('Хлопья овсяные «Экспресс» Nordic').count() > 0, 'нет состава с граммами');
   assert(await page.locator('.task').count() >= 7, 'мало задач');
   await page.screenshot({ path: path.join(shots, '01-day-ipad.png'), fullPage: true });
   await page.screenshot({ path: path.join(shots, '01-today-ipad.png'), fullPage: true });
@@ -107,7 +107,7 @@ await step('3. 04.11 → готовка: блюда, продукты, поша�
   await go(page, '/day/2026-11-04');
   await page.locator('.task.k-cooking .task-main').click();
   await page.getByRole('heading', { name: /Основная готовка, 4 ноября/ }).waitFor();
-  assert(await page.getByText('Тефтели из индейки').count() > 0, 'нет блюд готовки');
+  assert(await page.getByText('Тефтели индейки, гречка, овощи').count() > 0, 'нет блюд готовки');
   assert(await page.getByText('Продукты на всю партию').count() >= 3, 'нет продуктов на партию');
   assert(await page.getByText('3 порции').count() > 0, 'порции партии');
   assert(await page.getByText(/Контейнеры: \d+/).count() === 1, 'нет контейнеров');
@@ -227,7 +227,7 @@ await step('10. Офлайн: приложение, техника, меню и 
   await go(page, '/exercise/kb_rdl');
   assert(await page.locator('svg.fig-svg').count() >= 2, 'нет схем офлайн');
   await go(page, '/nutrition?d=2026-11-05');
-  await page.getByText('Тефтели из индейки + булгур + кабачок с морковью').first().waitFor();
+  await page.getByText('Тефтели индейки, гречка, овощи').first().waitFor();
   await go(page, '/shop/shop-p20261102-m2');
   await page.locator('.shop-item.bought').nth(2).waitFor();
   await ctx.setOffline(false);
@@ -261,7 +261,39 @@ await step('11. Резервная копия → восстановление �
   await ctx2.close();
 });
 
-await step('12. Ноябрь 2026: старт 16.11, Екатеринбург 18–20.11, Санкт-Петербург 24–25.11, релакс 29.11', async () => {
+async function step13(p3) {
+  // установленное приложение с прежним меню: в настройках плана нет id нового меню
+  await p3.evaluate(() => new Promise((res, rej) => {
+    const rq = indexedDB.open('god-v-forme');
+    rq.onerror = () => rej(rq.error);
+    rq.onsuccess = () => {
+      const db = rq.result;
+      const tx = db.transaction('settings', 'readwrite');
+      const st = tx.objectStore('settings');
+      const g = st.getAll();
+      g.onsuccess = () => { for (const s of g.result) if (s.plan) { delete s.plan.menuId; st.put(s); } };
+      tx.oncomplete = () => { db.close(); res(true); };
+      tx.onerror = () => rej(tx.error);
+    };
+  }));
+  await p3.goto(`${BASE}?today=2026-11-14#/today`);
+  await p3.reload();
+  await p3.getByText(/Новое меню «Азбука вкуса»/).first().waitFor();
+  await p3.screenshot({ path: path.join(shots, '13-menu-banner-iphone.png'), fullPage: false });
+  await p3.getByRole('link', { name: 'Посмотреть' }).click();
+  await p3.getByRole('heading', { name: 'Новое меню «Азбука вкуса»' }).waitFor();
+  assert(await p3.locator('input[type=date]').first().inputValue() === '2026-11-16', 'старт по комплекту — 16.11');
+  await p3.getByText('всё сходится').waitFor();
+  await p3.getByText(/48 из 48 обедов и ужинов/).waitFor();
+  await p3.getByText(/не собранная корзина/).waitFor();
+  await p3.screenshot({ path: path.join(shots, '13-menu-preview-iphone.png'), fullPage: true });
+  await p3.getByRole('button', { name: 'Применить новое меню' }).click();
+  await p3.getByText(/Новое меню применено/).waitFor();
+  await p3.waitForTimeout(300);
+  assert(await p3.getByText(/Новое меню «Азбука вкуса»: старт/).count() === 0, 'после применения баннер исчез');
+}
+
+await step('12–13. Ноябрь 2026: старт 16.11, командировки, релакс 29.11, меню «Азбука вкуса» с av.ru; обновление меню через предпросмотр', async () => {
   const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, locale: 'ru-RU', timezoneId: 'Asia/Yekaterinburg' });
   const p3 = await newPage(ctx3);
   active = p3;
@@ -299,19 +331,25 @@ await step('12. Ноябрь 2026: старт 16.11, Екатеринбург 18
   }
   assert(await p3.getByText('Восстановление после командировки').count() > 0, '26.11 — восстановление после командировки');
   await go(p3, '/day/2026-11-28');
-  await p3.getByText('Горбуша гриль с картофелем и овощным салатом').first().waitFor();
-  await go(p3, '/recipe/pink_salmon_potato_salad');
-  await p3.getByText('Филе горбуши с кожей, замороженное').first().waitFor();
-  assert(await p3.getByText(/скумбри/i).count() === 0, 'скумбрии нет в рецепте');
-  await p3.screenshot({ path: path.join(shots, '12-pink-salmon-recipe-iphone.png'), fullPage: true });
+  await p3.getByText('Курица с нутом, кабачком и рисом').first().waitFor();
+  await go(p3, '/recipe/D05');
+  await p3.getByText('Филе грудки цыплёнка без кожи «Просто Азбука»').first().waitFor();
+  assert(await p3.locator('a[href="https://av.ru/i/306330"]').count() > 0, 'ссылка на товар av.ru');
+  assert(await p3.getByText(/уп\./).count() > 0, 'доля упаковки');
+  await p3.screenshot({ path: path.join(shots, '12-av-recipe-iphone.png'), fullPage: true });
   await go(p3, '/recipes');
   await p3.waitForTimeout(200);
-  assert(await p3.getByText(/Скумбрия/).count() === 0, 'скумбрии нет в списке рецептов');
+  assert(await p3.getByText(/Скумбрия|Горбуша гриль/).count() === 0, 'прежних блюд нет в списке рецептов');
+  assert(await p3.getByRole('heading', { name: 'Обеды' }).count() === 1 && await p3.getByRole('heading', { name: 'Ужины' }).count() === 1, 'рецепты по приёмам пищи');
   await go(p3, '/day/2026-11-29');
   await p3.getByText(/Релакс/).first().waitFor();
   await go(p3, '/shopping');
   await p3.getByRole('heading', { name: 'Перекусы в командировки' }).waitFor();
   await p3.screenshot({ path: path.join(shots, '12-shopping-iphone.png'), fullPage: true });
+  await go(p3, '/shop/shop-p20261116-m1');
+  await p3.getByText(/не собранная корзина/).waitFor();
+  assert(await p3.locator('.av-link a').count() >= 30, 'у позиций — ссылки на av.ru');
+  await p3.screenshot({ path: path.join(shots, '12-av-shop-iphone.png'), fullPage: true });
   await go(p3, '/trips');
   await p3.getByRole('button', { name: /Новая командировка/ }).click();
   await p3.locator('.sheet input').first().fill('Казань');
@@ -325,6 +363,7 @@ await step('12. Ноябрь 2026: старт 16.11, Екатеринбург 18
   await p3.getByRole('button', { name: 'Отмена' }).click();
   await p3.waitForTimeout(200);
   assert(await p3.getByText('Казань').count() === 0, 'без подтверждения командировка не добавлена');
+  await step13(p3);
   await ctx3.close();
 });
 

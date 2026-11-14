@@ -8,7 +8,8 @@ import { fmtBytes } from '../lib/util';
 import { SEED_ID } from '../lib/seed';
 import { today as todayFn } from '../lib/clock';
 import { PlanCheckCard, PlanStartForm } from './planViews';
-import { planEnd } from '../domain/plan';
+import { menuUpdatePending, planEnd } from '../domain/plan';
+import { TEMPLATE } from '../domain/catalog';
 import { RelaxEditor } from './Trips';
 import { monthKey, tripList } from '../domain/trips';
 import { addDays } from '../lib/dates';
@@ -57,10 +58,18 @@ export function SettingsScreen() {
       <PageHead title="Настройки" />
       <div className="stack">
         <Group id="plan" title="Программа питания">
+          {menuUpdatePending(data) ? (
+            <Note kind="warn">
+              <p className="mt0">Доступно новое меню {TEMPLATE.title}: старт {fmtFull(TEMPLATE.base_start)}. Перед применением посмотрите, что изменится.</p>
+              <a className="btn small" href={href('/menu-update')}>Посмотреть и применить</a>
+            </Note>
+          ) : (
+            <p className="mt0">Меню: {TEMPLATE.title}. <a href={href('/menu-update')}>Проверки и сверка с комплектом</a></p>
+          )}
           {s.plan ? (
             <p className="mt0">Сейчас: первый цикл с {fmtFull(s.plan.startDate)} по {fmtFull(planEnd(s.plan))}.</p>
           ) : <p className="mt0">Дата старта ещё не выбрана.</p>}
-          <PlanStartForm submitLabel="Применить" />
+          {!menuUpdatePending(data) && <PlanStartForm submitLabel="Применить" />}
           <p className="hint">При смене даты меню, закупки, готовка и контейнеры пересчитываются; командировки, релакс-дни и выполненное остаются на своих датах. Программа рассчитана минимум на год: после 30-го дня можно начать следующий месяц по этому же меню или загрузить новый план от ChatGPT.</p>
         </Group>
 

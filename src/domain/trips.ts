@@ -117,10 +117,10 @@ const SHOP_BREAKFAST: TripMeal = {
   slot: 'breakfast', title: 'Завтрак из супермаркета или кафе', place: 'без завтрака в гостинице',
   variants: [
     { id: 'sb1', title: 'Творог, банан и хлебцы', kcal: '≈480', items: [
-      { name: 'Творог 5%', amount: '200 г', productId: 'cottage_5', qty: 200 }, { name: 'Банан', amount: '≈120 г', productId: 'banana', qty: 120 },
+      { name: 'Творог 5%', amount: '200 г', productId: 'curd', qty: 200 }, { name: 'Банан', amount: '≈120 г', productId: 'banana', qty: 120 },
       { name: 'Хлебцы цельнозерновые', amount: '≈30 г', productId: 'crispbread', qty: 30 }] },
     { id: 'sb2', title: 'Йогурт, яблоко и орехи', kcal: '≈480', items: [
-      { name: 'Йогурт греческий без сахара', amount: '250 г', productId: 'greek_yogurt', qty: 250 }, { name: 'Яблоко', amount: '≈150 г', productId: 'apple', qty: 150 },
+      { name: 'Йогурт греческий без сахара', amount: '250 г', productId: 'yogurt', qty: 250 }, { name: 'Яблоко', amount: '≈150 г', productId: 'apple', qty: 150 },
       { name: 'Грецкие орехи', amount: '≈20 г', productId: 'walnuts', qty: 20 }] },
     { id: 'sb3', title: 'Омлет или каша в кафе', kcal: '≈550', items: [
       { name: 'Омлет из 3 яиц или овсяная каша', amount: '1 порция' }, { name: 'Хлеб цельнозерновой', amount: '≈60 г' }] },
@@ -145,9 +145,9 @@ const SNACK: TripMeal = {
   slot: 'snack', title: 'Перекус', place: 'из супермаркета, без готовки',
   variants: [
     { id: 's1', title: 'Творог и банан', kcal: '≈330', items: [
-      { name: 'Творог 5% (подойдёт 2–5%)', amount: '200 г', productId: 'cottage_5', qty: 200 }, { name: 'Банан', amount: '≈120 г', productId: 'banana', qty: 120 }] },
+      { name: 'Творог 5% (подойдёт 2–5%)', amount: '200 г', productId: 'curd', qty: 200 }, { name: 'Банан', amount: '≈120 г', productId: 'banana', qty: 120 }] },
     { id: 's2', title: 'Греческий йогурт, ягоды, орехи', kcal: '≈360', items: [
-      { name: 'Йогурт греческий без сахара', amount: '250 г', productId: 'greek_yogurt', qty: 250 }, { name: 'Ягоды свежие', amount: '≈100 г', productId: 'berries_fresh', qty: 100 },
+      { name: 'Йогурт греческий без сахара', amount: '250 г', productId: 'yogurt', qty: 250 }, { name: 'Ягоды свежие', amount: '≈100 г', productId: 'berries_fresh', qty: 100 },
       { name: 'Грецкие орехи', amount: '≈20 г', productId: 'walnuts', qty: 20 }] },
     { id: 's3', title: 'Яйца, яблоко и хлебцы', kcal: '≈310', items: [
       { name: 'Яйца варёные', amount: '2 шт.', productId: 'egg_boiled', qty: 2 }, { name: 'Яблоко', amount: '≈150 г', productId: 'apple', qty: 150 },

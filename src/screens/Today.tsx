@@ -13,10 +13,11 @@ import { Note, Ring, toast } from '../ui/kit';
 import { AddTaskSheet, KindIcon, NoPlanCard, RelaxCard, TaskList, WeightSheet } from './shared';
 import { PlanStartSheet } from './planViews';
 import { PiSuitcase } from '../ui/icons';
-import { PLAN_LENGTH, planEnd } from '../domain/plan';
+import { PLAN_LENGTH, menuUpdatePending, planEnd } from '../domain/plan';
+import { TEMPLATE } from '../domain/catalog';
 import { fmtFull, fmtShort } from '../lib/dates';
 import { MEAL_LABELS } from '../state/types';
-import { PiCalendarBlank, PiPlus, PiShareNetwork, PiShieldCheck, PiX } from '../ui/icons';
+import { PiCalendarBlank, PiForkKnife, PiPlus, PiShareNetwork, PiShieldCheck, PiX } from '../ui/icons';
 
 function pickNow(data: ReturnType<typeof useApp>, tasks: DayTask[], date: ISODate, isToday: boolean): DayTask | null {
   const open = tasks.filter((t) => !t.optional && !t.postponed && (statusOf(data, t) === 'planned' || statusOf(data, t) === 'in_progress'));
@@ -33,6 +34,7 @@ export function Today() {
   const [weigh, setWeigh] = useState(false);
   const [planSheet, setPlanSheet] = useState(false);
   const cfg = data.settings.plan;
+  const pendingMenu = menuUpdatePending(data);
   const p = planDay(data, today);
   const startAt = cfg?.startDate ?? planRange(data)?.from ?? null;
   const range = startAt ? { from: startAt } : null;
@@ -82,7 +84,14 @@ export function Today() {
           <span className="grow">Это предпросмотр. Офлайн-режим, значок на экране «Домой», сохранение отчётов и копий в «Файлы» работают в версии, опубликованной на GitHub Pages.</span>
         </div>
       )}
-      {cfg && !cfg.confirmed && (
+      {pendingMenu && (
+        <div className="banner">
+          <PiForkKnife />
+          <span className="grow">Новое меню {TEMPLATE.title}: старт {fmtFull(TEMPLATE.base_start)}, {TEMPLATE.dishes.filter((d) => !d.archived).length} рецептов с товарами av.ru, готовки и закупки. Посмотрите, что изменится, — меню применится только после подтверждения. Тренировки, вес и фото не меняются.</span>
+          <a className="btn small primary" href={href('/menu-update')}>Посмотреть</a>
+        </div>
+      )}
+      {!pendingMenu && cfg && !cfg.confirmed && (
         <div className="banner">
           <PiCalendarBlank />
           <span className="grow">Программа обновлена: старт питания и тренировок — {fmtFull(cfg.startDate)}, первый цикл по {fmtFull(planEnd(cfg))}.{Object.keys(data.trips).length ? ` Командировки: ${Object.values(data.trips).sort((a, b) => a.from.localeCompare(b.from)).map((t) => `${t.city} ${fmtShort(t.from)}–${fmtShort(t.to)}`).join(', ')} — командировочное питание, без готовки и обязательных тренировок.` : ''} Меню, готовка и закупки пересчитаны; прежние отметки, вес и фото сохранены.</span>

@@ -106,7 +106,7 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   if (rest.photo && typeof rest.photo.weekday !== 'number') rest.photo = { enabled: rest.photo.enabled !== false, weekday: defaultSettings().photo.weekday };
   const settings = { ...defaultSettings(), ...rest };
   // v4: план питания из шаблона с выбором даты старта; тренировки — своё расписание
-  if (v < 4 && !settings.plan) settings.plan = makePlanSettings(BASE_START, now, false);
+  if (v < 4 && !settings.plan) settings.plan = makePlanSettings(V1_START, now, false);
   if (JSON.stringify(settings) !== JSON.stringify(data.settings)) ops.push({ store: 'settings', put: settings });
   if (v !== DATA_VERSION) ops.push({ store: 'meta', put: { ...data.meta, dataVersion: DATA_VERSION } });
   return ops;
@@ -131,8 +131,11 @@ const V1_ITEMS: Record<string, string[]> = {
  * поэтому отметки «съедено» остаются на своих местах). Отметки готовок и закупок, галочки «куплено»
  * и переносы переходят на новые события. Ничего пользовательского не удаляется.
  */
+/** Дата старта плана первой версии приложения (данные до v4). */
+const V1_START = '2026-11-02';
+
 export function planV4Ops(data: AppData, today: ISODate, now: string): Op[] {
-  const cfg = data.settings.plan ?? makePlanSettings(BASE_START, now, false);
+  const cfg = data.settings.plan ?? makePlanSettings(V1_START, now, false);
   const hasSeedPlan = Object.values(data.planDays).some((d) => d.source === 'seed');
   if (!hasSeedPlan && !data.settings.onboarded) return [];
   const res = replanOps(data, cfg, today, { force: true, now });
@@ -206,16 +209,14 @@ export function planV5Ops(data: AppData, today: ISODate, now: string): Op[] {
   }
   const imp = data.planDays['2026-11-26'];
   if (imp && imp.source === 'import' && staleTripTask(`${imp.note ?? ''} ${Object.values(imp.meals ?? {}).join(' ')}`)) ops.push({ store: 'planDays', del: '2026-11-26' });
-  const cfg = makePlanSettings(NOV_2026_START, now, false);
+  // меню и дата старта питания меняются только после предпросмотра нового меню (menuUpdateOps)
   const settings = {
-    ...data.settings, plan: cfg,
+    ...data.settings,
     relaxOverrides: { ...(data.settings.relaxOverrides ?? {}), '2026-11': '2026-11-29' },
     training: { ...data.settings.training, startDate: NOV_2026_START },
   };
   ops.push({ store: 'settings', put: settings });
-  const d2 = applyOps(data, ops);
-  if (!data.settings.onboarded && !Object.values(data.planDays).length) return ops;
-  return [...ops, ...replanOps(d2, cfg, today, { now }).ops];
+  return ops;
 }
 
 /**
@@ -223,11 +224,17 @@ export function planV5Ops(data: AppData, today: ISODate, now: string): Op[] {
  * План пересобирается по новому шаблону с той же датой старта: меню, готовки и закупки с сегодняшнего дня —
  * по новым граммовкам; прошедшие дни остаются историей, отметки и все записи пользователя не трогаются.
  */
-export function planV6Ops(data: AppData, today: ISODate, now: string): Op[] {
-  const cfg = data.settings.plan;
-  if (!cfg) return [];
-  if (!data.settings.onboarded && !Object.values(data.planDays).length) return [];
-  return replanOps(data, cfg, today, { now }).ops;
+export function planV6Ops(_data: AppData, _today: ISODate, _now: string): Op[] {
+  // замена скумбрии горбушей вошла в меню «Азбука вкуса»; новое меню применяется после предпросмотра
+  return [];
+}
+
+/**
+ * Переход на новое меню (шаблон с другим id) после предпросмотра: план пересобирается с выбранной датой старта.
+ * Прошедшие дни — история; тренировки, вес, фото, отметки, командировки и релакс-дни не меняются.
+ */
+export function menuUpdateOps(data: AppData, startDate: ISODate, today: ISODate, now: string) {
+  return replanOps(data, makePlanSettings(startDate, now, true), today, { now });
 }
 
 export { buildInstance };

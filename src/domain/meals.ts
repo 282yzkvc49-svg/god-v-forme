@@ -69,6 +69,8 @@ export const RECIPE_TYPE_LABELS: Record<string, string> = {
   main: 'Основные блюда',
   side: 'Гарниры',
   breakfast: 'Завтраки',
+  lunch: 'Обеды',
+  dinner: 'Ужины',
   snack: 'Перекусы',
   other: 'Мои рецепты',
 };

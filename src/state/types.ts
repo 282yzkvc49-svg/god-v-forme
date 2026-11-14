@@ -103,7 +103,8 @@ export interface ShoppingItem {
   note: string | null;
 }
 
-export interface ShoppingNeed { date: ISODate; label: string; qty: number }
+/** date — купить не позже (закупка до этой даты), use — когда продукт идёт в дело (для срока хранения). */
+export interface ShoppingNeed { date: ISODate; label: string; qty: number; use?: ISODate }
 
 /** Строка закупки, посчитанная из меню и готовок: сколько нужно, сколько купить, сколько останется. */
 export interface ShopLine {
@@ -209,7 +210,7 @@ export interface RecipeStep {
   minutes: string | null;
 }
 
-export type RecipeType = 'main' | 'side' | 'breakfast' | 'snack' | 'other';
+export type RecipeType = 'main' | 'side' | 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
 
 export interface Recipe {
   id: string;
@@ -459,6 +460,8 @@ export interface PlanSettings {
   relaxDay?: number;
   instanceId: string;
   confirmed: boolean; // пользователь подтвердил дату (после обновления — false, пока не подтвердит)
+  /** Какое меню применено (id шаблона); другое значение — доступно обновление меню с предпросмотром. */
+  menuId?: string;
   setAt: string;
 }
 

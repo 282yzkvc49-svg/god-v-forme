@@ -24,16 +24,17 @@ OLD.turkey_chili.ingredients[1] = { source_text: '2 банки фасоли', qt
 OLD.omelet_lavash.ingredients[0] = { source_text: '2 яйца', qty: 2, qty_max: null, unit: 'шт.', name: 'яйца' };
 const r = (id: string) => OLD[id];
 
-test('блюда меню: граммовки на порцию и на партию, яйца в штуках', () => {
-  assert.ok(SEED_RECIPES.find((x) => x.id === 'turkey_meatballs'));
-  const one = ingredientLines('turkey_meatballs', 1);
-  assert.equal(one.find((l) => l.productId === 'turkey_mince')!.amount, '200 г');
-  assert.equal(one.find((l) => l.productId === 'egg')!.amount, '⅓ шт.');
-  const batch = ingredientLines('turkey_meatballs', 3, true);
-  assert.equal(batch.find((l) => l.productId === 'turkey_mince')!.amount, '600 г');
-  assert.equal(batch.find((l) => l.productId === 'egg')!.amount, '1 шт.');
-  const rice = ingredientLines('grain_rice', 90);
-  assert.equal(rice[0].amount, '90 г');
+test('блюда меню: граммовки на порцию и на партию, яйца в штуках, доля упаковки av.ru', () => {
+  assert.ok(SEED_RECIPES.find((x) => x.id === 'D08'));
+  const one = ingredientLines('D08', 1);
+  assert.equal(one.find((l) => l.productId === 'turkey')!.amount, '110 г');
+  assert.equal(one.find((l) => l.productId === 'egg')!.amount, '3 шт.');
+  const batch = ingredientLines('L02', 3, true);
+  assert.equal(batch.find((l) => l.productId === 'turkey_mince')!.amount, '570 г');
+  assert.equal(batch.find((l) => l.productId === 'turkey_mince')!.qty, 570);
+  // trout и bread — товары комплекта, хотя так же назывались блюда прежнего меню
+  assert.equal(ingredientLines('D03', 1).find((l) => l.productId === 'trout')!.amount, '190 г');
+  assert.equal(ingredientLines('B02', 1).find((l) => l.productId === 'bread')!.amount, '70 г');
 });
 
 test('пересчёт структурированных количеств на порции', () => {

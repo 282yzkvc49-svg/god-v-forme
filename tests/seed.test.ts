@@ -5,15 +5,34 @@ import { DISHES, PRODUCTS, TEMPLATE, dishNutrition } from '../src/domain/catalog
 import { freshData } from './helpers';
 import { MEAL_SLOTS } from '../src/state/types';
 
-test('шаблон меню: 30 дней, релакс-день 28, 116 приёмов пищи с конкретными блюдами', () => {
-  assert.equal(TEMPLATE.days.length, 30);
-  assert.equal(TEMPLATE.base_start, '2026-11-02');
-  assert.equal(TEMPLATE.relax_day, 28);
-  const menuDays = TEMPLATE.days.filter((d) => !d.relax);
-  assert.equal(menuDays.length, 29);
-  let meals = 0;
-  for (const d of menuDays) for (const s of MEAL_SLOTS) { assert.ok(d.meals![s].parts.length >= 1); meals++; }
-  assert.equal(meals, 116);
+test('шаблон меню «Азбука вкуса»: 24 дня меню по 4 рецепта, 61 рецепт, 8 партий, старт 16.11', () => {
+  assert.equal(TEMPLATE.id, 'azbuka-2026-11-16-30days-v1');
+  assert.equal(TEMPLATE.base_start, '2026-11-16');
+  assert.equal(TEMPLATE.length, 30);
+  assert.equal(TEMPLATE.budget_rub, 50000);
+  assert.equal(TEMPLATE.days.length, 24);
+  for (const d of TEMPLATE.days) for (const s of MEAL_SLOTS) assert.equal(d.meals![s].parts.length, 1, `день ${d.day} ${s}`);
+  assert.equal(new Set(TEMPLATE.days.map((d) => d.meals!.breakfast.parts[0].dish)).size, 24, '24 разных завтрака');
+  assert.equal(TEMPLATE.dishes.filter((d) => !d.archived).length, 61);
+  assert.equal(TEMPLATE.blocks.length, 8);
+  const portions = TEMPLATE.blocks.reduce((n, b) => n + b.items.reduce((m, i) => m + i.uses.length, 0), 0);
+  assert.equal(portions, 48, '48 обедов и ужинов из партий');
+  const src = TEMPLATE.source!;
+  assert.equal(src.calendar.length, 30);
+  assert.equal(src.orders.reduce((x, o) => x + o.subtotal, 0).toFixed(2), '38653.20');
+});
+
+test('товары av.ru: ссылка, статус ссылки, фасовка и цена упаковки; наличие не проверено', () => {
+  const av = TEMPLATE.products.filter((p) => !p.archived);
+  assert.equal(av.length, 49);
+  for (const p of av) {
+    assert.match(p.url!, /^https:\/\/av\.ru\//, p.id);
+    assert.ok(['individual_product_page', 'category_listing'].includes(p.listing_status!), p.id);
+    assert.equal(p.availability, 'not_verified');
+    assert.ok(p.pack.size > 0 && p.pack_price! > 0, p.id);
+  }
+  assert.equal(av.filter((p) => p.listing_status === 'category_listing').length, 2);
+  for (const d of TEMPLATE.dishes.filter((x) => !x.archived)) for (const i of d.ingredients) assert.ok(PRODUCTS[i.product]?.url, `${d.id}: ${i.product}`);
 });
 
 test('блюда: у каждого ингредиенты с количеством, известные продукты и шаги рецепта', () => {
@@ -40,13 +59,18 @@ test('исключённые продукты отсутствуют', () => {
   for (const bad of ['мёд', 'мед ', 'дорад', 'сардин', 'алкогол', 'вино', 'пиво', 'кофе', 'энергетик', 'лимонад']) assert.ok(!names.includes(bad), bad);
 });
 
-test('калорийность дня ≈2450 ккал по справочным данным', () => {
+test('калорийность: расчёт по продуктам совпадает с оценками комплекта (≈2389 ккал в среднем, 2139–2559)', () => {
+  const ks: number[] = [];
   for (const d of TEMPLATE.days) {
-    if (d.relax) continue;
     let k = 0;
     for (const s of MEAL_SLOTS) for (const p of d.meals![s].parts) k += dishNutrition(p.dish, p.qty).kcal;
-    assert.ok(k > 2300 && k < 2600, `день ${d.day}: ${Math.round(k)}`);
+    ks.push(k);
   }
+  const avg = ks.reduce((a, b) => a + b, 0) / ks.length;
+  assert.ok(Math.abs(avg - 2389.2) < 1, `${avg}`);
+  assert.equal(Math.round(Math.min(...ks)), 2139);
+  assert.equal(Math.round(Math.max(...ks)), 2559);
+  for (const d of TEMPLATE.dishes.filter((x) => !x.archived)) assert.ok(Math.abs(dishNutrition(d.id, 1).kcal - d.nutrition_estimate!.kcal) < 1.5, d.id);
 });
 
 test('тренировки: только гири 12 и 16 кг, без весов 6, 8, 10, 14 кг', () => {
@@ -64,13 +88,19 @@ test('тренировки: только гири 12 и 16 кг, без весо
   for (const e of SEED.exercise_library) for (const eq of e.equipment) assert.ok(!/гантел|штанг|скам|тренаж|разборн/i.test(eq), eq);
 });
 
-test('план со стартом 02.11: дни, релакс 29.11, карточки с граммовками', () => {
+test('план со стартом 02.11 без поездок: дни, релакс 29.11, карточки с граммовками, меню идёт по кругу', () => {
   const d = freshData();
   assert.equal(d.planDays['2026-11-02'].dayNumber, 1);
   assert.equal(d.planDays['2026-11-29'].relax, true);
   assert.equal(d.planDays['2026-11-29'].meals, null);
   const card = d.planDays['2026-11-02'].mealCards!.lunch;
-  assert.equal(card.parts[0].dishId, 'chicken_lemon_paprika');
+  assert.equal(card.parts[0].dishId, 'L01');
   assert.ok(card.parts[0].cookEventId, 'порция из готовки');
+  // 29 домашних дней при 24 днях меню: с 26.11 меню начинается сначала, партии — целиком
+  assert.equal(d.planDays['2026-11-25'].mealCards!.breakfast.parts[0].dishId, 'B24');
+  assert.equal(d.planDays['2026-11-26'].mealCards!.breakfast.parts[0].dishId, 'B01');
+  assert.equal(d.planDays['2026-12-01'].mealCards!.lunch.parts[0].dishId, 'L02');
+  const second = Object.values(d.cookingEvents).filter((e) => e.blockId === 'cook-01');
+  assert.equal(second.length, 2, 'первая партия меню готовится и во втором круге');
   assert.equal(d.planDays['2026-12-02'], undefined);
 });

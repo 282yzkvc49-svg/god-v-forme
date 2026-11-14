@@ -15,6 +15,7 @@ import { CheckButton, Disclosure, Empty, Note, PageHead, toast } from '../ui/kit
 import { copyText, shareText } from '../lib/files';
 import { PiBookOpen, PiCheck, PiCookingPot, PiCopy, PiPrinter, PiShareNetwork, PiShoppingCart, PiSnowflake, PiPackage, PiListChecks, PiHouse } from '../ui/icons';
 import { containersFor } from './planViews';
+import { AvLink } from '../ui/AvLink';
 
 type Data = ReturnType<typeof useApp>;
 
@@ -196,7 +197,8 @@ export function ShopPage({ id }: { id: string }) {
       } />
       <div className="print-only"><h2>{e.title}, {fmtLong(d)}</h2></div>
       {e.kind === 'trip' && <Note kind="info">Перекусы в командировку: купить в обычном супермаркете на месте, готовить не нужно. Варианты чередуются по дням — можно взять любой доступный. Сумма не входит в домашний бюджет на продукты.</Note>}
-      {e.kind === 'topup' && <Note kind="info">Небольшая докупка свежего: молочные продукты, бананы, зелень, томаты и т. п. не хранятся до следующей основной закупки — их лучше купить ближе к дате.</Note>}
+      {e.kind === 'topup' && <Note kind="info">Небольшая докупка свежего: молочные продукты, грибы, огурцы, помидоры, бананы и т. п. не хранятся до следующей основной закупки — их лучше купить ближе к дате. Фрукты и овощи — поштучно, в ближайшем магазине или заказом на av.ru; часть можно заменить замороженными.</Note>}
+      {e.lines?.some((l) => PRODUCTS[l.productId]?.url) && <Note kind="plain">Ссылки ведут на товары av.ru (у некоторых — на подборку категории). Цены — ориентир на 14.11.2026, а не собранная корзина: наличие и доставка по адресу не проверены, итог будет известен при оформлении заказа.</Note>}
       {e.lines && <p className="hint">Количество посчитано из меню и готовок этого периода; учтены остатки прошлых закупок и несъедобная часть (кожура, сердцевина). Отметьте «есть дома», если продукт уже есть — он не войдёт в сумму.</p>}
       <div className="cols">
         <div className="card">
@@ -266,6 +268,7 @@ function ShopLineRow({ e, l, editPrices }: { e: ShoppingEvent; l: ShopLine; edit
       <CheckButton small state={bought ? 'on' : 'off'} label={`${p.name}: ${bought ? 'снять отметку' : 'куплено'}`} onClick={() => A.setBought(e.id, l.productId, !bought)} />
       <div style={{ minWidth: 0 }}>
         <div className="name">{p.name}</div>
+        <AvLink productId={l.productId} />
         <div className="small muted">
           Нужно {needText(l)}{l.needs.length ? ` к ${fmtShort(l.needs.reduce((m, n) => (n.date < m ? n.date : m), l.needs[0].date))}` : ''}{l.fromStock > 0 ? `, из остатков ${fmtAmount(l.fromStock, p.unit)}` : ''}{l.leftover > 0 && l.buy > 0 ? `, останется ${fmtAmount(l.leftover, p.unit)}` : ''}. Ориентир {fmtRub(atHome ? 0 : l.cost)}.
         </div>
@@ -393,7 +396,7 @@ function CookItemCard({ e, dishId }: { e: CookingEvent; dishId: string }) {
       </p>
       <h4 className="mt0" style={{ marginBottom: 4 }}>Продукты на всю партию</h4>
       <ul className="ing-list compact">
-        {ingredientLines(dishId, it.qty, true).map((l, j) => <li key={j}><span className="ing-dot" /><span className="grow">{l.name}{l.note ? <span className="orig"> — {l.note}</span> : null}</span><span className="num small">{l.amount}</span></li>)}
+        {ingredientLines(dishId, it.qty, true).map((l, j) => <li key={j}><span className="ing-dot" /><span className="grow ing-main"><span>{l.name}{l.note ? <span className="orig"> — {l.note}</span> : null}</span>{l.productId && <AvLink productId={l.productId} qty={l.qty} />}</span><span className="num small">{l.amount}</span></li>)}
         {d.spices.map((s, j) => <li key={`s${j}`}><span className="ing-dot text" /><span className="grow small muted">{s}</span></li>)}
       </ul>
       <h4 style={{ marginBottom: 4 }}>Как готовить</h4>

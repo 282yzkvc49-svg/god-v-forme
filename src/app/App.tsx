@@ -16,6 +16,7 @@ import { ProgressScreen } from '../screens/Progress';
 import { AnalysisScreen } from '../screens/Analysis';
 import { SettingsScreen, MoreScreen } from '../screens/Settings';
 import { TripsScreen } from '../screens/Trips';
+import { MenuUpdateScreen } from '../screens/MenuUpdate';
 import { Onboarding } from '../screens/Onboarding';
 import { onUpdateReady, applyUpdate } from './sw';
 
@@ -85,6 +86,7 @@ export function App() {
     case 'analysis': screen = <AnalysisScreen />; break;
     case 'settings': screen = <SettingsScreen />; break;
     case 'trips': screen = <TripsScreen />; break;
+    case 'menu-update': screen = <MenuUpdateScreen />; break;
     case 'more': screen = <MoreScreen />; break;
     default: screen = <Today />;
   }

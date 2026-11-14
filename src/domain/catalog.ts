@@ -1,4 +1,5 @@
-// Справочник продуктов и блюд плана питания (src/data/plan_template.json, собирается tools/build_plan.py).
+// Справочник продуктов и блюд плана питания (src/data/plan_template.json, собирается tools/build_av_plan.py
+// из комплекта «Азбука вкуса»; прежнее меню — только для истории, помечено archived).
 // Здесь — пищевая ценность, развёртка блюда в продукты и форматирование количеств.
 import tpl from '../data/plan_template.json';
 import type { MealSlot } from '../state/types';
@@ -24,6 +25,15 @@ export interface Product {
   pantry: boolean;
   /** Убран из меню; остаётся только для истории прошедших дней (например, скумбрия → горбуша). */
   archived?: boolean;
+  /** Товар av.ru: ссылка на карточку товара или на подборку категории. */
+  url?: string;
+  listing_status?: 'individual_product_page' | 'category_listing';
+  /** Наличие по адресу доставки не проверено, пока заказ не оформлен. */
+  availability?: 'not_verified';
+  /** Цена упаковки на av.ru (ориентир на дату снимка, не корзина). */
+  pack_price?: number;
+  av_category?: string;
+  av_note?: string | null;
 }
 
 export interface DishIngr { product: string; qty: number; note: string | null }
@@ -33,7 +43,7 @@ export interface Dish {
   id: string;
   title: string;
   short: string;
-  category: 'main' | 'side' | 'veg' | 'protein' | 'breakfast' | 'snack' | 'other';
+  category: 'main' | 'side' | 'veg' | 'protein' | 'breakfast' | 'snack' | 'lunch' | 'dinner' | 'other';
   kind: 'batch' | 'fresh';
   unit: 'portion' | 'g';
   unit_label: string | null;
@@ -48,12 +58,32 @@ export interface Dish {
   legacy: string | null;
   /** Убрано из меню и списка рецептов; остаётся только для истории прошедших дней. */
   archived?: boolean;
+  active_minutes?: number | null;
+  portable?: boolean | null;
+  storage_text?: string | null;
+  /** Оценка из комплекта (для сверки; в приложении калорийность считается по продуктам). */
+  nutrition_estimate?: Nutr;
 }
 
 export interface TplPart { dish: string; qty: number; fresh: boolean }
-export interface TplDay { day: number; relax: boolean; meals: Record<MealSlot, { parts: TplPart[] }> | null }
+export interface TplDay { day: number; relax: boolean; meals: Record<MealSlot, { parts: TplPart[] }> | null; seed_date?: string }
 export interface TplUse { day: number; slot: MealSlot; qty: number; via: string | null; storage: string }
-export interface TplBlock { id: string; day: number; when: 'morning' | 'evening'; kind: 'main' | 'quick'; items: { dish: string; uses: TplUse[] }[] }
+export interface TplBlock {
+  id: string; day: number; when: 'morning' | 'evening'; kind: 'main' | 'quick'; items: { dish: string; uses: TplUse[] }[];
+  /** Готовка закреплена за днём меню (как в комплекте), а не подбирается по ближайшему свободному вечеру. */
+  pinned?: boolean;
+  seed_date?: string;
+}
+
+export interface SeedOrderLine { product: string; need: number; packs: number; cost: number; leftover: number }
+export interface SeedSource {
+  seed_id: string; schema_version: string; price_snapshot: string; address_delivery_status: string; dining_rules: string[];
+  protein_target: number; validation: Record<string, unknown>;
+  calendar: { date: string; type: 'home' | 'travel' | 'relax'; city: string | null; meals: Record<MealSlot, string> | null }[];
+  cooking: { id: string; date: string; items: { dish: string; servings: number; uses: [string, string][] }[] }[];
+  orders: { id: string; date: string; title: string; period: [string, string]; subtotal: number; note: string | null; lines: SeedOrderLine[] }[];
+  kcal: { avg: number; min: number; max: number; protein: number };
+}
 
 export interface PlanTemplate {
   id: string;
@@ -71,11 +101,23 @@ export interface PlanTemplate {
   days: TplDay[];
   blocks: TplBlock[];
   topup_candidates: number[];
+  source?: SeedSource;
 }
 
 export const TEMPLATE: PlanTemplate = tpl as any;
 export const PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.products.map((p) => [p.id, p]));
 export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.map((d) => [d.id, d]));
+
+/**
+ * Ингредиент — вложенное блюдо из партии (прежнее меню) или продукт. В рецептах комплекта все ингредиенты —
+ * товары, и их id могут совпадать с id прежних блюд (trout, bread): для действующих блюд продукт важнее.
+ */
+export function subDishOf(parent: Dish | undefined, id: string): Dish | null {
+  const sub = DISHES[id];
+  if (!sub) return null;
+  if (parent && !parent.archived && PRODUCTS[id]) return null;
+  return sub;
+}
 
 export function isDish(id: string): boolean {
   return !!DISHES[id] && !DISHES[id].archived;
@@ -95,7 +137,7 @@ export function dishNutrition(dishId: string, qty: number): DishNutrition {
   if (!d) return out;
   for (const i of d.ingredients) {
     const q = i.qty * qty;
-    if (DISHES[i.product]) {
+    if (subDishOf(d, i.product)) {
       const n = dishNutrition(i.product, q);
       out.kcal += n.kcal; out.p += n.p; out.f += n.f; out.c += n.c;
       for (const l of n.labelProducts) if (!out.labelProducts.includes(l)) out.labelProducts.push(l);
@@ -138,7 +180,7 @@ export function dishProducts(dishId: string, qty: number, includeNested: boolean
   if (!d) return out;
   for (const i of d.ingredients) {
     const q = i.qty * qty;
-    if (DISHES[i.product]) {
+    if (subDishOf(d, i.product)) {
       if (!includeNested) continue;
       for (const [k, v] of dishProducts(i.product, q, true)) out.set(k, (out.get(k) ?? 0) + v);
       continue;
@@ -198,7 +240,7 @@ export function cookedWeight(dishId: string, qty: number): number | null {
   return d.serving_g ? Math.round(qty * d.serving_g / 5) * 5 : null;
 }
 
-export interface IngrLine { productId: string | null; dishId: string | null; name: string; amount: string; note: string | null }
+export interface IngrLine { productId: string | null; dishId: string | null; name: string; amount: string; note: string | null; qty: number }
 
 /** Ингредиенты блюда на qty единиц для показа (вложенное блюдо из партии — одной строкой). */
 export function ingredientLines(dishId: string, qty: number, batchRound = false): IngrLine[] {
@@ -207,16 +249,16 @@ export function ingredientLines(dishId: string, qty: number, batchRound = false)
   const out: IngrLine[] = [];
   for (const i of d.ingredients) {
     const q = i.qty * qty;
-    const sub = DISHES[i.product];
+    const sub = subDishOf(d, i.product);
     if (sub) {
-      out.push({ productId: null, dishId: sub.id, name: sub.title, amount: sub.unit === 'g' ? `${Math.round(q)} г` : dishAmount(sub.id, q), note: 'из готовки' });
+      out.push({ productId: null, dishId: sub.id, name: sub.title, amount: sub.unit === 'g' ? `${Math.round(q)} г` : dishAmount(sub.id, q), note: 'из готовки', qty: q });
       continue;
     }
     const p = PRODUCTS[i.product];
     if (!p) continue;
     const amount = fmtAmount(batchRound ? roundBatch(p, q) : q, p.unit);
     const piece = p.unit !== 'pcs' && p.piece_g && q >= p.piece_g * 0.4 ? ` (≈${frac(Math.round(q / p.piece_g * 2) / 2)} шт.)` : '';
-    out.push({ productId: p.id, dishId: null, name: p.name, amount: amount + piece, note: i.note ?? p.note });
+    out.push({ productId: p.id, dishId: null, name: p.name, amount: amount + piece, note: i.note ?? p.note, qty: batchRound ? roundBatch(p, q) : q });
   }
   return out;
 }
@@ -227,6 +269,6 @@ export const METHOD_LABEL: Record<string, string> = {
 
 export const DISH_CATEGORY_LABELS: Record<Dish['category'], string> = {
   main: 'Основные блюда', side: 'Гарниры', veg: 'Овощи и салаты', protein: 'Мясо для бутербродов',
-  breakfast: 'Завтраки', snack: 'Перекусы', other: 'Заготовки',
+  breakfast: 'Завтраки', snack: 'Перекусы', lunch: 'Обеды', dinner: 'Ужины', other: 'Заготовки',
 };
 

@@ -3,16 +3,16 @@
  "schema_version": "2.0",
  "title": "Мой год в форме — стартовый план",
  "sources": [
-  "Меню на 30 дней с граммовками: tools/plan_*.py → src/data/plan_template.json",
-  "Исходные блюда: План_питания_2ноя_1дек_2026.xlsx и Рецепты_к_меню_ноябрь_2026.docx",
-  "ТЗ «Мой год в форме», корректировки: меню, оборудование, порции, закупки, дата старта"
+  "Комплект «Азбука вкуса» azbuka-2026-11-16-30days-v1: tools/source/av_30day_seed.json → tools/build_av_plan.py → src/data/plan_template.json",
+  "Прежнее меню (до 14.11.2026) — только для истории: tools/legacy/",
+  "ТЗ «Мой год в форме» и корректировки: оборудование, командировки, релакс-дни, дата старта"
  ],
  "profile": {
   "start_weight_kg": 107,
   "target_weight_kg": 82,
   "horizon_text": "≈12 месяцев",
   "kcal_reference": 2450,
-  "kcal_note": "≈2450 ккал/сутки; калорийность каждого приёма пищи считается по справочным данным.",
+  "kcal_note": "≈2450 ккал/сутки — ориентир; расчётная средняя домашних дней ≈2389 ккал (по справочным данным, не по этикеткам).",
   "meal_times": {
    "breakfast": "08:30",
    "lunch": "12:00",
@@ -20,12 +20,12 @@
    "dinner": "20:00–21:30"
   },
   "weekend_note": "Выходные: можно 2 основных приёма + перекус по голоду; не надо насильно есть 4 раза.",
-  "cooking_days_text": "2 основные готовки в неделю (вечер буднего дня и выходной) + быстрая готовка рыбы перед ужином.",
-  "shopping_text": "Две основные закупки: накануне старта и к 14-му дню плана; скоропортящееся — небольшими докупками.",
+  "cooking_days_text": "8 партий за 30 дней: обеды на 2–4 дня и ужины; порции позже 3 дней — в морозилку.",
+  "shopping_text": "Две основные закупки на av.ru (15.11 и к готовке 30.11); скоропортящееся — небольшими докупками.",
   "budget_limit_rub": 30000,
   "relax_days": [],
   "drinks": "Вода, травяные чаи и морсы без сахара; без кофе, энергетиков, лимонадов и алкоголя.",
-  "exclusions": "Без мёда, дорадо, сардин, алкоголя, кофе, энергетиков и сладких лимонадов.",
+  "exclusions": "Без мёда, дорадо, сардин, скумбрии, алкоголя, кофе, энергетиков и сладких лимонадов.",
   "kitchen": "Плита, аэрогриль, электрогриль. Духовка не нужна.",
   "training_equipment": [
    "Мини-степпер",
@@ -47,11 +47,11 @@
   },
   {
    "label": "Энергия, старт",
-   "text": "≈2450 ккал/сутки; по дням меню 2327–2462 ккал (справочные данные)"
+   "text": "≈2450 ккал/сутки — ориентир; по дням меню 2139–2559 ккал, в среднем ≈2389 (расчёт, не по этикеткам)"
   },
   {
    "label": "Белок / жиры / углеводы",
-   "text": "в среднем ≈185 г / 75 г / 264 г в день (≈2420 ккал)"
+   "text": "в среднем ≈167 г / 78 г / 263 г в день"
   },
   {
    "label": "Режим в будни",
@@ -63,15 +63,15 @@
   },
   {
    "label": "Готовка",
-   "text": "2 основные готовки в неделю + быстрая готовка рыбы перед ужином; блюда на 2–3 дня, остальное сразу в морозилку"
+   "text": "8 партий: в день готовки — обед и ужины на 2–4 дня; что не съедите за 3 дня — в морозилку; рыбу — в день готовки или на следующий"
   },
   {
    "label": "Закупки",
-   "text": "Две основные: накануне старта и к 14-му дню плана; молочное, бананы, зелень и овощи — небольшими докупками"
+   "text": "Две основные на av.ru (15.11 и к 30.11) + небольшие докупки свежего; цены — ориентир с av.ru, не корзина"
   },
   {
    "label": "Релакс-день",
-   "text": "28-й день плана (переносится вместе с датой старта): меню свободное, алкоголь исключён"
+   "text": "Один в календарный месяц (в ноябре — 29.11): свободная еда без подсчёта, алкоголь исключён"
   },
   {
    "label": "Напитки",
@@ -79,7 +79,7 @@
   },
   {
    "label": "Исключения",
-   "text": "Без мёда, дорадо, сардин, алкоголя, кофе, энергетиков и сладких лимонадов"
+   "text": "Без мёда, дорадо, сардин, скумбрии, алкоголя, кофе, энергетиков и сладких лимонадов"
   },
   {
    "label": "Техника",
@@ -95,11 +95,11 @@
   },
   {
    "label": "Важно про КБЖУ",
-   "text": "Калорийность считается по справочным таблицам (USDA, Скурихин). Если в блюде есть продукт, состав которого зависит от марки (лаваш, сыр, фарш, хлебцы), — «требует уточнения» по этикетке."
+   "text": "Калорийность расчётная — по справочным значениям комплекта; этикетки av.ru не сверены. Вручную ничего вводить не нужно."
   },
   {
    "label": "Важно про бюджет",
-   "text": "Цены ориентировочные, не проверены в магазине. Фактические можно вписать в закупке."
+   "text": "Бюджет домашней еды 50 000 ₽. Цены — с av.ru на 14.11.2026, ориентир; наличие и доставка по адресу не проверены."
   },
   {
    "label": "Хранение",
@@ -719,584 +719,430 @@
  ],
  "meal_recipe_map": [
   {
-   "match": "большой овощной салат",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Листовой салат и свежие овощи"
-  },
-  {
-   "match": "брокколи",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Овощной гарнир (замороженная брокколи)"
-  },
-  {
-   "match": "булгур",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "grains",
-   "comment": "Рецепт «Крупы: рис, гречка, булгур, кускус»"
-  },
-  {
-   "match": "говядина гриль",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "beef_grill",
-   "comment": null
-  },
-  {
-   "match": "горбуша",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "pink_salmon",
-   "comment": null
-  },
-  {
-   "match": "гречка",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "grains",
-   "comment": "Рецепт «Крупы: рис, гречка, булгур, кускус»"
-  },
-  {
-   "match": "индейка горчица",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "turkey_mustard",
-   "comment": "Рецепт «Индейка с горчицей»"
-  },
-  {
-   "match": "индейка с горчицей",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "turkey_mustard",
-   "comment": null
-  },
-  {
-   "match": "индейка томатная",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "turkey_tomato",
-   "comment": null
-  },
-  {
-   "match": "кабачок",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Овощной гарнир"
-  },
-  {
-   "match": "капуста",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Свежая капуста"
-  },
-  {
-   "match": "картофель",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "potato_airfryer",
-   "comment": "Рецепт «Картофель в аэрогриле»"
-  },
-  {
-   "match": "киноа",
-   "scope": "component",
-   "kind": "similar",
-   "recipe_id": "grains",
-   "comment": "Киноа нет в рецепте круп — время варки уточнить по упаковке."
-  },
-  {
-   "match": "креветки с чесноком",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "shrimp_garlic",
-   "comment": null
-  },
-  {
-   "match": "куриное бедро",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "chicken_thigh",
-   "comment": "Рецепт «Куриное бедро без кожи»"
-  },
-  {
-   "match": "куриное бедро без кожи",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "chicken_thigh",
-   "comment": null
-  },
-  {
-   "match": "куриные котлеты",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "chicken_cutlets",
-   "comment": null
-  },
-  {
-   "match": "курица лимон-паприка",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "chicken_lemon_paprika",
-   "comment": null
-  },
-  {
-   "match": "курица паприка",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "chicken_lemon_paprika",
-   "comment": "В меню «Курица паприка»; ближайший рецепт — «Курица лимон-паприка». Проверьте, тот ли это вариант."
-  },
-  {
-   "match": "курица терияки",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "chicken_teriyaki",
-   "comment": "Рецепт «Курица терияки без сахара»"
-  },
-  {
-   "match": "курица чеснок-йогурт",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "chicken_garlic_yogurt",
-   "comment": null
-  },
-  {
-   "match": "кускус",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "grains",
-   "comment": "Рецепт «Крупы: рис, гречка, булгур, кускус»"
-  },
-  {
-   "match": "лосось",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "salmon",
-   "comment": "Рецепт «Лосось/сёмга»"
-  },
-  {
-   "match": "морковь",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Овощной гарнир"
-  },
-  {
-   "match": "овощи",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Овощной гарнир"
-  },
-  {
-   "match": "огурец",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Свежий огурец"
-  },
-  {
-   "match": "перец",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Свежий сладкий перец"
-  },
-  {
-   "match": "перловка",
-   "scope": "component",
-   "kind": "similar",
-   "recipe_id": "grains",
-   "comment": "Перловки нет в рецепте круп — время варки уточнить по упаковке."
-  },
-  {
-   "match": "рис",
-   "scope": "component",
-   "kind": "alias",
-   "recipe_id": "grains",
-   "comment": "Рецепт «Крупы: рис, гречка, булгур, кускус»"
-  },
-  {
-   "match": "салат",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Листовой салат и свежие овощи"
-  },
-  {
-   "match": "свекла",
-   "scope": "component",
-   "kind": "unknown",
-   "recipe_id": null,
-   "comment": "Свёклы нет ни в рецептах, ни в списке закупок — уточнить."
-  },
-  {
-   "match": "стручковая фасоль",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Замороженная стручковая фасоль"
-  },
-  {
-   "match": "тефтели из индейки",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "turkey_meatballs",
-   "comment": null
-  },
-  {
-   "match": "томаты",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Свежие томаты"
-  },
-  {
-   "match": "форель",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "trout",
-   "comment": null
-  },
-  {
-   "match": "хек",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "hake",
-   "comment": null
-  },
-  {
-   "match": "чили из индейки",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "turkey_chili",
-   "comment": null
-  },
-  {
-   "match": "шпинат",
-   "scope": "component",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Замороженный шпинат"
-  },
-  {
-   "match": "бутерброд с яйцом, сыром и огурцом",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "egg_sandwich",
-   "comment": null
-  },
-  {
-   "match": "горбуша гриль с картофелем и овощным салатом",
+   "match": "ночная овсянка с бананом, клубникой и орехами",
    "scope": "whole",
    "kind": "exact",
-   "recipe_id": "pink_salmon_potato_salad",
+   "recipe_id": "B01",
    "comment": null
   },
   {
-   "match": "горячий сэндвич на гриле с яйцом и индейкой",
+   "match": "творог с киви, миндалём и тостами",
    "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "egg_sandwich",
-   "comment": "Точного рецепта нет; похожий — «Яичные бутерброды»."
-  },
-  {
-   "match": "греческий йогурт с ягодами, гранолой и чиа",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "yogurt_berries_granola",
+   "kind": "exact",
+   "recipe_id": "B02",
    "comment": null
   },
   {
-   "match": "гречка с молоком, грушей и миндалем",
+   "match": "шакшука с овощами и цельнозерновым хлебом",
    "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "grains",
-   "comment": "Точного рецепта нет; крупа — по рецепту «Крупы»."
-  },
-  {
-   "match": "запеченное яблоко + йогурт 200 г + орехи",
-   "scope": "whole",
-   "kind": "unknown",
-   "recipe_id": null,
-   "comment": "Нет рецепта запечённого яблока."
-  },
-  {
-   "match": "йогурт 200 г + гранола 50 г + груша",
-   "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "йогурт 200 г + ягоды + чиа + банан",
-   "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "йогурт 200 г + ягоды 100 г + орехи 25 г + банан",
-   "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "йогурт 220 г + киви + семечки 25 г + тост",
-   "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "йогурт с манго (замороженным), мюсли и миндалем",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "yogurt_berries_granola",
-   "comment": "Точного рецепта нет; похожий — «Йогурт с ягодами и гранолой». Манго нет в списке закупок."
-  },
-  {
-   "match": "йогурт с овсяными хлопьями, яблоком и орехами",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "overnight_oats",
-   "comment": "Точного рецепта нет; похожий — «Ночная овсянка»."
-  },
-  {
-   "match": "йогурт с черникой, семенами и домашней гранолой",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "yogurt_berries_granola",
+   "kind": "exact",
+   "recipe_id": "B03",
    "comment": null
   },
   {
-   "match": "кефир 300 мл + банан + миндаль 25 г + тост",
+   "match": "сырники с клубникой и йогуртом",
    "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "кефир 300 мл + орехи 25 г + фрукт",
-   "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "кефирно-овсяный смузи с бананом, орехами и тостом",
-   "scope": "whole",
-   "kind": "unknown",
-   "recipe_id": null,
+   "kind": "exact",
+   "recipe_id": "B04",
    "comment": null
   },
   {
-   "match": "лаваш с индейкой, мягким сыром и томатом",
+   "match": "овсяный стакан с грушей и тыквенными семечками",
    "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "lavash_turkey",
+   "kind": "exact",
+   "recipe_id": "B05",
    "comment": null
   },
   {
-   "match": "лаваш с курицей, листьями салата и йогуртовым соусом",
+   "match": "тосты с авокадо, яйцами и томатами",
    "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "lavash_turkey",
-   "comment": "Точного рецепта нет; похожий — «Лаваш с индейкой»."
-  },
-  {
-   "match": "лаваш с нежирным сыром, огурцом и курицей",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "lavash_turkey",
-   "comment": "Точного рецепта нет; похожий — «Лаваш с индейкой»."
-  },
-  {
-   "match": "лаваш-ролл с сыром, зеленью и томатом",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "lavash_turkey",
-   "comment": "Точного рецепта нет; похожий — «Лаваш с индейкой»."
-  },
-  {
-   "match": "ночная овсянка с замороженной вишней и семенами",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "overnight_oats",
+   "kind": "exact",
+   "recipe_id": "B06",
    "comment": null
   },
   {
-   "match": "овсянка на ночь: йогурт, банан, лен, грецкий орех",
+   "match": "овсянка с яблоком, корицей и творогом",
    "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "overnight_oats",
+   "kind": "exact",
+   "recipe_id": "B07",
    "comment": null
   },
   {
-   "match": "овсяные панкейки с ягодами и творогом",
+   "match": "йогурт с вишней, бананом и хрустящей овсянкой",
    "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "oat_pancakes",
+   "kind": "exact",
+   "recipe_id": "B08",
    "comment": null
   },
   {
-   "match": "омлет в лаваше с сыром",
+   "match": "омлет с грибами, томатами и тостом",
    "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "omelet_lavash",
+   "kind": "exact",
+   "recipe_id": "B09",
    "comment": null
   },
   {
-   "match": "омлет со шпинатом, цельнозерновой тост",
+   "match": "творожный десерт с клубникой, овсянкой и киви",
    "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "omelet_lavash",
-   "comment": "Точного рецепта нет; похожий — «Омлет в лаваше»."
-  },
-  {
-   "match": "ржаные тосты с тунцом, огурцом и яйцом",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "egg_sandwich",
-   "comment": "Точного рецепта нет; похожий — «Яичные бутерброды»."
-  },
-  {
-   "match": "рулет из лаваша с яйцом, сыром и зеленью",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "omelet_lavash",
-   "comment": "Точного рецепта нет; похожий — «Омлет в лаваше»."
-  },
-  {
-   "match": "ряженка 300 мл + банан + семечки",
-   "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "салат из яиц, фасоли и томатов с хлебом",
-   "scope": "whole",
-   "kind": "unknown",
-   "recipe_id": null,
+   "kind": "exact",
+   "recipe_id": "B10",
    "comment": null
   },
   {
-   "match": "сырники из творога в аэрогриле с ягодами",
+   "match": "сэндвич с индейкой, овощами и йогуртовым соусом",
    "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "syrniki",
+   "kind": "exact",
+   "recipe_id": "B11",
    "comment": null
   },
   {
-   "match": "сэндвич с индейкой 90 г и огурцом",
+   "match": "каша из гречки с бананом и творогом",
    "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "lavash_turkey",
-   "comment": "Точного рецепта нет; похожий — «Лаваш с индейкой»."
-  },
-  {
-   "match": "сэндвич с куриными котлетами и томатами",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "chicken_cutlets",
-   "comment": "Сборка из готовых котлет; отдельного рецепта сэндвича нет."
-  },
-  {
-   "match": "творог 180 г + груша + грецкие орехи 25 г",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "cottage_fruit_nuts",
+   "kind": "exact",
+   "recipe_id": "B12",
    "comment": null
   },
   {
-   "match": "творог 200 г + яблоко + хлебцы",
+   "match": "овсяные оладьи с грушей и йогуртом",
    "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "cottage_fruit_nuts",
+   "kind": "exact",
+   "recipe_id": "B13",
    "comment": null
   },
   {
-   "match": "творог с апельсином, семенами тыквы и овсянкой",
+   "match": "творог с апельсином, тыквенными семечками и тостами",
    "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "cottage_plate",
-   "comment": "Фрукт — апельсин"
-  },
-  {
-   "match": "творог с грушей, какао и орехами",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "cottage_plate",
-   "comment": "Фрукт — груша"
-  },
-  {
-   "match": "творог с яблоком, корицей, орехами и хлебцами",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "cottage_plate",
-   "comment": "Фрукт — яблоко"
-  },
-  {
-   "match": "творог с ягодами, бананом и миндалем",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "cottage_plate",
-   "comment": "Фрукт — ягоды и банан"
-  },
-  {
-   "match": "творожные оладьи без сахара на гриле",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "syrniki",
-   "comment": "Точного рецепта нет; похожий — «Сырники в аэрогриле»."
-  },
-  {
-   "match": "творожный десерт с киви, бананом и семечками",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "cottage_plate",
-   "comment": "Фрукт — киви и банан"
-  },
-  {
-   "match": "творожный крем 200 г + ягоды + тост",
-   "scope": "whole",
-   "kind": "simple",
-   "recipe_id": null,
-   "comment": "Собрать в контейнер"
-  },
-  {
-   "match": "хлебцы + хумус + яйцо + помидор",
-   "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "hummus_crispbread",
-   "comment": "Точного рецепта нет; похожий — «Хумус с хлебцами»."
-  },
-  {
-   "match": "хумус 80 г + хлебцы + огурец + кефир",
-   "scope": "whole",
-   "kind": "alias",
-   "recipe_id": "hummus_crispbread",
+   "kind": "exact",
+   "recipe_id": "B14",
    "comment": null
   },
   {
-   "match": "цельнозерновой сэндвич с индейкой и шпинатом",
+   "match": "овсянка с вишней и миндалём плюс йогурт",
    "scope": "whole",
-   "kind": "similar",
-   "recipe_id": "lavash_turkey",
-   "comment": "Точного рецепта нет; похожий — «Лаваш с индейкой»."
+   "kind": "exact",
+   "recipe_id": "B15",
+   "comment": null
   },
   {
-   "match": "яичный скрэмбл с грибами и тостом",
+   "match": "яичные маффины с индейкой и перцем",
    "scope": "whole",
-   "kind": "unknown",
-   "recipe_id": null,
+   "kind": "exact",
+   "recipe_id": "B16",
+   "comment": null
+  },
+  {
+   "match": "греческий йогурт с яблоком, орехами и овсянкой",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B17",
+   "comment": null
+  },
+  {
+   "match": "сырники с бананом и вишнёвым соусом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B18",
+   "comment": null
+  },
+  {
+   "match": "сэндвич с тунцом, йогуртом и огурцом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B19",
+   "comment": null
+  },
+  {
+   "match": "гречневый завтрак с яйцами и томатами",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B20",
+   "comment": null
+  },
+  {
+   "match": "овсяноблин с яблоком и творожной начинкой",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B21",
+   "comment": null
+  },
+  {
+   "match": "йогуртовый стакан с грушей, клубникой и миндалём",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B22",
+   "comment": null
+  },
+  {
+   "match": "горячие тосты с яйцами, авокадо и огурцом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B23",
+   "comment": null
+  },
+  {
+   "match": "творожная миска с бананом, клубникой и семечками",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "B24",
+   "comment": null
+  },
+  {
+   "match": "курица лимон-паприка, рис, брокколи",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L01",
+   "comment": null
+  },
+  {
+   "match": "тефтели индейки, гречка, овощи",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L02",
+   "comment": null
+  },
+  {
+   "match": "курица в йогуртовом соусе, булгур, кабачки",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L03",
+   "comment": null
+  },
+  {
+   "match": "чили из говядины, фасоли и риса",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L04",
+   "comment": null
+  },
+  {
+   "match": "индейка карри, чечевица, рис",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L05",
+   "comment": null
+  },
+  {
+   "match": "курица с перцем и булгуром на электрогриле",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L06",
+   "comment": null
+  },
+  {
+   "match": "болоньезе из говядины с пастой",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L07",
+   "comment": null
+  },
+  {
+   "match": "куриное филе, гречка и морковь с брокколи",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L08",
+   "comment": null
+  },
+  {
+   "match": "котлеты из индейки, рис и стручковая фасоль",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "L09",
+   "comment": null
+  },
+  {
+   "match": "минтай с картофелем и огуречно-томатным салатом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D01",
+   "comment": null
+  },
+  {
+   "match": "индейка с фасолью и рисом по-мексикански",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D02",
+   "comment": null
+  },
+  {
+   "match": "форель с картофелем, брокколи и лимоном",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D03",
+   "comment": null
+  },
+  {
+   "match": "говядина с булгуром и шампиньонами",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D04",
+   "comment": null
+  },
+  {
+   "match": "курица с нутом, кабачком и рисом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D05",
+   "comment": null
+  },
+  {
+   "match": "минтай на электрогриле с гречкой и фасолью",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D06",
+   "comment": null
+  },
+  {
+   "match": "котлеты из индейки с картофелем и салатом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D07",
+   "comment": null
+  },
+  {
+   "match": "шакшука с индейкой, нутом и хлебом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D08",
+   "comment": null
+  },
+  {
+   "match": "тунец с цельнозерновой пастой и томатами",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D09",
+   "comment": null
+  },
+  {
+   "match": "курица карри с чечевицей и овощами",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D10",
+   "comment": null
+  },
+  {
+   "match": "форель с рисом и стручковой фасолью",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D11",
+   "comment": null
+  },
+  {
+   "match": "говяжьи тефтели в томатах с картофелем",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D12",
+   "comment": null
+  },
+  {
+   "match": "индейка с овощами и гречкой в йогуртовом соусе",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D13",
+   "comment": null
+  },
+  {
+   "match": "минтай с булгуром, брокколи и морковью",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D14",
+   "comment": null
+  },
+  {
+   "match": "курица с грибами, рисом и брокколи",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D15",
+   "comment": null
+  },
+  {
+   "match": "паста с индейкой, томатами и пармезаном",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "D16",
+   "comment": null
+  },
+  {
+   "match": "творог с яблоком и грецкими орехами",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S01",
+   "comment": null
+  },
+  {
+   "match": "йогурт с клубникой и миндалём",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S02",
+   "comment": null
+  },
+  {
+   "match": "творог с бананом и семечками",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S03",
+   "comment": null
+  },
+  {
+   "match": "йогурт с грушей и овсяными хлопьями",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S04",
+   "comment": null
+  },
+  {
+   "match": "творог с киви и хлебцами",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S05",
+   "comment": null
+  },
+  {
+   "match": "йогурт с вишней, бананом и грецким орехом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S06",
+   "comment": null
+  },
+  {
+   "match": "творог с апельсином и тыквенными семечками",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S07",
+   "comment": null
+  },
+  {
+   "match": "сэндвич с яйцом, овощами и йогуртом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S08",
+   "comment": null
+  },
+  {
+   "match": "йогурт с яблоком и миндалём",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S09",
+   "comment": null
+  },
+  {
+   "match": "творог с клубникой и грецким орехом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S10",
+   "comment": null
+  },
+  {
+   "match": "тунец на цельнозерновом хлебе с огурцом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S11",
+   "comment": null
+  },
+  {
+   "match": "йогурт с бананом и тыквенными семечками",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "S12",
    "comment": null
   }
  ]

@@ -7,13 +7,14 @@ import { addDays, fmtDayMonth, fmtLong, fmtShort, isISODate, isWeekend, type ISO
 import { PROFILE, STORAGE_GUIDE } from '../lib/seed';
 import { planDay, planRange, statusOf, tasksForDate } from '../domain/tasks';
 import { allRecipes, recipeById, resolveMeal, RECIPE_TYPE_LABELS } from '../domain/meals';
+import { AvLink } from '../ui/AvLink';
 import { parseIngredientLine, scaleRecipe, stepChips } from '../domain/scale';
 import { MEAL_LABELS, MEAL_SLOTS, type MealSlot, type Recipe, type RecipeType } from '../state/types';
 import { CheckButton, Disclosure, Empty, Note, PageHead, Seg, toast } from '../ui/kit';
 import { MealParts, NoPlanCard, RelaxCard } from './shared';
 import { MealCardView } from './planViews';
 import { dayNutrition, planPosition, PLAN_LENGTH } from '../domain/plan';
-import { DISHES, dishNutrition, ingredientLines, kcalText, TEMPLATE } from '../domain/catalog';
+import { DISHES, PRODUCTS, dishNutrition, ingredientLines, kcalText, TEMPLATE } from '../domain/catalog';
 import { PiBookOpen, PiCaretLeft, PiCaretRight, PiCheck, PiMagnifyingGlass, PiSnowflake, PiThermometer, PiClock, PiTrash, PiPackage } from '../ui/icons';
 
 const BOX_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'snack'];
@@ -125,7 +126,7 @@ export function RecipesScreen() {
   const [type, setType] = useState<RecipeType | 'all'>('all');
   const list = allRecipes(data);
   const filtered = list.filter((r) => (type === 'all' || r.type === type) && (!qText.trim() || r.title.toLowerCase().includes(qText.trim().toLowerCase()) || r.ingredients_text.toLowerCase().includes(qText.trim().toLowerCase())));
-  const types = (['main', 'side', 'breakfast', 'snack', 'other'] as RecipeType[]).filter((t) => list.some((r) => r.type === t));
+  const types = (['breakfast', 'lunch', 'snack', 'dinner', 'main', 'side', 'other'] as RecipeType[]).filter((t) => list.some((r) => r.type === t));
   return (
     <div className="page">
       <PageHead title="Рецепты" sub={`${list.length} рецептов: ${list.filter((r) => !r.user).length} из исходного набора${list.some((r) => r.user) ? `, ${list.filter((r) => r.user).length} добавлено вами` : ''}`} backTo="/nutrition" />
@@ -213,11 +214,11 @@ export function RecipePage({ id }: { id: string }) {
               <Seg value={servings} onChange={setServings} label="Порции" options={[1, 2, 3, 4].map((n) => ({ value: n, label: dish?.unit === 'g' ? `${n * 100} г` : `${n} порц.` }))} />
             </div>
             {kt && <p className="small mt0"><span className={`chip ${kt.verified ? 'accent' : 'warn'}`}>{kt.main}</span> {dish.unit === 'g' ? 'на 100 г' : `на ${servings} порц.`}{kt.detail ? ` · ${kt.detail}` : ''}</p>}
-            {dish && <p className="hint mt0">Способ: {dish.method}. {dish.unit === 'portion' && dish.serving_g ? `Готовая порция ≈${dish.serving_g} г. ` : ''}Мясо и рыба — масса до приготовления; крупы — сухой вес; фрукты — съедобная часть.</p>}
+            {dish && <p className="hint mt0">Способ: {dish.method}{dish.active_minutes ? `, ≈${dish.active_minutes} мин` : ''}. {dish.unit === 'portion' && dish.serving_g ? `Готовая порция ≈${dish.serving_g} г. ` : ''}Мясо, рыба и крупы — в сыром виде; овощи — до приготовления; ягоды — замороженные; орехи — очищенные; фрукты — съедобная часть.{dish.ingredients.some((i) => PRODUCTS[i.product]?.url) ? ' У каждого продукта — товар av.ru и доля упаковки; цены — ориентир, наличие не проверено.' : ''}</p>}
             {dish ? (
               <ul className="ing-list">
                 {ingredientLines(r.id, dish.unit === 'g' ? 100 * servings : servings, servings > 1).map((l, i) => (
-                  <li key={i}><span className={`ing-dot${l.dishId ? ' text' : ''}`} /><span className="grow">{l.name}{l.note ? <span className="orig"> — {l.note}</span> : null}</span><span className="num">{l.amount}</span></li>
+                  <li key={i}><span className={`ing-dot${l.dishId ? ' text' : ''}`} /><span className="grow ing-main"><span>{l.name}{l.note ? <span className="orig"> — {l.note}</span> : null}</span>{l.productId && <AvLink productId={l.productId} qty={l.qty} />}</span><span className="num">{l.amount}</span></li>
                 ))}
                 {dish.spices.map((t, i) => <li key={`s${i}`}><span className="ing-dot text" /><span className="grow muted">{t}</span></li>)}
               </ul>
@@ -272,9 +273,10 @@ export function RecipePage({ id }: { id: string }) {
             <h3>Хранение</h3>
             <ul className="tech-list small">
               {storage.map((s) => <li key={s.id}>{s.text}</li>)}
-              {(r.type === 'main' || r.type === 'side') && <li>Горячее и салат храните раздельно: салат не разогревают.</li>}
+              {dish?.storage_text && <li>{dish.storage_text}</li>}
+              {['main', 'side', 'lunch', 'dinner'].includes(r.type) && <li>Горячее и салат храните раздельно: салат не разогревают.</li>}
             </ul>
-            {(r.type === 'main' || r.type === 'side') && <p className="hint"><PiSnowflake style={{ display: 'inline', verticalAlign: '-3px' }} /> Что не съедите за 3–4 дня — заморозьте порциями; размораживайте в холодильнике.</p>}
+            {['main', 'side', 'lunch', 'dinner'].includes(r.type) && <p className="hint"><PiSnowflake style={{ display: 'inline', verticalAlign: '-3px' }} /> Что не съедите за 3–4 дня — заморозьте порциями; размораживайте в холодильнике.</p>}
           </div>
           <div className="card">
             <h3>Где в меню</h3>
