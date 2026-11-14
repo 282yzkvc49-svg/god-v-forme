@@ -1,7 +1,7 @@
 // Сопоставление «блюдо дня → рецепт» по проверяемой таблице соответствий (initial_seed.json.meal_recipe_map)
 // плюс связи, добавленные пользователем. Отсутствующий рецепт никогда не подставляется молча.
 import type { AppData, MealMapEntry, MealSlot, Recipe } from '../state/types';
-import { SEED_MEAL_MAP, SEED_RECIPES } from '../lib/seed';
+import { ARCHIVED_RECIPES, SEED_MEAL_MAP, SEED_RECIPES } from '../lib/seed';
 import { normText } from '../lib/util';
 
 export type PartStatus = 'recipe' | 'similar' | 'simple' | 'unknown';
@@ -15,7 +15,7 @@ export interface MealPart {
 }
 
 const seedIndex = new Map<string, MealMapEntry>(SEED_MEAL_MAP.map((e) => [`${e.scope}|${e.match}`, e]));
-const SEED_RECIPE_INDEX = new Map(SEED_RECIPES.map((r) => [r.id, r]));
+const SEED_RECIPE_INDEX = new Map([...SEED_RECIPES, ...ARCHIVED_RECIPES].map((r) => [r.id, r]));
 
 export function allRecipes(data: AppData): Recipe[] {
   return [...SEED_RECIPES, ...Object.values(data.userRecipes)];

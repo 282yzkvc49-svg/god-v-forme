@@ -11,7 +11,7 @@ import { scheduledTraining, tasksForDate, thawList } from '../src/domain/tasks';
 import { applyOps, dataMigrationOps, DATA_VERSION, emptyData, seedOps } from '../src/state/model';
 import { seedTemplateVersions } from '../src/lib/seed';
 import { addDays, diffDays, isoWeekday } from '../src/lib/dates';
-import { DISHES } from '../src/domain/catalog';
+import { DISHES, PRODUCTS, TEMPLATE, dishNutrition } from '../src/domain/catalog';
 import type { AppData } from '../src/state/types';
 
 const cfg = (start: string) => makePlanSettings(start, NOW);
@@ -352,4 +352,66 @@ test('свежая установка в ноябре 2026 (второе уст�
   // после командировок свежая установка их не добавляет
   const later = freshData('2026-12-20', '2026-12-21', true);
   assert.equal(Object.keys(later.trips).length, 0);
+});
+
+// ------------------------------------------------------------------ скумбрия → горбуша (14.11.2026)
+
+test('горбуша вместо скумбрии: рецепт с граммовками, нет скумбрии в меню, готовках, закупках и рецептах', () => {
+  const r = DISHES.pink_salmon_potato_salad;
+  assert.equal(r.title, 'Горбуша гриль с картофелем и овощным салатом');
+  assert.deepEqual(Object.fromEntries(r.ingredients.map((i) => [i.product, i.qty])),
+    { pink_salmon_fillet: 200, potato: 250, cucumber: 100, tomato: 100, olive_oil: 10, lemon: 10 });
+  assert.ok(r.spices.length > 0, 'специи');
+  assert.equal(PRODUCTS.pink_salmon_fillet.storage, 'freezer');
+  assert.match(PRODUCTS.pink_salmon_fillet.name, /горбуш.*заморож/i);
+  assert.equal(DISHES.pink_salmon.ingredients[0].product, 'pink_salmon_fillet');
+  // калорийность рецепта по справочным данным: ≈596 ккал
+  const n = dishNutrition('pink_salmon_potato_salad', 1);
+  assert.ok(Math.abs(n.kcal - 596) < 3, `${n.kcal}`);
+  // в шаблоне скумбрия осталась только как архив для истории
+  for (const d of TEMPLATE.days) for (const s of Object.values(d.meals ?? {})) for (const p of s.parts) assert.ok(!DISHES[p.dish].archived, `день ${d.day}: ${p.dish}`);
+  for (const b of TEMPLATE.blocks) for (const it of b.items) assert.ok(!DISHES[it.dish].archived, `${b.id}: ${it.dish}`);
+  // ноябрьский цикл: рецепт — на ужин 28.11, горбуша из той же готовки — на обед 30.11
+  const before = v4State();
+  const d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
+  const inst = buildInstance(d.settings.plan!, { trips: Object.values(d.trips), relaxOverrides: d.settings.relaxOverrides, today: '2026-11-14' });
+  for (const c of checkInstance(inst)) assert.ok(c.ok, `${c.title}: ${c.details.join('; ')}`);
+  const day28 = inst.planDays.find((x) => x.date === '2026-11-28')!;
+  assert.equal(day28.mealCards!.dinner.title, 'Горбуша гриль с картофелем и овощным салатом');
+  const q8 = inst.cookingEvents.find((e) => e.items!.some((i) => i.dishId === 'pink_salmon_potato_salad'))!;
+  assert.equal(q8.date, '2026-11-28');
+  assert.deepEqual(q8.items!.map((i) => [i.dishId, i.qty, i.uses.map((u) => `${u.date}:${u.slot}`)]),
+    [['pink_salmon_potato_salad', 1, ['2026-11-28:dinner']], ['pink_salmon', 1, ['2026-11-30:lunch']]]);
+  const all = JSON.stringify([inst.planDays, inst.cookingEvents, inst.shoppingEvents]);
+  assert.ok(!/mackerel/.test(all), 'скумбрии нет в плане');
+  // закупка горбуши: 200 г на каждую порцию цикла (рецепт + 4 приёма с горбушей)
+  const salmonPortions = inst.planDays.reduce((k, x) => k + Object.values(x.mealCards ?? {}).reduce((m, c) => m + c.parts.filter((p) => p.dishId === 'pink_salmon' || p.dishId === 'pink_salmon_potato_salad').length, 0), 0);
+  assert.equal(salmonPortions, 5);
+  const bought = inst.shoppingEvents.flatMap((e) => e.lines ?? []).filter((l) => l.productId === 'pink_salmon_fillet').reduce((k, l) => k + l.buy + l.fromStock, 0);
+  assert.equal(Math.round(bought), 1000);
+});
+
+test('миграция v6: план пересобирается с горбушей, прошедшие дни со скумбрией — история', () => {
+  const before = v4State();
+  let d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
+  // как у пользователя после версии 1.2.0: будущий день ещё со скумбрией, прошлый день со скумбрией и отметкой
+  const fut = d.planDays['2026-11-28'];
+  const old = d.planDays['2026-11-09'];
+  const mackerelDinner = { title: 'Скумбрия + салат томаты-огурцы + картофель', parts: [{ dishId: 'mackerel', qty: 1, fresh: false }] };
+  d = applyOps(d, [
+    { store: 'meta', put: { ...d.meta!, dataVersion: 5 } },
+    { store: 'planDays', put: { ...fut, mealCards: { ...fut.mealCards!, dinner: mackerelDinner } } },
+    { store: 'planDays', put: { ...old, mealCards: { ...old.mealCards!, dinner: mackerelDinner } } },
+    { store: 'taskStatus', put: { taskId: 'meal:2026-11-09:dinner', date: '2026-11-09', kind: 'meal', status: 'done', updatedAt: NOW } },
+  ]);
+  const d2 = applyOps(d, dataMigrationOps(d, '2026-11-15', NOW));
+  assert.equal(d2.meta!.dataVersion, DATA_VERSION);
+  assert.equal(d2.planDays['2026-11-28'].mealCards!.dinner.title, 'Горбуша гриль с картофелем и овощным салатом');
+  assert.equal(d2.planDays['2026-11-09'].mealCards!.dinner.parts[0].dishId, 'mackerel', 'история не переписана');
+  assert.ok(DISHES.mackerel, 'архивное блюдо доступно для истории');
+  for (const x of Object.values(d2.planDays)) if (x.date >= '2026-11-15') assert.ok(!JSON.stringify(x).includes('mackerel'), x.date);
+  assert.equal(d2.settings.plan!.startDate, '2026-11-16');
+  assert.equal(Object.keys(d2.trips).length, 2);
+  assert.equal(d2.taskStatus['meal:2026-11-03:breakfast'].status, 'done');
+  assert.equal(dataMigrationOps(d2, '2026-11-15', NOW).length, 0);
 });

@@ -22,13 +22,16 @@ CATEGORIES = [
 
 
 def P(id, name, cat, unit, kcal, p, f, c, price, pack, pack_label, shelf, storage="fridge", freezable=False,
-      src=REF, edible=1.0, piece=None, piece_label=None, note=None, pantry=False):
-    return dict(
+      src=REF, edible=1.0, piece=None, piece_label=None, note=None, pantry=False, archived=False):
+    out = dict(
         id=id, name=name, category=cat, unit=unit,
         nutr=dict(kcal=kcal, p=p, f=f, c=c), nutr_src="label" if src == LABEL else "ref",
         price=price, pack=dict(size=pack, label=pack_label), shelf_days=shelf, storage=storage,
         freezable=freezable, edible_ratio=edible, piece_g=piece, piece_label=piece_label, note=note, pantry=pantry,
     )
+    if archived:  # больше не используется в меню; остаётся только для истории прошедших дней
+        out["archived"] = True
+    return out
 
 
 PRODUCTS = [
@@ -50,8 +53,11 @@ PRODUCTS = [
       1150, 1000, "по весу (порционные куски)", 180, storage="freezer", note="масса до приготовления"),
     P("salmon_fillet", "Филе сёмги (атлантический лосось) с кожей, замороженное", "Рыба и морепродукты", "g",
       208, 20.4, 13.4, 0, 1450, 1000, "по весу (порционные куски)", 180, storage="freezer", note="масса до приготовления"),
+    P("pink_salmon_fillet", "Филе горбуши с кожей, замороженное", "Рыба и морепродукты", "g", 140, 20.5, 6.5, 0,
+      900, 1000, "по весу (порционные куски)", 180, storage="freezer", note="масса до приготовления"),
+    # скумбрия заменена горбушей (14.11.2026); запись нужна только для истории прошедших дней
     P("mackerel_fillet", "Филе скумбрии атлантической, замороженное", "Рыба и морепродукты", "g", 205, 18.6, 13.9, 0,
-      650, 500, "упаковка ≈500 г", 180, storage="freezer", note="масса до приготовления"),
+      650, 500, "упаковка ≈500 г", 180, storage="freezer", note="масса до приготовления", archived=True),
     P("hake_fillet", "Филе хека без кожи, замороженное", "Рыба и морепродукты", "g", 86, 16.6, 2.2, 0,
       480, 800, "упаковка ≈800 г", 180, storage="freezer", note="масса до приготовления"),
     P("shrimp_raw", "Креветки очищенные сырые замороженные, без глазури", "Рыба и морепродукты", "g", 85, 20.1, 0.5, 0,

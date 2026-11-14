@@ -22,6 +22,8 @@ export interface Product {
   piece_label: string | null;
   note: string | null;
   pantry: boolean;
+  /** Убран из меню; остаётся только для истории прошедших дней (например, скумбрия → горбуша). */
+  archived?: boolean;
 }
 
 export interface DishIngr { product: string; qty: number; note: string | null }
@@ -44,6 +46,8 @@ export interface Dish {
   storage: { place: 'fridge' | 'pantry'; days: number; freezable: boolean };
   note: string | null;
   legacy: string | null;
+  /** Убрано из меню и списка рецептов; остаётся только для истории прошедших дней. */
+  archived?: boolean;
 }
 
 export interface TplPart { dish: string; qty: number; fresh: boolean }
@@ -74,7 +78,7 @@ export const PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.pro
 export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.map((d) => [d.id, d]));
 
 export function isDish(id: string): boolean {
-  return !!DISHES[id];
+  return !!DISHES[id] && !DISHES[id].archived;
 }
 
 /** Масса в граммах для расчёта пищевой ценности (штуки → граммы). */

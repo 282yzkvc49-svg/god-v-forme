@@ -9,7 +9,7 @@ import type { ISODate } from '../lib/dates';
 import { BASE_START, buildInstance, makePlanSettings, replanOps } from '../domain/plan';
 import type { Trip } from './types';
 
-export const DATA_VERSION = 5;
+export const DATA_VERSION = 6;
 
 export function emptyData(): AppData {
   const d: any = { ready: false, settings: defaultSettings(), meta: null };
@@ -93,6 +93,7 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   const step = (more: Op[]) => { ops.push(...more); data = applyOps(data, more); };
   if (v < 4) step(planV4Ops(data, today, now));
   if (v < 5) step(planV5Ops(data, today, now));
+  if (v < 6) step(planV6Ops(data, today, now));
   if (v < 2) {
     // v2: у позиции «Апельсины» из стартовых закупок убрано примечание (по решению пользователя)
     for (const e of Object.values(data.shoppingEvents)) {
@@ -215,6 +216,18 @@ export function planV5Ops(data: AppData, today: ISODate, now: string): Op[] {
   const d2 = applyOps(data, ops);
   if (!data.settings.onboarded && !Object.values(data.planDays).length) return ops;
   return [...ops, ...replanOps(d2, cfg, today, { now }).ops];
+}
+
+/**
+ * v6: скумбрия заменена горбушей (обед и ужины с рыбой, рецепт «Горбуша гриль с картофелем и овощным салатом»).
+ * План пересобирается по новому шаблону с той же датой старта: меню, готовки и закупки с сегодняшнего дня —
+ * по новым граммовкам; прошедшие дни остаются историей, отметки и все записи пользователя не трогаются.
+ */
+export function planV6Ops(data: AppData, today: ISODate, now: string): Op[] {
+  const cfg = data.settings.plan;
+  if (!cfg) return [];
+  if (!data.settings.onboarded && !Object.values(data.planDays).length) return [];
+  return replanOps(data, cfg, today, { now }).ops;
 }
 
 export { buildInstance };

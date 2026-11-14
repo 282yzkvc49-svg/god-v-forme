@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from plan_products import PRODUCTS, CATEGORIES  # noqa: E402
 from plan_dishes import DISHES  # noqa: E402
-from plan_menu import MENU, BLOCKS, TOPUP_CANDIDATES  # noqa: E402
+from plan_menu import MENU, BLOCKS, TOPUP_CANDIDATES, NO_TUNE  # noqa: E402
 
 ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, "src", "data", "plan_template.json")
@@ -53,6 +53,22 @@ for d in DISHES:
 for p in PRODUCTS:
     if p["category"] not in CATEGORIES:
         err(f"{p['id']}: неизвестная категория {p['category']}")
+# архивные продукты и блюда (только для истории) не должны встречаться в действующем меню
+for d in DISHES:
+    if d.get("archived"):
+        continue
+    for i in d["ingredients"]:
+        if P.get(i["product"], {}).get("archived") or Dm.get(i["product"], {}).get("archived"):
+            err(f"{d['id']}: архивный продукт {i['product']}")
+for day, m in MENU.items():
+    for k, parts in (m or {}).items():
+        for t in parts:
+            if Dm.get(t[0], {}).get("archived"):
+                err(f"день {day}: архивное блюдо {t[0]}")
+for b in BLOCKS:
+    for d in b["dishes"]:
+        if Dm.get(d, {}).get("archived"):
+            err(f"готовка {b['id']}: архивное блюдо {d}")
 
 # ---------------------------------------------------------------- пищевая ценность
 def dish_nutr(dish_id, qty):
@@ -107,7 +123,7 @@ def tune_day(m):
 
 # ---------------------------------------------------------------- приёмы пищи → части
 for day, m in list(MENU.items()):
-    if m:
+    if m and day not in NO_TUNE:
         MENU[day] = tune_day(m)
 days = []
 batch_uses = []  # (day, slot, dish, qty, via)
@@ -239,7 +255,8 @@ out = dict(
 )
 with open(OUT, "w", encoding="utf-8") as f:
     json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
-print(f"OK: {OUT} — {len(PRODUCTS)} продуктов, {len(DISHES)} блюд, {len(blocks)} готовок, "
+print(f"OK: {OUT} — {sum(1 for p in PRODUCTS if not p.get('archived'))} продуктов, "
+      f"{sum(1 for d in DISHES if not d.get('archived'))} блюд (+ архивные для истории), {len(blocks)} готовок, "
       f"{sum(1 for d in days if not d['relax']) * 4} приёмов пищи")
 
 
@@ -338,6 +355,13 @@ def update_seed(kcal_avg, p_avg, f_avg, c_avg):
              description="Прогулка или лёгкая активность по самочувствию — без силовой нагрузки.",
              items=[dict(exercise_id="walk", sets=1, note="По самочувствию")]),
     ]
+    # блюдо дня → рецепт для импортированных планов: скумбрия заменена горбушей
+    mm = [e for e in seed["meal_recipe_map"] if e["match"] not in ("скумбрия", "горбуша",
+                                                                   "горбуша гриль с картофелем и овощным салатом")]
+    mm.append(dict(match="горбуша", scope="component", kind="exact", recipe_id="pink_salmon", comment=None))
+    mm.append(dict(match="горбуша гриль с картофелем и овощным салатом", scope="whole", kind="exact",
+                   recipe_id="pink_salmon_potato_salad", comment=None))
+    seed["meal_recipe_map"] = sorted(mm, key=lambda e: (e["scope"], e["match"]))
     seed["sources"] = ["Меню на 30 дней с граммовками: tools/plan_*.py → src/data/plan_template.json",
                        "Исходные блюда: План_питания_2ноя_1дек_2026.xlsx и Рецепты_к_меню_ноябрь_2026.docx",
                        "ТЗ «Мой год в форме», корректировки: меню, оборудование, порции, закупки, дата старта"]

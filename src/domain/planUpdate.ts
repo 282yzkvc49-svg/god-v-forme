@@ -9,12 +9,15 @@ import type {
 import { MEAL_LABELS, MEAL_SLOTS, TEMPLATE_IDS } from '../state/types';
 import type { Op } from '../state/idb';
 import { fmtShort, isISODate, isTime, type ISODate } from '../lib/dates';
-import { AVAILABLE_KETTLEBELLS, EXERCISES } from '../lib/seed';
+import { ARCHIVED_RECIPES, AVAILABLE_KETTLEBELLS, EXERCISES } from '../lib/seed';
 import { fmtNum, normText } from '../lib/util';
 import { exerciseName, prescription, templateFor, templateVersionFor, TEMPLATE_NAMES, weightText } from './templates';
 import { recipeById } from './meals';
 import { statusOf, baseTasksForDate } from './tasks';
 import { SEED_MEAL_MAP } from '../lib/seed';
+
+/** Блюда, убранные из меню (скумбрия → горбуша): в обновлениях плана не принимаются. */
+const ARCHIVED_RECIPE_IDS = new Set(ARCHIVED_RECIPES.map((r) => r.id));
 
 export const PLAN_UPDATE_SCHEMA_VERSION = '1.0.0';
 export const CHANGE_TYPES = ['workout_template', 'calendar_training', 'meal_plan', 'meal_prep_event', 'shopping_event', 'goal'] as const;
@@ -390,7 +393,7 @@ function parseMealPrep(c: any, path: string, v: V, data: AppData, today: ISODate
         const ids: string[] = [];
         if (d.recipe_ids != null && v.arr(d.recipe_ids, `${p}.dishes[${j}].recipe_ids`, 0, 5)) {
           d.recipe_ids.forEach((rid: any, k: number) => {
-            if (typeof rid !== 'string' || !recipeById(data, rid)) v.err(`${p}.dishes[${j}].recipe_ids[${k}]`, `рецепт «${String(rid)}» не найден в приложении`);
+            if (typeof rid !== 'string' || !recipeById(data, rid) || ARCHIVED_RECIPE_IDS.has(rid)) v.err(`${p}.dishes[${j}].recipe_ids[${k}]`, `рецепт «${String(rid)}» не найден в приложении`);
             else ids.push(rid);
           });
         }

@@ -19,12 +19,15 @@ PEPPER = "перец чёрный молотый — по вкусу (щепот
 
 
 def D(id, title, cat, kind, ingr, steps, method, storage, unit="portion", short=None, serving_g=None,
-      cooked_factor=None, unit_label=None, spices=(SALT, PEPPER), note=None, legacy=None):
-    return dict(id=id, title=title, short=short or title, category=cat, kind=kind, unit=unit,
-                unit_label=unit_label, cooked_factor=cooked_factor, serving_g=serving_g,
-                ingredients=[dict(product=i[0], qty=i[1], note=(i[2] if len(i) > 2 else None)) for i in ingr],
-                spices=list(spices), steps=[dict(text=s[0], temperature_c=s[1], minutes=s[2]) for s in steps],
-                method=method, storage=storage, note=note, legacy=legacy)
+      cooked_factor=None, unit_label=None, spices=(SALT, PEPPER), note=None, legacy=None, archived=False):
+    out = dict(id=id, title=title, short=short or title, category=cat, kind=kind, unit=unit,
+               unit_label=unit_label, cooked_factor=cooked_factor, serving_g=serving_g,
+               ingredients=[dict(product=i[0], qty=i[1], note=(i[2] if len(i) > 2 else None)) for i in ingr],
+               spices=list(spices), steps=[dict(text=s[0], temperature_c=s[1], minutes=s[2]) for s in steps],
+               method=method, storage=storage, note=note, legacy=legacy)
+    if archived:  # больше нет в меню и в списке рецептов; нужно только для истории прошедших дней
+        out["archived"] = True
+    return out
 
 
 A = "аэрогриль"
@@ -104,13 +107,36 @@ DISHES = [
        ("Готовить в аэрогриле в один слой, перевернув в середине, до полной готовности.", "185", "13–15"),
        ("Остудить; порцию, которую не съедите за 3 дня, сразу заморозить.", None, None)],
       A, FRIDGE3, short="Курица чеснок-йогурт", serving_g=165, legacy="chicken_garlic_yogurt"),
+    D("pink_salmon_potato_salad", "Горбуша гриль с картофелем и овощным салатом", "main", "batch",
+      [("pink_salmon_fillet", 200), ("potato", 250), ("cucumber", 100), ("tomato", 100), ("olive_oil", 10),
+       ("lemon", 10)],
+      [("Горбушу разморозить в холодильнике накануне, обсушить бумажным полотенцем.", None, None),
+       ("Картофель вымыть щёткой, нарезать дольками, смешать с половиной масла и солью.", None, None),
+       ("Готовить картофель в аэрогриле, встряхнув корзину 2 раза, до мягкости внутри.", "190", "18–22"),
+       ("Горбушу посолить, поперчить, сбрызнуть половиной лимонного сока и готовить на электрогриле кожей вниз "
+        "(или в аэрогриле) до готовности: мякоть непрозрачная, легко расслаивается. Горбуша нежирная — не пересушивайте.",
+        "190", "8–10"),
+       ("Огурец и помидор нарезать, заправить оставшимся маслом и лимонным соком, посолить перед едой.", None, None),
+       ("Подать сразу: горбуша, картофель и салат.", None, None)],
+      "электрогриль и аэрогриль", dict(place="fridge", days=1, freezable=False),
+      short="Горбуша гриль с картофелем и овощным салатом", serving_g=555,
+      note="Готовится к ужину и съедается сразу; рыбу на завтра — в этой же готовке."),
+    D("pink_salmon", "Горбуша на гриле с лимоном", "main", "batch",
+      [("pink_salmon_fillet", 200), ("lemon", 5)],
+      [("Филе разморозить в холодильнике накануне, обсушить.", None, None),
+       ("Посолить, поперчить, сбрызнуть лимоном.", None, None),
+       ("Готовить на электрогриле кожей вниз или в аэрогриле до готовности: мякоть непрозрачная, легко расслаивается. "
+        "Горбуша нежирная — не пересушивайте.", "190", "8–10"),
+       ("Порции на следующие дни остудить и убрать в холодильник (не больше 2 дней).", None, None)],
+      G, FISH2, short="Горбуша", serving_g=160, legacy="mackerel"),
+    # скумбрия заменена горбушей (14.11.2026); блюдо осталось только для истории прошедших дней
     D("mackerel", "Скумбрия на гриле с лимоном", "main", "batch",
       [("mackerel_fillet", 170), ("lemon", 5)],
       [("Филе разморозить в холодильнике накануне, обсушить.", None, None),
        ("Посолить, поперчить, сбрызнуть лимоном.", None, None),
        ("Готовить на электрогриле кожей вниз или в аэрогриле до готовности: мякоть легко расслаивается.", "190", "10–12"),
        ("Порции на следующие дни остудить и убрать в холодильник (не больше 2 дней).", None, None)],
-      G, FISH2, short="Скумбрия", serving_g=135, legacy="mackerel"),
+      G, FISH2, short="Скумбрия", serving_g=135, archived=True),
     D("hake", "Хек в аэрогриле с паприкой", "main", "batch",
       [("hake_fillet", 230), ("lemon", 5), ("olive_oil", 5), ("paprika", 1)],
       [("Филе разморозить в холодильнике накануне, обсушить.", None, None),

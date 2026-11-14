@@ -295,7 +295,7 @@ export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODa
   const sum = (kinds: string[]) => shopping.events.filter((e) => kinds.includes(e.kind ?? 'main')).reduce((s, e) => s + (e.lines ?? []).reduce((x, l) => x + l.cost, 0), 0);
   const totalCost = sum(['main', 'topup']);
   const tripCost = sum(['trip']);
-  if (totalCost > BUDGET_RUB) issues.push({ level: 'warn', text: `Ориентировочная сумма домашних закупок ${Math.round(totalCost)} ₽ больше бюджета ${BUDGET_RUB} ₽. Можно заменить сёмгу на хек или скумбрию и часть греческого йогурта — на кефир.` });
+  if (totalCost > BUDGET_RUB) issues.push({ level: 'warn', text: `Ориентировочная сумма домашних закупок ${Math.round(totalCost)} ₽ больше бюджета ${BUDGET_RUB} ₽. Можно заменить сёмгу на хек или горбушу и часть греческого йогурта — на кефир.` });
   return { cfg, ctx, layout, planDays, cookingEvents, shoppingEvents: shopping.events, issues, totalCost, tripCost };
 }
 

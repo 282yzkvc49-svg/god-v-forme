@@ -26,7 +26,8 @@ test('блюда: у каждого ингредиенты с количеств
     }
   }
   assert.equal(new Set(TEMPLATE.dishes.map((d) => d.id)).size, TEMPLATE.dishes.length);
-  assert.equal(SEED_RECIPES.length, TEMPLATE.dishes.length, 'каждое блюдо — карточка рецепта');
+  assert.equal(SEED_RECIPES.length, TEMPLATE.dishes.filter((d) => !d.archived).length, 'каждое блюдо меню — карточка рецепта');
+  assert.ok(!SEED_RECIPES.some((r) => DISHES[r.id]?.archived), 'архивных блюд нет в списке рецептов');
 });
 
 test('меню: нет общих слов «гарнир», «салат», «фрукты» без состава', () => {

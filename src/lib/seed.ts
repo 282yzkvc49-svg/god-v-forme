@@ -32,7 +32,7 @@ export const STORAGE_GUIDE: { id: string; text: string; source: string }[] = SEE
 export const EXERCISES: Record<string, Exercise> = Object.fromEntries((SEED.exercise_library as Exercise[]).map((e) => [e.id, e]));
 /** Старые id рецептов (первая версия плана) → блюда нового меню: для своих связей и импорта. */
 export const LEGACY_RECIPE_IDS: Record<string, string> = Object.fromEntries(
-  [...TEMPLATE.dishes.filter((d) => d.legacy && !DISHES[d.legacy]).map((d) => [d.legacy as string, d.id]),
+  [...TEMPLATE.dishes.filter((d) => d.legacy && !d.archived && (!DISHES[d.legacy] || DISHES[d.legacy].archived)).map((d) => [d.legacy as string, d.id]),
     ['grains', 'grain_rice']] as [string, string][],
 );
 
@@ -61,12 +61,16 @@ export function dishToRecipe(d: Dish): Recipe {
     ingredients: [...ingredients, ...spices],
     method_text: d.steps.map((x) => x.text).join(' '),
     steps: d.steps,
-    storage_ids: d.kind === 'batch' ? ['portion', 'cool_fast', 'freeze', 'veg_separate', 'reheat'] : ['work_fridge'],
+    storage_ids: d.kind !== 'batch' ? ['work_fridge']
+      : d.storage.freezable ? ['portion', 'cool_fast', 'freeze', 'veg_separate', 'reheat']
+        : [...(d.ingredients.some((i) => PRODUCTS[i.product]?.storage === 'freezer') ? ['fish_thaw'] : []), 'veg_separate'],
     source: 'Меню на 30 дней',
   };
 }
 
-export const SEED_RECIPES: Recipe[] = TEMPLATE.dishes.map(dishToRecipe);
+export const SEED_RECIPES: Recipe[] = TEMPLATE.dishes.filter((d) => !d.archived).map(dishToRecipe);
+/** Рецепты блюд, убранных из меню: только для ссылок из истории прошедших дней, в списке рецептов их нет. */
+export const ARCHIVED_RECIPES: Recipe[] = TEMPLATE.dishes.filter((d) => d.archived).map(dishToRecipe);
 export const SEED_MEAL_MAP: MealMapEntry[] = (SEED.meal_recipe_map ?? []).map((e: MealMapEntry) => ({
   ...e, recipe_id: e.recipe_id ? (LEGACY_RECIPE_IDS[e.recipe_id] ?? (DISHES[e.recipe_id] ? e.recipe_id : null)) : null,
   kind: e.recipe_id && !DISHES[LEGACY_RECIPE_IDS[e.recipe_id] ?? e.recipe_id] ? 'unknown' : e.kind,

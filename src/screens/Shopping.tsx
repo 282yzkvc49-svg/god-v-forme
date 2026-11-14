@@ -74,7 +74,7 @@ export function ShoppingHub() {
             <div className="row between"><span>Ориентир по домашним закупкам цикла</span><b className="num">{fmtRub(modelTotal)}</b></div>
             {tripShops.length > 0 && <div className="row between small"><span>Перекусы в командировки (отдельно, не входят в бюджет)</span><span className="num">{fmtRub(tripTotal)}</span></div>}
             <div className="row between"><span>Бюджет</span><b className="num">{fmtRub(BUDGET_RUB)}</b></div>
-            {modelTotal > BUDGET_RUB && <Note kind="warn">Ориентир больше бюджета на {fmtRub(modelTotal - BUDGET_RUB)}. Можно заменить сёмгу на хек или скумбрию и часть греческого йогурта — на кефир.</Note>}
+            {modelTotal > BUDGET_RUB && <Note kind="warn">Ориентир больше бюджета на {fmtRub(modelTotal - BUDGET_RUB)}. Можно заменить сёмгу на хек или горбушу и часть греческого йогурта — на кефир.</Note>}
             {actualTotal > 0 && <div className="row between"><span>Введено фактических цен</span><b className="num">{fmtRub(actualTotal)}</b></div>}
             <p className="hint" style={{ marginBottom: 0 }}>{SHOPPING_META.price_warning} Позиции «есть дома» в сумму не входят. Остатки круп, масла, орехов и специй перейдут на следующий месяц.</p>
           </div>

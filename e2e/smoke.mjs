@@ -298,6 +298,15 @@ await step('12. Ноябрь 2026: старт 16.11, Екатеринбург 18
     assert(await p3.getByRole('heading', { name: /Командировка:/ }).count() === 0, `${d} — не командировка`);
   }
   assert(await p3.getByText('Восстановление после командировки').count() > 0, '26.11 — восстановление после командировки');
+  await go(p3, '/day/2026-11-28');
+  await p3.getByText('Горбуша гриль с картофелем и овощным салатом').first().waitFor();
+  await go(p3, '/recipe/pink_salmon_potato_salad');
+  await p3.getByText('Филе горбуши с кожей, замороженное').first().waitFor();
+  assert(await p3.getByText(/скумбри/i).count() === 0, 'скумбрии нет в рецепте');
+  await p3.screenshot({ path: path.join(shots, '12-pink-salmon-recipe-iphone.png'), fullPage: true });
+  await go(p3, '/recipes');
+  await p3.waitForTimeout(200);
+  assert(await p3.getByText(/Скумбрия/).count() === 0, 'скумбрии нет в списке рецептов');
   await go(p3, '/day/2026-11-29');
   await p3.getByText(/Релакс/).first().waitFor();
   await go(p3, '/shopping');

@@ -47,11 +47,11 @@
   },
   {
    "label": "Энергия, старт",
-   "text": "≈2450 ккал/сутки; по дням меню 2387–2462 ккал (справочные данные)"
+   "text": "≈2450 ккал/сутки; по дням меню 2327–2462 ккал (справочные данные)"
   },
   {
    "label": "Белок / жиры / углеводы",
-   "text": "в среднем ≈184 г / 77 г / 264 г в день (≈2434 ккал)"
+   "text": "в среднем ≈185 г / 75 г / 264 г в день (≈2420 ккал)"
   },
   {
    "label": "Режим в будни",
@@ -747,6 +747,13 @@
    "comment": null
   },
   {
+   "match": "горбуша",
+   "scope": "component",
+   "kind": "exact",
+   "recipe_id": "pink_salmon",
+   "comment": null
+  },
+  {
    "match": "гречка",
    "scope": "component",
    "kind": "alias",
@@ -929,13 +936,6 @@
    "comment": "Свёклы нет ни в рецептах, ни в списке закупок — уточнить."
   },
   {
-   "match": "скумбрия",
-   "scope": "component",
-   "kind": "exact",
-   "recipe_id": "mackerel",
-   "comment": null
-  },
-  {
    "match": "стручковая фасоль",
    "scope": "component",
    "kind": "simple",
@@ -989,6 +989,13 @@
    "scope": "whole",
    "kind": "alias",
    "recipe_id": "egg_sandwich",
+   "comment": null
+  },
+  {
+   "match": "горбуша гриль с картофелем и овощным салатом",
+   "scope": "whole",
+   "kind": "exact",
+   "recipe_id": "pink_salmon_potato_salad",
    "comment": null
   },
   {
