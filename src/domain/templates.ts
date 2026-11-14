@@ -8,6 +8,7 @@ export const TEMPLATE_NAMES: Record<string, string> = {
   strength_b: 'Силовая Б',
   stepper: 'Степпер',
   recovery: 'Восстановление / прогулка',
+  trip: 'Командировка: плановый отдых',
   rest: 'Отдых',
 };
 
@@ -70,4 +71,26 @@ export function plannedSets(t: WorkoutTemplate): number {
 
 export function itemSummary(it: TemplateItem): string {
   return [prescription(it), weightText(it)].filter(Boolean).join(', ');
+}
+
+/**
+ * Постепенное увеличение нагрузки: подсказка по прошлой тренировке того же упражнения.
+ * Ничего не меняется автоматически — решает пользователь.
+ */
+export function progressionHint(data: AppData, exerciseId: string, beforeDate: ISODate): string | null {
+  const logs = Object.values(data.trainingLogs)
+    .filter((l) => l.status === 'done' && l.date < beforeDate)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  for (const l of logs) {
+    const idx = l.templateSnapshot?.items.findIndex((x) => x.exerciseId === exerciseId) ?? -1;
+    if (idx < 0) continue;
+    const el = l.exercises.find((e) => e.index === idx);
+    if (!el) continue;
+    const allDone = el.sets.length > 0 && el.sets.every(Boolean);
+    if (exerciseId === 'stepper_cardio') return allDone ? 'В прошлый раз степпер дался — можно добавить 1–2 минуты, если самочувствие хорошее.' : null;
+    if (el.difficulty === 'easy' && allDone) return 'В прошлый раз было легко: можно добавить 1–2 повтора в подходе. Вес гири меняйте только осознанно, при чистой технике.';
+    if (el.difficulty === 'hard') return 'В прошлый раз было тяжело: оставьте те же повторы и вес, без форсирования.';
+    return null;
+  }
+  return null;
 }

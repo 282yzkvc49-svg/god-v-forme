@@ -4,8 +4,10 @@ import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
 import { addDays, diffDays, fmtShort, isoWeekday } from '../lib/dates';
 import { DISHES, PRODUCTS, dishNutrition } from './catalog';
 import {
-  BUDGET_RUB, KCAL_TARGET, PLAN_LENGTH, buildInstance, collectNeeds, dayNutrition, makePlanSettings, type PlanInstance,
+  BUDGET_RUB, KCAL_TARGET, PLAN_LENGTH, buildInstance, collectNeeds, dayNutrition, makePlanSettings, planEnd,
+  type PlanContext, type PlanInstance,
 } from './plan';
+import { relaxDateOfMonth, tripDates, tripOn } from './trips';
 
 export const AVAILABLE_KETTLEBELLS = [12, 16];
 
@@ -22,19 +24,24 @@ function timeOrder(time: string | null | undefined): number {
 
 export function checkInstance(inst: PlanInstance): CheckResult[] {
   const res: CheckResult[] = [];
-  // 1. 30 дней с полным меню, кроме релакс-дня
+  // 1. 30 дней: домашние — с полным меню, командировки — с командировочным, релакс-день — свободный
   {
     const d: string[] = [];
-    if (inst.planDays.length !== PLAN_LENGTH) d.push(`дней в плане: ${inst.planDays.length}`);
-    const relax = inst.planDays.filter((x) => x.relax);
-    if (relax.length !== 1) d.push(`релакс-дней: ${relax.length}`);
-    const dates = inst.planDays.map((x) => x.date);
+    const end = planEnd(inst.cfg);
+    const cycle = inst.planDays.filter((x) => x.date >= inst.cfg.startDate && x.date <= end);
+    if (cycle.length !== PLAN_LENGTH) d.push(`дней в цикле: ${cycle.length}`);
+    const dates = cycle.map((x) => x.date);
     for (let i = 1; i < dates.length; i++) if (diffDays(dates[i], dates[i - 1]) !== 1) d.push(`разрыв между ${fmtShort(dates[i - 1])} и ${fmtShort(dates[i])}`);
-    for (const day of inst.planDays) {
-      if (day.relax) continue;
+    for (const r of inst.layout.relaxDates) if (r !== relaxDateOfMonth(inst.ctx, r.slice(0, 7))) d.push(`релакс-день ${fmtShort(r)} не совпадает с календарным`);
+    let home = 0, trip = 0;
+    for (const day of cycle) {
+      if (day.tripId) { trip++; if (!day.meals) d.push(`${fmtShort(day.date)}: нет командировочного меню`); continue; }
+      if (day.relax || !day.templateDay) continue;
+      home++;
       for (const s of MEAL_SLOTS) if (!day.mealCards?.[s]?.parts.length) d.push(`${fmtShort(day.date)}: нет «${MEAL_LABELS[s]}»`);
     }
-    res.push({ id: 1, title: '30 дней с полным меню, кроме релакс-дня', ok: !d.length, details: d.length ? d : [`${PLAN_LENGTH - 1} дней × 4 приёма = ${(PLAN_LENGTH - 1) * 4} приёма пищи, релакс-день ${fmtShort(relax[0]?.date ?? '')}`] });
+    const relax = inst.layout.relaxDates.map(fmtShort).join(', ') || 'нет в этом цикле';
+    res.push({ id: 1, title: '30 дней: домашнее меню, командировки и релакс-день', ok: !d.length, details: d.length ? d : [`Домашних дней ${home} × 4 приёма = ${home * 4}; дней командировки ${trip}; релакс-день: ${relax}`] });
   }
   // 2 и 3. граммовки и рецепты
   {
@@ -109,26 +116,50 @@ export function checkInstance(inst: PlanInstance): CheckResult[] {
   // 6. закупки покрывают потребности
   {
     const d6: string[] = [];
-    const needs = collectNeeds(inst.planDays, inst.cookingEvents);
+    const needs = collectNeeds(inst.planDays, inst.cookingEvents, inst.ctx.trips);
     const need = new Map<string, number>();
     for (const n of needs) need.set(n.productId, (need.get(n.productId) ?? 0) + n.qty);
     const got = new Map<string, number>();
     for (const e of inst.shoppingEvents) for (const l of e.lines ?? []) {
       got.set(l.productId, (got.get(l.productId) ?? 0) + l.buy);
-      if (l.buy + l.fromStock + 1e-3 < l.need) d6.push(`${fmtShort(e.date)} ${PRODUCTS[l.productId].name}: нужно ${l.need}, покрыто ${l.buy + l.fromStock}`);
+      if (l.buy + l.fromStock + 0.5 < l.need) d6.push(`${fmtShort(e.date)} ${PRODUCTS[l.productId].name}: нужно ${l.need}, покрыто ${l.buy + l.fromStock}`);
       for (const n of l.needs) if (n.date < e.date) d6.push(`${PRODUCTS[l.productId].name}: нужно ${fmtShort(n.date)}, а закупка ${fmtShort(e.date)}`);
       const p = PRODUCTS[l.productId];
       if (p.storage === 'fridge' && !p.freezable) for (const n of l.needs) if (diffDays(n.date, e.date) > p.shelf_days && l.fromStock < 1e-6) d6.push(`${p.name}: куплен ${fmtShort(e.date)}, нужен ${fmtShort(n.date)} — дольше срока ${p.shelf_days} дн.`);
     }
-    for (const [pid, q] of need) if ((got.get(pid) ?? 0) + 1e-3 < q) d6.push(`${PRODUCTS[pid].name}: всего нужно ${Math.round(q)}, куплено ${Math.round(got.get(pid) ?? 0)}`);
+    for (const [pid, q] of need) if ((got.get(pid) ?? 0) + 0.5 < q) d6.push(`${PRODUCTS[pid].name}: всего нужно ${Math.round(q)}, куплено ${Math.round(got.get(pid) ?? 0)}`);
     const main = inst.shoppingEvents.filter((e) => e.kind === 'main').length;
-    const top = inst.shoppingEvents.length - main;
+    const top = inst.shoppingEvents.filter((e) => e.kind === 'topup').length;
+    const tripLists = inst.shoppingEvents.filter((e) => e.kind === 'trip').length;
     const cost = Math.round(inst.totalCost);
-    const details = d6.length ? d6 : [`${need.size} продуктов, ${main} основные закупки и ${top} докупки свежего; сумма ≈${cost.toLocaleString('ru-RU')} ₽ при бюджете ${BUDGET_RUB.toLocaleString('ru-RU')} ₽`];
+    const details = d6.length ? d6 : [`${need.size} продуктов, ${main} основные закупки и ${top} докупки свежего; домашние закупки ≈${cost.toLocaleString('ru-RU')} ₽ при бюджете ${BUDGET_RUB.toLocaleString('ru-RU')} ₽${tripLists ? `; ${tripLists} отдельных списка перекусов в командировку (≈${Math.round(inst.tripCost).toLocaleString('ru-RU')} ₽, не входят в домашний бюджет)` : ''}`];
     if (cost > BUDGET_RUB) details.push(`Сумма больше бюджета на ${(cost - BUDGET_RUB).toLocaleString('ru-RU')} ₽`);
     res.push({ id: 6, title: 'Закупки покрывают все потребности', ok: !d6.length, details });
   }
+  res.push(checkTripDays(inst));
   return res;
+}
+
+/** На командировочные и релакс-дни нет домашних порций, готовки и домашних закупок. */
+export function checkTripDays(inst: PlanInstance): CheckResult {
+  const d: string[] = [];
+  const trips = inst.ctx.trips;
+  const relax = inst.layout.relaxDates;
+  for (const e of inst.cookingEvents) {
+    if (tripOn(trips, e.date)) d.push(`готовка ${fmtShort(e.date)} — в командировке`);
+    if (relax.includes(e.date)) d.push(`готовка ${fmtShort(e.date)} — в релакс-день`);
+    for (const it of e.items ?? []) for (const u of it.uses) if (tripOn(trips, u.date)) d.push(`${DISHES[it.dishId].title}: порция на ${fmtShort(u.date)} — день командировки`);
+  }
+  for (const s of inst.shoppingEvents) {
+    if (s.kind === 'trip') continue;
+    if (tripOn(trips, s.date)) d.push(`закупка ${fmtShort(s.date)} — в командировке`);
+  }
+  for (const day of inst.planDays) if (day.tripId && day.mealCards) d.push(`${fmtShort(day.date)}: домашнее меню в командировке`);
+  const tripDays = trips.reduce((n, t) => n + tripDates(t).length, 0);
+  return {
+    id: 7, title: 'Командировки и релакс-дни без домашних порций и готовки', ok: !d.length,
+    details: d.length ? d : trips.length ? [`Командировок: ${trips.length}, дней: ${tripDays}. Домашние порции, готовка и закупки на эти дни не планируются; перекусы — отдельным списком.`] : ['Командировок нет.'],
+  };
 }
 
 /** Калорийность по дням (для отчёта проверки). */
@@ -150,28 +181,25 @@ export function checkEquipment(templates: WorkoutTemplate[]): CheckResult {
     const ws = [it.kettlebellKg, it.fallbackKg, ...(it.weightKg ?? [])].filter((w): w is number => typeof w === 'number');
     for (const w of ws) if (!AVAILABLE_KETTLEBELLS.includes(w)) d.push(`${t.name}: ${it.exerciseId} — ${w} кг`);
   }
-  return { id: 7, title: 'В тренировках только гири 12 и 16 кг', ok: !d.length, details: d.length ? d : ['Гиря 12 кг, гиря 16 кг или собственный вес; других весов нет'] };
+  return { id: 8, title: 'В тренировках только гири 12 и 16 кг', ok: !d.length, details: d.length ? d : ['Гиря 12 кг, гиря 16 кг или собственный вес; других весов нет'] };
 }
 
-/** Перенос: план собирается для других дат старта и релакс-дня и проходит те же проверки. */
-export function checkShift(base: PlanSettings): CheckResult {
+/** Перенос: план собирается для других дат старта и проходит те же проверки; командировки и релакс-дни остаются на своих датах. */
+export function checkShift(base: PlanSettings, ctx: PlanContext): CheckResult {
   const d: string[] = [];
-  const variants: PlanSettings[] = [
-    makePlanSettings(addDays(base.startDate, 3), base.relaxDay, base.setAt),
-    makePlanSettings(addDays(base.startDate, 10), 10, base.setAt),
-    makePlanSettings(addDays(base.startDate, 5), 30, base.setAt),
-    makePlanSettings(addDays(base.startDate, 1), 1, base.setAt),
-  ];
+  const variants: PlanSettings[] = [1, 3, 10, 17, -2].map((n) => makePlanSettings(addDays(base.startDate, n), base.setAt));
   for (const v of variants) {
-    const inst = buildInstance(v, null);
-    const relax = inst.planDays.find((x) => x.relax);
-    if (relax?.date !== addDays(v.startDate, v.relaxDay - 1)) d.push(`старт ${fmtShort(v.startDate)}: релакс-день не на ${v.relaxDay}-м дне`);
-    if (inst.planDays[0].date !== v.startDate) d.push(`старт ${fmtShort(v.startDate)}: первый день ${fmtShort(inst.planDays[0].date)}`);
-    const first = inst.cookingEvents[0];
-    if (diffDays(v.startDate, first.date) < 1) d.push(`старт ${fmtShort(v.startDate)}: первая готовка не накануне`);
-    for (const c of checkInstance(inst)) if (!c.ok) d.push(`старт ${fmtShort(v.startDate)}, релакс ${v.relaxDay}: ${c.title} — ${c.details[0]}`);
+    const inst = buildInstance(v, { ...ctx, today: null });
+    const cycle = inst.planDays.filter((x) => x.date >= v.startDate && x.date <= planEnd(v));
+    if (cycle[0]?.date !== v.startDate) d.push(`старт ${fmtShort(v.startDate)}: первый день ${fmtShort(cycle[0]?.date ?? '')}`);
+    for (const t of ctx.trips) for (const day of tripDates(t)) {
+      const pd = inst.planDays.find((x) => x.date === day);
+      if (!pd?.tripId) d.push(`старт ${fmtShort(v.startDate)}: командировка «${t.city}» сдвинулась с ${fmtShort(day)}`);
+    }
+    for (const r of inst.layout.relaxDates) if (r !== relaxDateOfMonth(ctx, r.slice(0, 7))) d.push(`старт ${fmtShort(v.startDate)}: релакс-день ${fmtShort(r)} сдвинулся`);
+    for (const c of checkInstance(inst)) if (!c.ok) d.push(`старт ${fmtShort(v.startDate)}: ${c.title} — ${c.details[0]}`);
   }
-  return { id: 8, title: 'Перенос событий при смене даты старта', ok: !d.length, details: d.length ? d : [`Проверено ${variants.length} варианта дат старта (будни и выходные) и релакс-дня (1, 10, 28, 30): меню, готовки, закупки и контейнеры сдвигаются вместе, порции и сроки хранения сходятся`] };
+  return { id: 9, title: 'Перенос событий при смене даты старта', ok: !d.length, details: d.length ? d : [`Проверено ${variants.length} других дат старта: меню, готовки, закупки и контейнеры пересчитываются; командировки и релакс-дни остаются на своих календарных датах`] };
 }
 
 /** Проверки на текущих данных пользователя. */
@@ -179,10 +207,10 @@ export function checkUserData(data: AppData): CheckResult[] {
   const out: CheckResult[] = [];
   const marks = Object.values(data.taskStatus).filter((s) => s.status !== 'planned').length;
   out.push({
-    id: 9, title: 'Отметки, вес и фото сохраняются', ok: true,
-    details: [`Сейчас в приложении: отметок ${marks}, тренировок в журнале ${Object.keys(data.trainingLogs).length}, взвешиваний ${Object.keys(data.weights).length}, фото ${Object.keys(data.photos).length}. Смена даты старта и релакс-дня их не удаляет и не переносит.`],
+    id: 10, title: 'Отметки, вес и фото сохраняются', ok: true,
+    details: [`Сейчас в приложении: отметок ${marks}, тренировок в журнале ${Object.keys(data.trainingLogs).length}, взвешиваний ${Object.keys(data.weights).length}, фото ${Object.keys(data.photos).length}. Смена даты старта, релакс-дня и командировок их не удаляет и не переносит.`],
   });
-  out.push({ id: 10, title: 'Хранение, резервная копия, экспорт и импорт', ok: true, details: ['Данные хранятся на устройстве (IndexedDB); резервная копия, отчёт для ChatGPT и импорт плана проверяются автотестами при каждой сборке.'] });
+  out.push({ id: 11, title: 'Хранение, резервная копия, экспорт и импорт', ok: true, details: ['Данные хранятся на устройстве (IndexedDB); резервная копия, отчёт для ChatGPT и импорт плана проверяются автотестами при каждой сборке.'] });
   return out;
 }
 

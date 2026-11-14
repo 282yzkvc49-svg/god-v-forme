@@ -9,8 +9,8 @@ import {
   DISHES, PRODUCTS, cookedWeight, dishAmount, dishNutrition, ingredientLines, kcalText,
 } from '../domain/catalog';
 import {
-  BASE_START, BUDGET_RUB, DEFAULT_RELAX, PLAN_LENGTH, buildInstance, buyText, cardNutrition, dayNutrition,
-  makePlanSettings, planEnd, planPosition, portionsLeft,
+  BASE_START, BUDGET_RUB, PLAN_LENGTH, buildInstance, buyText, cardNutrition, dayNutrition,
+  makePlanSettings, planContext, planEnd, planPosition, portionsLeft,
 } from '../domain/plan';
 import { checkEquipment, checkInstance, checkShift, checkUserData, kcalSummary } from '../domain/planCheck';
 import { planDay, statusOf, tasksForDate, thawList, type DayTask } from '../domain/tasks';
@@ -21,6 +21,8 @@ import { fmtRub } from '../lib/util';
 import { today as todayFn } from '../lib/clock';
 import { href } from '../app/router';
 import { CheckButton, Disclosure, Note, Sheet, toast } from '../ui/kit';
+import { TripDayCard } from './Trips';
+import { NOV_2026_START } from '../state/model';
 import { KettlebellIcon, PiBookOpen, PiCheck, PiCheckBold, PiCookingPot, PiShoppingCart, PiSnowflake, PiWarning } from '../ui/icons';
 
 // ------------------------------------------------------------------ приём пищи
@@ -116,6 +118,14 @@ export function DayPlanSections({ date }: { date: ISODate }) {
   const shops = tasks.filter((t) => t.kind === 'shopping').map((t) => data.shoppingEvents[t.eventId!]).filter(Boolean);
   const dn = p ? dayNutrition(p) : null;
   const pos = planPosition(data.settings.plan, date);
+  if (p?.tripId) {
+    return (
+      <div className="stack">
+        <TripDayCard date={date} tasks={tasks} />
+        {shops.map((e) => <ShopInline key={e.id} e={e} />)}
+      </div>
+    );
+  }
   return (
     <div className="stack">
       {p?.mealCards && (
@@ -274,26 +284,24 @@ export function ThawSheet({ task, onClose }: { task: DayTask | null; onClose: ()
 
 // ------------------------------------------------------------------ дата старта и релакс-день
 
-export function PlanStartForm({ initialDate, initialRelax, onDone, submitLabel = 'Начать', firstRun }: {
-  initialDate?: ISODate; initialRelax?: number; onDone?: (cfg: PlanSettings) => void; submitLabel?: string; firstRun?: boolean;
+export function PlanStartForm({ initialDate, onDone, submitLabel = 'Начать', firstRun }: {
+  initialDate?: ISODate; onDone?: (cfg: PlanSettings) => void; submitLabel?: string; firstRun?: boolean;
 }) {
   const data = useApp();
   const today = todayFn();
   const cur = data.settings.plan;
-  const [date, setDate] = useState<ISODate>(initialDate ?? cur?.startDate ?? addDays(today, 1));
-  const [relax, setRelax] = useState<number>(initialRelax ?? cur?.relaxDay ?? DEFAULT_RELAX);
+  const [date, setDate] = useState<ISODate>(initialDate ?? cur?.startDate ?? (today < NOV_2026_START ? NOV_2026_START : addDays(today, 1)));
   const [ack, setAck] = useState(false);
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(date);
-  const cfg = valid ? makePlanSettings(date, relax, new Date().toISOString()) : null;
-  const inst = useMemo(() => (cfg ? buildInstance(cfg, today) : null), [date, relax, today]);
-  const preview = useMemo(() => (cfg ? A.previewPlan(cfg) : null), [date, relax, data]);
-  const same = !!cur && cur.startDate === date && cur.relaxDay === relax && cur.confirmed;
+  const cfg = valid ? makePlanSettings(date, new Date().toISOString()) : null;
+  const inst = useMemo(() => (cfg ? buildInstance(cfg, planContext(data, today)) : null), [date, today, data.trips, data.settings.relaxOverrides]);
+  const preview = useMemo(() => (cfg ? A.previewPlan(cfg) : null), [date, data]);
+  const same = !!cur && cur.startDate === date && cur.confirmed;
   const conflicts = !!preview && (preview.mealMarks > 0 || preview.eventMarks.length > 0);
-  const relaxDate = cfg ? addDays(date, relax - 1) : null;
-  const relaxInPast = !!relaxDate && relaxDate < today;
-  const firstShop = inst?.shoppingEvents[0];
+  const firstShop = inst?.shoppingEvents.find((e) => e.kind === 'main');
   const firstCook = inst?.cookingEvents[0];
   const secondShop = inst?.shoppingEvents.find((e) => e.kind === 'main' && e !== firstShop);
+  const trips = inst ? inst.ctx.trips.filter((t) => t.to >= date && t.from <= planEnd(cfg!)) : [];
   const submit = () => {
     if (!cfg) return;
     if (conflicts && !ack) return;
@@ -312,33 +320,23 @@ export function PlanStartForm({ initialDate, initialRelax, onDone, submitLabel =
         {[0, 1, 2].map((n) => <button key={n} className={`chip${date === addDays(today, n) ? ' accent' : ''}`} onClick={() => setDate(addDays(today, n))}>{n === 0 ? 'Сегодня' : n === 1 ? 'Завтра' : 'Послезавтра'}</button>)}
         {(() => { const mon = addDays(today, (8 - isoWeekday(today)) % 7 || 7); return <button className={`chip${date === mon ? ' accent' : ''}`} onClick={() => setDate(mon)}>С понедельника {fmtShort(mon)}</button>; })()}
       </div>
-      <label className="field" style={{ margin: 0 }}>
-        <span>Релакс-день (один в месяц)</span>
-        <select className="input" value={relax} onChange={(e) => { setRelax(+e.target.value); setAck(false); }}>
-          {Array.from({ length: PLAN_LENGTH }, (_, i) => i + 1).map((n) => (
-            <option key={n} value={n} disabled={valid && addDays(date, n - 1) < today && n !== relax}>
-              День {n}{valid ? ` — ${weekdayShort(addDays(date, n - 1))}, ${fmtShort(addDays(date, n - 1))}` : ''}{n === DEFAULT_RELAX ? ' (по умолчанию)' : ''}
-            </option>
-          ))}
-        </select>
-      </label>
       {inst && (
         <div className="card flat">
           <table className="table small">
             <tbody>
-              <tr><td>План</td><td>{fmtDayMonth(date)} — {fmtDayMonth(planEnd(cfg!))}</td></tr>
+              <tr><td>Первый цикл</td><td>{fmtDayMonth(date)} — {fmtDayMonth(planEnd(cfg!))} (30 дней; дальше — следующий месяц)</td></tr>
               {firstShop && <tr><td>Первая закупка</td><td>{fmtLong(firstShop.date)}, {firstShop.time}</td></tr>}
               {firstCook && <tr><td>Первая готовка</td><td>{fmtLong(firstCook.date)}, {firstCook.time}</td></tr>}
               {secondShop && <tr><td>Вторая закупка</td><td>{fmtLong(secondShop.date)}, {secondShop.time}</td></tr>}
-              <tr><td>Релакс-день</td><td>{relaxDate ? fmtLong(relaxDate) : ''} (день {relax}); меню свободное, без алкоголя</td></tr>
-              <tr><td>Закупки за месяц</td><td>≈{fmtRub(inst.totalCost)} (бюджет {fmtRub(BUDGET_RUB)}, цены ориентировочные)</td></tr>
+              <tr><td>Релакс-день</td><td>{inst.layout.relaxDates.length ? inst.layout.relaxDates.map((d) => fmtLong(d)).join(', ') : 'в этом цикле нет'} — один в календарный месяц, не сдвигается при смене даты старта</td></tr>
+              {trips.map((t) => <tr key={t.id}><td>Командировка</td><td>{t.city}: {fmtShort(t.from)}–{fmtShort(t.to)} — командировочное меню, без готовки и тренировок</td></tr>)}
+              <tr><td>Домашние закупки</td><td>≈{fmtRub(inst.totalCost)} (бюджет {fmtRub(BUDGET_RUB)}, цены ориентировочные){inst.tripCost ? `; перекусы в поездки — отдельно, ≈${fmtRub(inst.tripCost)}` : ''}</td></tr>
             </tbody>
           </table>
         </div>
       )}
       {firstCook && firstCook.timeNote && <Note kind="warn">{firstCook.timeNote}</Note>}
       {valid && date < today && <Note kind="warn">Дата старта в прошлом: дни до сегодняшнего будут считаться прошедшими.</Note>}
-      {relaxInPast && <Note kind="warn">Выбранный релакс-день уже прошёл — выберите другой.</Note>}
       {!firstRun && preview && preview.importedKept > 0 && <Note kind="plain">{preview.importedKept} дн. изменены импортом от ChatGPT — они останутся как есть.</Note>}
       {!firstRun && conflicts && (
         <Note kind="warn">
@@ -347,8 +345,8 @@ export function PlanStartForm({ initialDate, initialRelax, onDone, submitLabel =
           <label className="row nowrap" style={{ gap: 8 }}><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> Понятно, сменить план</label>
         </Note>
       )}
-      {!firstRun && cur && <p className="hint mt0">Прошедшие дни с отметками остаются историей. Тренировки, вес, фото и отметки не удаляются и не переносятся — расписание тренировок своё.</p>}
-      <button className="btn primary big" disabled={!valid || relaxInPast || (conflicts && !ack) || same} onClick={submit}><PiCheckBold /> {same ? 'Уже выбрано' : submitLabel}</button>
+      {!firstRun && cur && <p className="hint mt0">Командировки и релакс-дни остаются на своих датах. Прошедшие дни остаются историей. Тренировки, вес, фото и отметки не удаляются и не переносятся — расписание тренировок своё.</p>}
+      <button className="btn primary big" disabled={!valid || (conflicts && !ack) || same} onClick={submit}><PiCheckBold /> {same ? 'Уже выбрано' : submitLabel}</button>
     </div>
   );
 }
@@ -356,7 +354,7 @@ export function PlanStartForm({ initialDate, initialRelax, onDone, submitLabel =
 export function PlanStartSheet({ open, onClose, initialDate }: { open: boolean; onClose: () => void; initialDate?: ISODate }) {
   if (!open) return null;
   return (
-    <Sheet open onClose={onClose} title="Дата старта и релакс-день">
+    <Sheet open onClose={onClose} title="Дата старта программы">
       <PlanStartForm initialDate={initialDate} onDone={onClose} submitLabel="Применить" />
     </Sheet>
   );
@@ -366,12 +364,13 @@ export function PlanStartSheet({ open, onClose, initialDate }: { open: boolean; 
 
 export function PlanCheckCard() {
   const data = useApp();
-  const cfg = data.settings.plan ?? makePlanSettings(BASE_START, DEFAULT_RELAX, '');
+  const cfg = data.settings.plan ?? makePlanSettings(BASE_START, '');
   const result = useMemo(() => {
-    const inst = buildInstance(cfg, null);
+    const ctx = { ...planContext(data, null) };
+    const inst = buildInstance(cfg, ctx);
     const tpls = TEMPLATE_IDS.map((id) => templateFor(data, id, todayFn())).filter(Boolean) as any[];
-    return { checks: [...checkInstance(inst), checkEquipment(tpls), checkShift(cfg), ...checkUserData(data)], kcal: kcalSummary(inst), inst };
-  }, [cfg.startDate, cfg.relaxDay, data.templateVersions]);
+    return { checks: [...checkInstance(inst), checkEquipment(tpls), checkShift(cfg, ctx), ...checkUserData(data)], kcal: kcalSummary(inst), inst };
+  }, [cfg.startDate, data.trips, data.settings.relaxOverrides, data.templateVersions]);
   const failed = result.checks.filter((c) => !c.ok).length;
   return (
     <div className="card">

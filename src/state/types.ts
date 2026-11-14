@@ -31,6 +31,8 @@ export interface PlanDay {
   /** Экземпляр плана питания из шаблона (src/data/plan_template.json). */
   instanceId?: string | null;
   templateDay?: number | null;
+  /** День командировки: вместо домашнего меню — варианты в гостинице, ресторане и из супермаркета. */
+  tripId?: string | null;
   /** Подробные карточки приёмов пищи: блюда с количеством, из какой готовки взять порцию. */
   mealCards?: Record<MealSlot, MealCard> | null;
 }
@@ -126,7 +128,8 @@ export interface ShoppingEvent {
   source: 'seed' | 'import';
   patchId?: string | null;
   instanceId?: string | null;
-  kind?: 'main' | 'topup' | null;
+  kind?: 'main' | 'topup' | 'trip' | null;
+  tripId?: string | null;
   time?: string | null;
   lines?: ShopLine[] | null;
   covers?: { from: ISODate; to: ISODate } | null;
@@ -250,6 +253,26 @@ export interface TaskStatusRec {
   date: ISODate; // исходная плановая дата задачи
   kind: TaskKind;
   status: TaskStatus;
+  updatedAt: string;
+  /** Командировочный приём пищи: съел предложенный вариант или выбрал другое подходящее блюдо. */
+  choice?: 'suggested' | 'other' | null;
+  variantId?: string | null;
+  comment?: string | null;
+}
+
+/** Командировка: в эти дни вместо домашнего меню и тренировок — командировочный режим. */
+export interface Trip {
+  id: string;
+  city: string;
+  from: ISODate;
+  to: ISODate; // включительно
+  hotelBreakfast: boolean;
+  fridge: boolean;
+  canTrain: boolean;
+  comment: string | null;
+  /** Фактические расходы на еду в поездке — отдельно от домашнего бюджета (необязательно). */
+  foodExpensesRub?: number | null;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -413,8 +436,10 @@ export interface Settings {
   containersEnabled: boolean;
   trainingStartDate: ISODate | null;
   postponeCardio: boolean;
-  /** Программа питания: дата старта (день 1) и номер релакс-дня. null — ещё не выбрано. */
+  /** Программа питания: дата старта (день 1). null — ещё не выбрано. */
   plan: PlanSettings | null;
+  /** Релакс-день каждого календарного месяца ('YYYY-MM' → дата); по умолчанию — последнее воскресенье. */
+  relaxOverrides: Record<string, ISODate>;
   /** Расписание тренировок — своё, не зависит от даты старта питания. */
   training: TrainingSchedule;
   restDefaultSec: number;
@@ -430,7 +455,8 @@ export interface Settings {
 
 export interface PlanSettings {
   startDate: ISODate;
-  relaxDay: number; // 1–30, по умолчанию 28
+  /** Устарело (v4): релакс-день теперь календарный — Settings.relaxOverrides. */
+  relaxDay?: number;
   instanceId: string;
   confirmed: boolean; // пользователь подтвердил дату (после обновления — false, пока не подтвердит)
   setAt: string;
@@ -469,6 +495,7 @@ export interface AppData {
   photos: Record<string, PhotoMeta>;
   shoppingChecks: Record<string, ShoppingCheck>;
   checks: Record<string, CheckRec>;
+  trips: Record<string, Trip>;
   dayNotes: Record<ISODate, DayNote>;
   userRecipes: Record<string, Recipe>;
   mealLinks: Record<string, MealMapEntry>;
@@ -480,7 +507,7 @@ export interface AppData {
 export const RECORD_STORES = [
   'planDays', 'templateVersions', 'shoppingEvents', 'cookingEvents', 'taskStatus', 'taskMoves', 'customTasks',
   'trainingLogs', 'weights', 'measurements', 'photos', 'shoppingChecks', 'checks', 'dayNotes', 'userRecipes',
-  'mealLinks', 'exportHistory', 'patches',
+  'mealLinks', 'exportHistory', 'patches', 'trips',
 ] as const;
 export type RecordStore = (typeof RECORD_STORES)[number];
 
@@ -499,6 +526,7 @@ export const STORE_KEYS: Record<RecordStore | 'settings' | 'meta' | 'photoBlobs'
   photos: 'id',
   shoppingChecks: 'id',
   checks: 'id',
+  trips: 'id',
   dayNotes: 'date',
   userRecipes: 'id',
   mealLinks: 'id',
@@ -516,5 +544,5 @@ export type PlanStore = (typeof PLAN_STORES)[number];
 /** Хранилища пользователя: импорт плана их никогда не трогает. */
 export const USER_STORES = [
   'taskStatus', 'taskMoves', 'customTasks', 'trainingLogs', 'weights', 'measurements', 'photos',
-  'shoppingChecks', 'checks', 'dayNotes', 'userRecipes', 'mealLinks', 'exportHistory', 'patches',
+  'shoppingChecks', 'checks', 'dayNotes', 'userRecipes', 'mealLinks', 'exportHistory', 'patches', 'trips',
 ] as const;

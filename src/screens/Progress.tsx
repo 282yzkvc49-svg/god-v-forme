@@ -168,6 +168,7 @@ function WeightSection({ onAdd }: { onAdd: () => void }) {
                 {pts.length === 1 ? 'Один замер — для линии нужен ещё хотя бы один. ' : ''}
                 {view === 'weeks' && !trend.length && pts.length > 1 ? 'Сглаженная тенденция появится, когда будет 4+ замера за 2+ недели. ' : ''}
                 {trend.length ? 'Пунктир — сглаженная тенденция (скользящее среднее ±7 дней). ' : ''}
+                {Object.values(data.trips).some((t) => pts.some((p) => p.date > t.from && p.date <= addDays(t.to, 5))) ? 'После перелётов и ресторанной еды вес может временно вырасти из-за воды и соли — это не доказанный набор жира; смотрите на тенденцию за 2–3 недели. ' : ''}
                 {view === 'months' ? 'Точка — среднее за месяц.' : ''}
               </p>
             </>
@@ -454,6 +455,7 @@ function TrainingSection() {
                 <tr><td>Перенесено</td><td className="n">{s.moved}</td></tr>
                 <tr><td>Пропущено</td><td className="n">{s.skipped}</td></tr>
                 <tr><td>Без отметки (не считается пропуском)</td><td className="n">{s.notLogged}</td></tr>
+                {s.tripRest > 0 && <tr><td>Плановый отдых / командировка</td><td className="n">{s.tripRest}</td></tr>}
                 {s.postponed > 0 && <tr><td>Отложено до начала занятий</td><td className="n">{s.postponed}</td></tr>}
                 <tr><td>Впереди</td><td className="n">{s.upcoming}</td></tr>
                 <tr><td>Силовых / степпер</td><td className="n">{s.strengthDone} / {s.cardioDone}</td></tr>
@@ -505,6 +507,17 @@ function NutritionSection() {
                 <tr><td>Пропущено или заменено</td><td className="n">{a.skipped}</td></tr>
                 <tr><td>Без отметки</td><td className="n">{a.unknown}</td></tr>
               </tbody></table>
+              {a.trip.days > 0 && (
+                <table className="table" style={{ marginTop: 12 }}>
+                  <tbody>
+                    <tr><td colSpan={2}><b>В командировках ({a.trip.days} дн.)</b> — граммы ориентировочные</td></tr>
+                    <tr><td>Предложенный вариант</td><td className="n">{a.trip.suggested}</td></tr>
+                    <tr><td>Другое подходящее блюдо</td><td className="n">{a.trip.other}</td></tr>
+                    <tr><td>Пропущено</td><td className="n">{a.trip.skipped}</td></tr>
+                    <tr><td>Без отметки</td><td className="n">{a.trip.unknown}</td></tr>
+                  </tbody>
+                </table>
+              )}
               {a.relaxDays.length > 0 && <p className="hint">Релакс-дни не учитываются: {a.relaxDays.map(fmtShort).join(', ')}.</p>}
             </>
           )}

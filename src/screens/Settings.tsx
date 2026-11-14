@@ -6,8 +6,12 @@ import { href, useRoute } from '../app/router';
 import { fmtDayMonth, fmtFull, isISODate, isTime, WEEKDAYS_FULL } from '../lib/dates';
 import { fmtBytes } from '../lib/util';
 import { SEED_ID } from '../lib/seed';
+import { today as todayFn } from '../lib/clock';
 import { PlanCheckCard, PlanStartForm } from './planViews';
-import { planEnd, relaxDate } from '../domain/plan';
+import { planEnd } from '../domain/plan';
+import { RelaxEditor } from './Trips';
+import { monthKey, tripList } from '../domain/trips';
+import { addDays } from '../lib/dates';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
 import { isStandalone } from '../lib/files';
 import { NumberStepper, Note, PageHead, Seg, Switch, toast } from '../ui/kit';
@@ -54,10 +58,20 @@ export function SettingsScreen() {
       <div className="stack">
         <Group id="plan" title="Программа питания">
           {s.plan ? (
-            <p className="mt0">Сейчас: с {fmtFull(s.plan.startDate)} по {fmtFull(planEnd(s.plan))}, релакс-день — {fmtDayMonth(relaxDate(s.plan))} (день {s.plan.relaxDay}).</p>
+            <p className="mt0">Сейчас: первый цикл с {fmtFull(s.plan.startDate)} по {fmtFull(planEnd(s.plan))}.</p>
           ) : <p className="mt0">Дата старта ещё не выбрана.</p>}
           <PlanStartForm submitLabel="Применить" />
-          <p className="hint">02.11.2026 — только базовая дата шаблона. При смене даты меню, закупки, готовка, контейнеры и релакс-день переносятся по номеру дня плана. После 30-го дня можно начать следующий месяц по этому же меню или загрузить новый план от ChatGPT.</p>
+          <p className="hint">При смене даты меню, закупки, готовка и контейнеры пересчитываются; командировки, релакс-дни и выполненное остаются на своих датах. Программа рассчитана минимум на год: после 30-го дня можно начать следующий месяц по этому же меню или загрузить новый план от ChatGPT.</p>
+        </Group>
+
+        <Group id="relax" title="Релакс-дни">
+          <RelaxEditor months={Array.from(new Set([0, 29, 45].map((n) => monthKey(addDays(s.plan?.startDate ?? todayFn(), n)))))} />
+        </Group>
+
+        <Group id="trips" title="Командировки">
+          <p className="mt0">{tripList(data).length ? tripList(data).map((t) => `${t.city}: ${fmtDayMonth(t.from)}–${fmtDayMonth(t.to)}`).join('; ') : 'Командировок нет.'}</p>
+          <a className="btn" href={href('/trips')}>Командировки и «Новая командировка»</a>
+          <p className="hint">В поездке — завтрак в гостинице, обед и ужин в кафе, перекус из супермаркета, плановый отдых вместо тренировок. Перед подтверждением показывается, что изменится.</p>
         </Group>
 
         <Group id="training" title="Расписание тренировок">

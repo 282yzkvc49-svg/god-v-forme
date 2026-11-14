@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp, getData } from '../state/store';
 import * as A from '../state/actions';
-import { useToday } from '../lib/clock';
+import { useToday, today as todayFn } from '../lib/clock';
 import { go, href } from '../app/router';
 import { taskById, statusOf, type DayTask } from '../domain/tasks';
-import { templateFor, prescription, weightText, exerciseName, plannedKg } from '../domain/templates';
+import { templateFor, prescription, weightText, exerciseName, plannedKg, progressionHint } from '../domain/templates';
 import { AVAILABLE_KETTLEBELLS, EXERCISES, PROFILE } from '../lib/seed';
 import { fmtDayMonth, fmtLong } from '../lib/dates';
 import type { Difficulty, Feeling, TemplateItem, TrainingLog, WorkoutTemplate } from '../state/types';
@@ -120,6 +120,8 @@ export function WorkoutScreen({ taskId }: { taskId: string }) {
 function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
   it: TemplateItem; idx: number; log?: TrainingLog; open: boolean; onToggleOpen: () => void; onSet: (si: number) => void; ensure: () => TrainingLog | null;
 }) {
+  const appData = useApp();
+  const hint = useMemo(() => progressionHint(appData, it.exerciseId, log?.plannedDate ?? todayFn()), [appData.trainingLogs, it.exerciseId, log?.plannedDate]);
   const el = log?.exercises.find((e) => e.index === idx);
   const variant = el?.variantId && it.alternative?.exerciseId === el.variantId ? it.alternative : null;
   const ex = EXERCISES[variant ? variant.exerciseId : it.exerciseId];
@@ -162,6 +164,7 @@ function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
         {open ? <PiCaretUp /> : <PiCaretDown />}
       </button>
       <div className="ex-body">
+        {hint && <p className="hint mt0" style={{ margin: 0 }}>{hint}</p>}
         {(it.condition || it.alternative) && (
           <div className="note plain small" style={{ margin: 0 }}>
             {it.condition && <div>{it.condition}.</div>}

@@ -10,11 +10,13 @@ import {
 } from './stats';
 import { templatesForExport, PLAN_UPDATE_SCHEMA_VERSION } from './planUpdate';
 import { AVAILABLE_KETTLEBELLS, EXERCISES } from '../lib/seed';
+import { relaxDatesBetween, tripDates, tripList } from './trips';
+import { TEMPLATE_NAMES } from './templates';
 import { TEMPLATE_IDS } from '../state/types';
 
 export const REPORT_SCHEMA_VERSION = '1.0.0';
 
-export const CHATGPT_PROMPT = `Проанализируй мой месячный отчёт из приложения «Мой год в форме». Цель — снизить вес со 107 до 82 кг примерно за год, сохранить мышцы и улучшить силу. Использую только мини-степпер, одну регулируемую гирю и собственный вес. Сначала дай краткую оценку динамики веса, посещаемости тренировок, выполнения питания и самочувствия. Укажи, где недостаточно фактических данных. Затем предложи корректировку следующего месяца: упражнения, подходы, повторы, рабочие веса и расписание; питание корректируй осторожно, без экстремальных диет. Учитывай возможные дни болезни и переносы, не считай их ленью. Отдельно подготовь файл \`plan_update.json\` строго по схеме импорта приложения, чтобы я мог его загрузить обратно. Не утверждай, что я выполнил то, чего нет в отчёте.`;
+export const CHATGPT_PROMPT = `Проанализируй мой месячный отчёт из приложения «Мой год в форме». Цель — снизить вес со 107 до 82 кг примерно за год, сохранить мышцы и улучшить силу. Использую только мини-степпер, гири 12 кг и 16 кг и собственный вес. Сначала дай краткую оценку динамики веса, посещаемости тренировок, выполнения питания и самочувствия. Укажи, где недостаточно фактических данных. Затем предложи корректировку следующего месяца: упражнения, подходы, повторы, рабочие веса и расписание; питание корректируй осторожно, без экстремальных диет. Учитывай возможные дни болезни, переносы и командировки, не считай их ленью: дни командировок — плановый отдых и командировочное питание, пропущенные из-за поездок тренировки не переносить с удвоенной нагрузкой. Не интерпретируй временное увеличение веса после перелётов или ресторанного питания как доказанный набор жира — это может быть вода и соль; смотри на тенденцию за несколько недель. Отдельно подготовь файл \`plan_update.json\` строго по схеме импорта приложения, чтобы я мог его загрузить обратно. Не утверждай, что я выполнил то, чего нет в отчёте.`;
 
 export interface ReportOptions {
   from: ISODate;
@@ -29,6 +31,7 @@ export interface ReportOptions {
 
 const STATUS_RU: Record<string, string> = {
   done: 'выполнено', skipped: 'пропущено', postponed: 'отложено', not_logged: 'нет отметки', planned: 'впереди', in_progress: 'начато, не завершено',
+  trip_rest: 'плановый отдых / командировка',
 };
 
 export function photoFileName(p: PhotoMeta): string {
@@ -115,7 +118,9 @@ export function buildReport(data: AppData, o: ReportOptions) {
   const diffCount = rows.reduce((s, r) => s + r.exercises.filter((e) => e.difficulty).length, 0);
   if (!diffCount) obs.push('Оценки сложности упражнений (легко/нормально/тяжело) не вводились.');
   if (madh.unknown) obs.push(`${madh.unknown} плановых приёмов пищи без отметки — они не считаются ни выполненными, ни пропущенными.`);
-  if (madh.relaxDays.length) obs.push(`Релакс-день (${madh.relaxDays.map(fmtShort).join(', ')}) не учитывается в выполнении плана питания.`);
+  if (madh.relaxDays.length) obs.push(`Релакс-день (${madh.relaxDays.map(fmtShort).join(', ')}) не учитывается в выполнении плана питания и не считается нарушением.`);
+  const tripsIn = tripList(data).filter((t) => t.to >= from && t.from <= to);
+  if (tripsIn.length) obs.push(`Командировки: ${tripsIn.map((t) => `${t.city} ${fmtShort(t.from)}–${fmtShort(t.to)}`).join(', ')}. В эти дни — плановый отдых вместо тренировок и командировочное питание; это не пропуски. Временное увеличение веса после перелётов и ресторанной еды не доказывает набор жира.`);
   const futureDays = to > today ? diffDays(to, today) : 0;
   if (futureDays > 0) obs.push(`Период ещё не закончился: ${futureDays} дн. впереди; будущие задачи в статистику не входят.`);
 
@@ -131,7 +136,7 @@ export function buildReport(data: AppData, o: ReportOptions) {
       kcal_reference_per_day: data.settings.goals.kcalReference,
       kcal_note: 'Калорийность приёмов пищи считается по справочным данным (USDA, Скурихин); для продуктов «по этикетке» — требует уточнения.',
       equipment: ['мини-степпер', 'гиря 12 кг', 'гиря 16 кг', 'собственный вес'],
-      nutrition_plan: data.settings.plan ? { start_date: data.settings.plan.startDate, relax_day_number: data.settings.plan.relaxDay } : null,
+      nutrition_plan: data.settings.plan ? { start_date: data.settings.plan.startDate, relax_days: relaxDatesBetween(data.settings, from, to) } : null,
       training_schedule: data.settings.training,
       training_start_date: data.settings.trainingStartDate,
     },
@@ -144,18 +149,29 @@ export function buildReport(data: AppData, o: ReportOptions) {
       last_known_before_period: allW.filter((w) => w.date < from).slice(-1)[0] ?? null,
     } : null,
     waist: waist,
+    trips: tripsIn.map((t) => {
+      const days = tripDates(t).filter((d) => d >= from && d <= to);
+      return { city: t.city, from: t.from, to: t.to, days_in_period: days.length, hotel_breakfast: t.hotelBreakfast, fridge: t.fridge, can_train: t.canTrain, comment: t.comment, food_expenses_rub: t.foodExpensesRub ?? null };
+    }),
+    trip_days_count: tripsIn.reduce((n, t) => n + tripDates(t).filter((d) => d >= from && d <= to).length, 0),
+    trainings_replaced_by_planned_rest: o.include.workouts ? tstats.replacedByTrip.map((r) => ({ date: r.date, planned: TEMPLATE_NAMES[r.templateId] ?? r.templateId, reason: `командировка: ${r.trip}` })) : [],
     photos: o.photos.map((p) => ({ file: photoFileName(p), date: p.date, pose: p.pose })),
     workouts: o.include.workouts ? rows.filter((r) => r.status !== 'planned').map(workoutJson) : [],
     workout_summary: o.include.workouts ? {
       due: tstats.planned, done: tstats.done, skipped: tstats.skipped, not_logged: tstats.notLogged, moved: tstats.moved,
       postponed: tstats.postponed, upcoming: tstats.upcoming, strength_done: tstats.strengthDone, stepper_done: tstats.cardioDone,
       recovery_marked: tstats.recoveryDone, stepper_minutes: tstats.stepperMinutes, warmup_minutes: tstats.warmupMinutes, sets_marked: tstats.setsDone,
+      planned_rest_trip_days: tstats.tripRest,
     } : null,
     working_weights: o.include.workouts ? Object.fromEntries(Object.entries(ww).map(([k, xs]) => [k, xs.map((x) => ({ date: x.date, kg: x.kg, difficulty: x.difficulty }))])) : {},
     nutrition_adherence: o.include.nutrition
-      ? { planned: madh.planned, done: madh.done, skipped: madh.skipped, unknown: madh.unknown, future_not_counted: madh.future, relax_days: madh.relaxDays, percent_of_marked: madh.percentOfMarked }
+      ? {
+        home: { planned: madh.planned, done: madh.done, skipped: madh.skipped, unknown: madh.unknown, percent_of_marked: madh.percentOfMarked },
+        trip: { days: madh.trip.days, planned: madh.trip.planned, suggested_variant: madh.trip.suggested, other_suitable_dish: madh.trip.other, skipped: madh.trip.skipped, unknown: madh.trip.unknown, note: 'Граммовки в командировке ориентировочные, ресторанная еда не взвешивалась.' },
+        planned: madh.planned, done: madh.done, skipped: madh.skipped, unknown: madh.unknown, future_not_counted: madh.future, relax_days: madh.relaxDays, percent_of_marked: madh.percentOfMarked,
+      }
       : { planned: 0, done: 0, skipped: 0, unknown: 0 },
-    nutrition_days: o.include.nutrition ? mrows.map((r) => ({ date: r.date, relax_day: r.relax, meals: r.meals.map((m) => ({ slot: m.slot, dish: m.dish, status: m.status })) })) : [],
+    nutrition_days: o.include.nutrition ? mrows.map((r) => ({ date: r.date, relax_day: r.relax, trip: r.trip, meals: r.meals.map((m) => ({ slot: m.slot, dish: m.dish, status: m.status, ...(r.trip ? { choice: m.choice ?? null, comment: m.comment ?? null } : {}) })) })) : [],
     cooking_and_shopping: [...cooking, ...shopping].sort((a, b) => (a.date < b.date ? -1 : 1)),
     day_notes: o.include.notes ? dayNotes : [],
     observations: obs,
@@ -197,6 +213,12 @@ function buildMarkdown(data: AppData, o: ReportOptions, j: any, rows: TrainingRo
     L.push('');
     L.push(`Записей: ${s.entries}. ${s.change_kg != null ? `Изменение за период: ${s.change_kg > 0 ? '+' : ''}${fmtNum(s.change_kg)} кг.` : 'Изменение рассчитать нельзя (меньше двух замеров).'}${s.weekly_rate_kg != null ? ` Темп по линейной тенденции: ${fmtNum(s.weekly_rate_kg, 2)} кг/нед.` : ''}`);
   }
+  if (j.trips.length) {
+    L.push('');
+    L.push('## Командировки');
+    for (const t of j.trips) L.push(`- ${t.city}: ${fmtShort(t.from)}–${fmtShort(t.to)} (${t.days_in_period} дн. в периоде)${t.hotel_breakfast ? ', завтрак в гостинице' : ''}${t.comment ? `, ${t.comment}` : ''}${t.food_expenses_rub != null ? `; расходы на еду ${fmtNum(t.food_expenses_rub, 0)} ₽ (отдельно от домашнего бюджета)` : ''}`);
+    L.push(`Всего дней командировок: ${j.trip_days_count}. Временное увеличение веса после перелётов и ресторанной еды не считать доказанным набором жира.`);
+  }
   L.push('');
   L.push('## Тренировки');
   if (!o.include.workouts) L.push('Пользователь не включил тренировки в отчёт.');
@@ -204,6 +226,8 @@ function buildMarkdown(data: AppData, o: ReportOptions, j: any, rows: TrainingRo
     const s = j.workout_summary;
     L.push(`Срок наступил: ${s.due}. Выполнено: ${s.done} (силовых ${s.strength_done}, степпер ${s.stepper_done}). Пропущено: ${s.skipped}. Без отметки: ${s.not_logged}. Перенесено: ${s.moved}. Отложено: ${s.postponed}. Впереди: ${s.upcoming}.`);
     L.push(`Минуты степпера (кардио): ${s.stepper_minutes}; разминка: ${s.warmup_minutes}. Отмечено подходов: ${s.sets_marked}. Дни восстановления отмечены: ${s.recovery_marked}.`);
+    if (s.planned_rest_trip_days) L.push(`Плановый отдых / командировка: ${s.planned_rest_trip_days} дн. — не пропуски.`);
+    if (j.trainings_replaced_by_planned_rest.length) L.push(`Заменены плановым отдыхом: ${j.trainings_replaced_by_planned_rest.map((r: any) => `${fmtShort(r.date)} ${r.planned} (${r.reason})`).join('; ')}.`);
     L.push('');
     const shown = rows.filter((r) => r.status !== 'planned' && r.kind !== 'recovery');
     if (shown.length) {
@@ -229,9 +253,10 @@ function buildMarkdown(data: AppData, o: ReportOptions, j: any, rows: TrainingRo
   if (!o.include.nutrition) L.push('Пользователь не включил питание в отчёт.');
   else {
     const n = j.nutrition_adherence;
-    L.push(`Плановых приёмов пищи (по сегодняшний день): ${n.planned}. Съедено по плану: ${n.done}. Пропущено/заменено: ${n.skipped}. Без отметки: ${n.unknown}.${n.percent_of_marked != null ? ` Выполнение среди отмеченных: ${n.percent_of_marked}%.` : ''}`);
+    L.push(`Дома — плановых приёмов пищи (по сегодняшний день): ${n.planned}. Съедено по плану: ${n.done}. Пропущено/заменено: ${n.skipped}. Без отметки: ${n.unknown}.${n.percent_of_marked != null ? ` Выполнение среди отмеченных: ${n.percent_of_marked}%.` : ''}`);
+    if (n.trip?.days) L.push(`В командировках (${n.trip.days} дн.): предложенный вариант — ${n.trip.suggested_variant}, другое подходящее блюдо — ${n.trip.other_suitable_dish}, пропущено — ${n.trip.skipped}, без отметки — ${n.trip.unknown}. Граммовки в поездке ориентировочные.`);
     if (n.relax_days?.length) L.push(`Релакс-дни без учёта: ${n.relax_days.map(fmtShort).join(', ')}.`);
-    L.push('КБЖУ не ведётся; ориентир ≈' + data.settings.goals.kcalReference + ' ккал/сутки — оценочный.');
+    L.push('Калорийность домашнего меню — по справочным данным (≈' + data.settings.goals.kcalReference + ' ккал/сутки); вручную КБЖУ не ведётся.');
   }
   L.push('');
   L.push('## Готовка и закупки');
@@ -313,7 +338,7 @@ export const PLAN_UPDATE_SCHEMA_DOC = `## Схема plan_update.json для о�
 Правила:
 - \`template_id\`: ${['strength_a', 'strength_b', 'stepper', 'recovery'].join(', ')}; в расписании ещё \`rest\` (отдых).
 - \`exercise_id\`: ${Object.keys(EXERCISES).join(', ')}. Других упражнений и инвентаря (гантели, штанга, скамья, тренажёры) нет.
-- \`workout_template\`: либо \`item_updates\` (меняются только перечисленные упражнения), либо \`items\` (полный новый список). Поля упражнения: \`sets\`, \`reps\` или \`seconds\` или \`minutes\`, \`per_side\` («руку», «ногу», «сторону»), \`weight_kg\` — число или диапазон \`[от, до]\`, не больше 24, \`note\`.
+- \`workout_template\`: либо \`item_updates\` (меняются только перечисленные упражнения), либо \`items\` (полный новый список). Поля упражнения: \`sets\`, \`reps\` или \`seconds\` или \`minutes\`, \`per_side\` («руку», «ногу», «сторону»), \`weight_kg\` — одно число 12 или 16 (есть две гири) либо null — без гири; диапазоны не допускаются, \`note\`.
 - Резкий рост нагрузки (+2 подхода, +50 % повторов, +4 кг и т. п.) приложение подсвечивает и требует отдельного подтверждения.
 - \`meal_prep_event\` и \`shopping_event\`: событие с той же датой заменяется; \`"action": "remove"\` — отменить.
 - Приём пищи в \`meal_plan\` — текст блюда; составные обеды и ужины записывайте через « + ».

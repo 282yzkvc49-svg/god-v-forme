@@ -183,6 +183,26 @@ export function setAtHome(eventId: string, itemId: string, atHome: boolean) {
   return commit([{ store: 'shoppingChecks', put: { id, eventId, itemId, actualPrice: prev?.actualPrice ?? null, bought: atHome ? false : prev?.bought ?? false, atHome, updatedAt: nowStamp() } }]);
 }
 
+/** Применить подготовленные операции (командировка, релакс-день) — после предпросмотра. */
+export function applyOps(ops: Op[]) {
+  return commit(ops);
+}
+
+/** Командировочный приём пищи: предложенный вариант, другое подходящее блюдо или пропуск. */
+export function setTripMeal(t: DayTask, choice: 'suggested' | 'other' | 'skipped' | null, variantId: string | null, comment: string | null) {
+  if (!choice) return commit([{ store: 'taskStatus', del: t.id }]);
+  return commit([{ store: 'taskStatus', put: {
+    taskId: t.id, date: t.originDate, kind: t.kind, status: choice === 'skipped' ? 'skipped' : 'done',
+    choice: choice === 'skipped' ? null : choice, variantId: choice === 'suggested' ? variantId : null, comment: comment?.trim() || null, updatedAt: nowStamp(),
+  } }]);
+}
+
+export function setTripExpenses(tripId: string, rub: number | null) {
+  const t = getData().trips[tripId];
+  if (!t) return Promise.resolve();
+  return commit([{ store: 'trips', put: { ...t, foodExpensesRub: rub, updatedAt: nowStamp() } }]);
+}
+
 /** Применить новую дату старта или релакс-день: план пересобирается, история и отметки остаются. */
 export function applyPlan(cfg: PlanSettings) {
   const res = replanOps(getData(), cfg, todayFn());

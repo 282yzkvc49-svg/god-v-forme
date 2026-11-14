@@ -396,6 +396,7 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 .cal-day.out { background: transparent; color: var(--ink-3); opacity: 0.55; }
 .cal-day.noplan { background: var(--surface-2); }
 .cal-day.relax { background: var(--rose-soft); }
+.cal-day.trip { background: var(--sea-soft, rgba(30, 120, 160, .10)); }
 .cal-day.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .cal-day.sel { background: var(--ink); color: var(--surface); }
 .cal-day.sel .cal-icons { color: var(--surface); }
@@ -406,6 +407,7 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 .cal-icons .i-cook { color: var(--amber); }
 .cal-icons .i-shop { color: var(--sea); }
 .cal-icons .i-relax { color: var(--rose); }
+.cal-icons .i-trip { color: var(--sea); }
 .cal-icons .i-weigh { color: var(--plum); }
 .cal-day.sel .cal-icons span { color: inherit; }
 .cal-bar { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 3px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
@@ -655,3 +657,8 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
   .print-only { display: block !important; }
 }
 .print-only { display: none; }
+
+/* командировка: варианты приёма пищи */
+.trip-variant { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.trip-variant input { margin-top: 4px; }
+.trip-variant.on { border-color: var(--accent); background: var(--accent-soft, rgba(40, 120, 80, .08)); }

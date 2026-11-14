@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { apply, freshData, NOW } from './helpers';
-import { displayStatus, statusOf, tasksForDate, dayProgress, baseTasksForDate } from '../src/domain/tasks';
+import { displayStatus, statusOf, tasksForDate, dayProgress, baseTasksForDate, scheduledTraining } from '../src/domain/tasks';
 
 test('день плана: 4 приёма пищи, тренировка, контейнеры, взвешивание по понедельникам', () => {
   const d = freshData();
@@ -23,11 +23,12 @@ test('04.11 — готовка, 15.11 — вторая закупка, 01.11 —
   assert.ok(tasksForDate(d, '2026-11-28').some((t) => t.kind === 'cooking'), '28.11 — сдвинутая готовка');
 });
 
-test('29.11 — релакс-день: нет приёмов пищи, готовки и контейнеров; тренировки — по своему расписанию', () => {
+test('29.11 — релакс-день: нет приёмов пищи, готовки, контейнеров и обязательной тренировки', () => {
   const d = freshData();
   const t = tasksForDate(d, '2026-11-29');
   assert.ok(!t.some((x) => x.kind === 'meal' || x.kind === 'cooking' || x.kind === 'containers'));
-  assert.equal(t.find((x) => x.kind === 'training')?.templateId, 'recovery', 'воскресенье — восстановление');
+  assert.ok(!t.some((x) => x.kind === 'training'), 'релакс-день — отдых');
+  assert.equal(scheduledTraining(d, '2026-11-29')!.label, 'Релакс-день, отдых');
 });
 
 test('после 01.12 меню не копируется, тренировки продолжаются по расписанию', () => {

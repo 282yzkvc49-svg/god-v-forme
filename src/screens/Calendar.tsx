@@ -1,3 +1,4 @@
+import { PiSuitcase } from '../ui/icons';
 import { useMemo, type ReactNode } from 'react';
 import { useApp } from '../state/store';
 import { useToday } from '../lib/clock';
@@ -17,9 +18,10 @@ function DayIcons({ data, date }: { data: AppData; date: ISODate }) {
   const tasks = tasksForDate(data, date);
   const train = tasks.find((t) => t.kind === 'training');
   const icons: ReactNode[] = [];
+  if (p?.tripId) icons.push(<span key="trip" className="i-trip" title={`Командировка: ${data.trips[p.tripId]?.city ?? ''}`}><PiSuitcase /></span>);
   if (p?.relax) icons.push(<span key="r" className="i-relax" title="Релакс-день"><PiSun /></span>);
-  else if (p?.meals) icons.push(<span key="m" title="Меню"><PiForkKnife /></span>);
-  if (train) {
+  else if (p?.meals && !p.tripId) icons.push(<span key="m" title="Меню"><PiForkKnife /></span>);
+  if (train && !train.tripId) {
     icons.push(
       <span key="t" className="i-train" title={train.title}>
         {train.templateId === 'stepper' ? <StepperIcon size={16} /> : train.templateId === 'recovery' ? <PiPersonSimpleWalk /> : <KettlebellIcon size={16} />}
@@ -111,7 +113,7 @@ function MonthView({ data, anchor, sel, today, onSelect, onNav }: { data: AppDat
           const p = planDay(data, d);
           const pr = dayProgress(data, d);
           const out = parts(d).m !== m;
-          const cls = ['cal-day', out && 'out', !p && 'noplan', p?.relax && 'relax', d === today && 'today', d === sel && 'sel'].filter(Boolean).join(' ');
+          const cls = ['cal-day', out && 'out', !p && 'noplan', p?.relax && 'relax', p?.tripId && 'trip', d === today && 'today', d === sel && 'sel'].filter(Boolean).join(' ');
           return (
             <button key={d} className={cls} onClick={() => onSelect(d)} aria-label={dayLabel(data, d)} aria-current={d === today ? 'date' : undefined}>
               <span className="cal-num">{parts(d).d}</span>

@@ -134,6 +134,7 @@ export function defaultSettings(): Settings {
     trainingStartDate: null,
     postponeCardio: false,
     plan: null,
+    relaxOverrides: {},
     training: { startDate: TEMPLATE.base_start, strengthDays: [1, 3, 5], cardioDays: [2, 6] },
     restDefaultSec: 75,
     restAutoStart: true,

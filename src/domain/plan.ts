@@ -1,48 +1,40 @@
-// План питания на реальные даты: шаблон (дни 1–30 и день 0 «накануне») → дни, готовки и закупки.
-// Всё считается от даты старта и номера релакс-дня; тренировки от этого не зависят.
+// План питания на реальные даты: шаблон меню (29 дней) → домашние дни цикла, готовки и закупки.
+// Цикл — 30 календарных дней от даты старта. Командировки и релакс-дни (один в календарный месяц,
+// по умолчанию последнее воскресенье) — календарные: в эти дни домашнего меню нет, а меню шаблона
+// идёт дальше по домашним дням. Готовка ставится на ближайшее возможное время до первого приёма
+// пищи (не в командировке и не в релакс-день); порции, которые не доживут в холодильнике или
+// пережидают поездку, — в морозилку. Тренировки от этого не зависят.
 import type { Op } from '../state/idb';
 import type {
   AppData, CookingEvent, CookItem, CookUse, MealCard, MealCardPart, MealSlot, PlanDay, PlanSettings, ShopLine,
-  ShoppingEvent, ShoppingItem, ShoppingNeed,
+  ShoppingEvent, ShoppingItem, ShoppingNeed, Trip,
 } from '../state/types';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
 import { addDays, diffDays, fmtShort, isWeekend, type ISODate } from '../lib/dates';
 import {
   DISHES, PRODUCTS, TEMPLATE, dishNutrition, dishProducts, roundBatch, sumNutrition, type DishNutrition, type TplBlock,
 } from './catalog';
+import { relaxDatesBetween, tripBetween, tripDates, tripList, tripMeal, tripOn, tripShoppingPlan } from './trips';
 
 export const BASE_START: ISODate = TEMPLATE.base_start;
 export const PLAN_LENGTH = TEMPLATE.length;
 export const DEFAULT_RELAX = TEMPLATE.relax_day;
 export const BUDGET_RUB = TEMPLATE.budget_rub;
 export const KCAL_TARGET = TEMPLATE.kcal_target;
-/** Вторая основная закупка — к первой основной готовке начиная с этого дня шаблона. */
+/** Вторая основная закупка — к первой основной готовке не раньше этого дня цикла. */
 export const SECOND_SHOP_DAY = 14;
 export const DRINKS_TEXT = 'Вода, травяные чаи и морсы без сахара. Без кофе, энергетиков, сладких лимонадов и алкоголя.';
+export const TRIP_DRINKS_TEXT = 'Вода, столовая минеральная вода, травяные чаи без сахара. Без алкоголя, кофе, энергетиков и сладких лимонадов.';
 
 const MENU_DAYS: number[] = TEMPLATE.days.filter((d) => !d.relax).map((d) => d.day);
+const SLOT_ORDER: Record<MealSlot, number> = { breakfast: 1, lunch: 3, snack: 5, dinner: 7 };
 
 export function instanceIdFor(start: ISODate): string {
   return `p${start.replace(/-/g, '')}`;
 }
 
-export function makePlanSettings(startDate: ISODate, relaxDay: number, now: string, confirmed = true): PlanSettings {
-  return { startDate, relaxDay, instanceId: instanceIdFor(startDate), confirmed, setAt: now };
-}
-
-/** Позиция дня в плане (1–30) для дня шаблона; 0 — «накануне старта». Релакс-день сдвигает меню после себя. */
-export function positionOf(templateDay: number, relaxDay: number): number {
-  if (templateDay <= 0) return templateDay;
-  const k = MENU_DAYS.indexOf(templateDay) + 1;
-  if (k <= 0) return relaxDay;
-  return k < relaxDay ? k : k + 1;
-}
-
-/** Обратное: какой день шаблона стоит на позиции (null — релакс-день). */
-export function templateDayAt(pos: number, relaxDay: number): number | null {
-  if (pos === relaxDay) return null;
-  const k = pos < relaxDay ? pos : pos - 1;
-  return MENU_DAYS[k - 1] ?? null;
+export function makePlanSettings(startDate: ISODate, now: string, confirmed = true): PlanSettings {
+  return { startDate, instanceId: instanceIdFor(startDate), confirmed, setAt: now };
 }
 
 export function dateAt(cfg: PlanSettings, pos: number): ISODate {
@@ -53,15 +45,63 @@ export function planEnd(cfg: PlanSettings): ISODate {
   return addDays(cfg.startDate, PLAN_LENGTH - 1);
 }
 
-export function relaxDate(cfg: PlanSettings): ISODate {
-  return dateAt(cfg, cfg.relaxDay);
-}
-
 /** Номер дня плана для даты (1–30) или null. */
 export function planPosition(cfg: PlanSettings | null, date: ISODate): number | null {
   if (!cfg) return null;
   const n = diffDays(date, cfg.startDate) + 1;
   return n >= 1 && n <= PLAN_LENGTH ? n : null;
+}
+
+// ------------------------------------------------------------------ календарь цикла
+
+export interface PlanContext {
+  trips: Trip[];
+  relaxOverrides: Record<string, ISODate>;
+  today: ISODate | null;
+}
+
+export function planContext(data: AppData, today: ISODate | null): PlanContext {
+  return { trips: tripList(data.trips ?? {}), relaxOverrides: data.settings.relaxOverrides ?? {}, today };
+}
+
+export function emptyContext(today: ISODate | null = null): PlanContext {
+  return { trips: [], relaxOverrides: {}, today };
+}
+
+export interface CycleDay {
+  date: ISODate;
+  pos: number;
+  kind: 'home' | 'trip' | 'relax' | 'free';
+  relax: boolean;
+  trip: Trip | null;
+  templateDay: number | null;
+}
+
+export interface CycleLayout {
+  days: CycleDay[];
+  /** День шаблона → дата домашнего дня. */
+  homeOf: Map<number, ISODate>;
+  relaxDates: ISODate[];
+}
+
+export function layoutCycle(cfg: PlanSettings, ctx: PlanContext): CycleLayout {
+  const end = planEnd(cfg);
+  const relaxDates = relaxDatesBetween(ctx, cfg.startDate, end);
+  const days: CycleDay[] = [];
+  const homeOf = new Map<number, ISODate>();
+  let k = 0;
+  for (let pos = 1; pos <= PLAN_LENGTH; pos++) {
+    const date = dateAt(cfg, pos);
+    const trip = tripOn(ctx.trips, date);
+    const relax = relaxDates.includes(date);
+    if (trip) { days.push({ date, pos, kind: 'trip', relax, trip, templateDay: null }); continue; }
+    if (relax) { days.push({ date, pos, kind: 'relax', relax, trip: null, templateDay: null }); continue; }
+    const td = MENU_DAYS[k++];
+    if (td == null) { days.push({ date, pos, kind: 'free', relax: false, trip: null, templateDay: null }); continue; }
+    homeOf.set(td, date);
+    days.push({ date, pos, kind: 'home', relax: false, trip: null, templateDay: td });
+  }
+  return { days, homeOf, relaxDates };
 }
 
 // ------------------------------------------------------------------ экземпляр плана
@@ -70,43 +110,74 @@ export interface PlanIssue { level: 'info' | 'warn' | 'error'; text: string }
 
 export interface PlanInstance {
   cfg: PlanSettings;
+  ctx: PlanContext;
+  layout: CycleLayout;
   planDays: PlanDay[];
   cookingEvents: CookingEvent[];
   shoppingEvents: ShoppingEvent[];
   issues: PlanIssue[];
+  /** Домашние закупки (без командировочных перекусов). */
   totalCost: number;
+  tripCost: number;
 }
 
 function cookId(cfg: PlanSettings, blockId: string) { return `cook-${cfg.instanceId}-${blockId}`; }
 
-interface Scheduled { block: TplBlock; date: ISODate; time: string; note: string | null; pos: number }
+interface Scheduled { date: ISODate; time: string; note: string | null }
 
-function scheduleBlock(cfg: PlanSettings, b: TplBlock, today: ISODate | null): Scheduled {
-  const pos = positionOf(b.day, cfg.relaxDay);
-  let date = dateAt(cfg, pos);
-  let time: string;
-  let note: string | null = null;
-  if (b.when === 'morning') {
-    if (isWeekend(date)) time = '10:00';
-    else {
-      date = addDays(date, -1);
-      time = '19:00';
-      note = 'Блюда нужны уже к обеду, а в будний день утром готовить некогда, — готовка накануне вечером.';
-    }
-  } else time = b.kind === 'quick' ? '19:30' : isWeekend(date) ? '17:00' : '19:00';
-  if (b.day === 0 && today && date < today && cfg.startDate >= today) {
-    date = today;
-    time = '10:00';
-    note = 'План начинается сегодня — первую закупку и готовку нужно сделать сегодня до обеда.';
-  }
-  return { block: b, date, time, note, pos };
+function canCookOn(cfg: PlanSettings, ctx: PlanContext, layout: CycleLayout, date: ISODate): boolean {
+  if (date < addDays(cfg.startDate, -1) || date > planEnd(cfg)) return false;
+  if (tripOn(ctx.trips, date)) return false;
+  return !layout.relaxDates.includes(date);
 }
 
-function storageFor(dishId: string, cookDate: ISODate, useDate: ISODate): CookUse['storage'] {
+/**
+ * Время готовки: самое позднее возможное до первого приёма пищи из этой готовки.
+ * Утром — только в выходные (10:00), вечером — 17:00 в выходные и 19:00 в будни, быстрая — 19:30.
+ */
+function scheduleBlock(cfg: PlanSettings, ctx: PlanContext, layout: CycleLayout, b: TplBlock, first: { date: ISODate; slot: MealSlot }): Scheduled {
+  const quick = b.kind === 'quick';
+  let found: Scheduled | null = null;
+  for (let d = first.date; d >= addDays(cfg.startDate, -1); d = addDays(d, -1)) {
+    if (!canCookOn(cfg, ctx, layout, d)) continue;
+    const sameDay = d === first.date;
+    const slot = SLOT_ORDER[first.slot];
+    if (sameDay) {
+      if (slot > 6) { found = { date: d, time: quick ? '19:30' : isWeekend(d) ? '17:00' : '19:00', note: null }; break; }
+      if (slot > 2 && isWeekend(d)) { found = { date: d, time: '10:00', note: null }; break; }
+      continue;
+    }
+    found = { date: d, time: quick ? '19:30' : isWeekend(d) ? '17:00' : '19:00', note: null };
+    break;
+  }
+  if (!found) {
+    found = { date: first.date, time: '07:30', note: 'Раньше приготовить не получается (командировка или релакс-день) — готовка утром до работы.' };
+  }
+  const gapDays = diffDays(first.date, found.date);
+  if (tripBetween(ctx.trips, found.date, first.date)) {
+    found.note = 'Готовка до поездки: порции на дни после командировки — сразу в морозилку.';
+  } else if (!quick && gapDays === 1 && !isWeekend(first.date) && SLOT_ORDER[first.slot] <= 3 && !found.note) {
+    found.note = 'Блюда нужны уже к обеду, а в будний день утром готовить некогда, — готовка накануне вечером.';
+  }
+  const today = ctx.today;
+  if (b.day === 0 && today && found.date < today && cfg.startDate >= today) {
+    found = { date: today, time: '10:00', note: 'План начинается сегодня — первую закупку и готовку нужно сделать сегодня до обеда.' };
+  }
+  return found;
+}
+
+function storageFor(ctx: PlanContext, dishId: string, cookDate: ISODate, useDate: ISODate): CookUse['storage'] {
   const st = DISHES[dishId].storage;
   const gap = diffDays(useDate, cookDate);
   if (st.place === 'pantry') return 'pantry';
+  if (tripBetween(ctx.trips, cookDate, useDate)) return 'freeze'; // готовая еда не ждёт в холодильнике всю поездку
   return gap <= st.days ? 'fridge' : 'freeze';
+}
+
+/** Когда размораживать готовую порцию: вечером накануне, если вы дома; иначе — разогреть сразу из морозилки. */
+function thawDate(ctx: PlanContext, useDate: ISODate): ISODate | null {
+  const prev = addDays(useDate, -1);
+  return tripOn(ctx.trips, prev) ? null : prev;
 }
 
 function plural(n: number, one: string, few: string, many: string) {
@@ -120,24 +191,38 @@ function rangeText(dates: ISODate[]): string {
   return s[0] === s[s.length - 1] ? fmtShort(s[0]) : `${fmtShort(s[0])}–${fmtShort(s[s.length - 1])}`;
 }
 
-export function buildInstance(cfg: PlanSettings, today: ISODate | null = null): PlanInstance {
+function tripPlanDay(cfg: PlanSettings, t: Trip, date: ISODate, pos: number | null, relax: boolean): PlanDay {
+  const meals = Object.fromEntries(MEAL_SLOTS.map((s) => [s, tripMeal(t, s).title])) as Record<MealSlot, string>;
+  const n = diffDays(date, t.from) + 1;
+  return {
+    date, source: 'seed', patchId: null, dayNumber: pos, relax, meals, relaxMealsText: null, training: null,
+    drinks: TRIP_DRINKS_TEXT, note: `Командировка: ${t.city}, день ${n} из ${diffDays(t.to, t.from) + 1}.${relax ? ' Совпадает с релакс-днём.' : ''}`,
+    kcalNote: null, instanceId: cfg.instanceId, templateDay: null, mealCards: null, tripId: t.id,
+  };
+}
+
+export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODate | null = null): PlanInstance {
+  const ctx: PlanContext = ctxOrToday && typeof ctxOrToday === 'object' ? ctxOrToday : emptyContext(ctxOrToday as ISODate | null);
   const issues: PlanIssue[] = [];
+  const layout = layoutCycle(cfg, ctx);
   // ---- дни
   const planDays: PlanDay[] = [];
   const cardsByDate = new Map<ISODate, Record<MealSlot, MealCard>>();
-  for (let pos = 1; pos <= PLAN_LENGTH; pos++) {
-    const date = dateAt(cfg, pos);
-    const td = templateDayAt(pos, cfg.relaxDay);
-    if (td == null) {
+  for (const cd of layout.days) {
+    const { date, pos } = cd;
+    if (cd.kind === 'trip') { planDays.push(tripPlanDay(cfg, cd.trip!, date, pos, cd.relax)); continue; }
+    if (cd.kind === 'relax' || cd.kind === 'free') {
       planDays.push({
-        date, source: 'seed', patchId: null, dayNumber: pos, relax: true, meals: null,
+        date, source: 'seed', patchId: null, dayNumber: pos, relax: cd.kind === 'relax', meals: null,
         relaxMealsText: { breakfast: 'Свободный выбор', lunch: 'Свободный выбор', snack: 'По желанию', dinner: 'Свободный выбор' },
-        training: null, drinks: 'Свободное меню, но без алкоголя. Вода, чаи и морсы без сахара.', note: 'Релакс-день: меню свободное, алкоголь исключён.',
+        training: null, drinks: 'Свободное меню, но без алкоголя. Вода, чаи и морсы без сахара.',
+        note: cd.kind === 'relax' ? 'Релакс-день: любимая еда без обязательного меню и подсчёта калорий; алкоголь исключён. Это часть плана, а не нарушение.' : 'День без меню шаблона: питание по принципам плана.',
         kcalNote: null, instanceId: cfg.instanceId, templateDay: null, mealCards: null,
       });
+      if (cd.kind === 'free') issues.push({ level: 'info', text: `${fmtShort(date)}: в цикле больше домашних дней, чем в шаблоне меню, — день без меню.` });
       continue;
     }
-    const tday = TEMPLATE.days.find((d) => d.day === td)!;
+    const tday = TEMPLATE.days.find((d) => d.day === cd.templateDay)!;
     const cards = {} as Record<MealSlot, MealCard>;
     for (const slot of MEAL_SLOTS) {
       const parts: MealCardPart[] = tday.meals![slot].parts.map((p) => ({ dishId: p.dish, qty: p.qty, fresh: p.fresh, cookEventId: null, storage: null, thawOn: null }));
@@ -148,29 +233,38 @@ export function buildInstance(cfg: PlanSettings, today: ISODate | null = null): 
       date, source: 'seed', patchId: null, dayNumber: pos, relax: false,
       meals: Object.fromEntries(MEAL_SLOTS.map((s) => [s, cards[s].title])) as Record<MealSlot, string>,
       relaxMealsText: null, training: null, drinks: DRINKS_TEXT, note: null, kcalNote: null,
-      instanceId: cfg.instanceId, templateDay: td, mealCards: cards,
+      instanceId: cfg.instanceId, templateDay: cd.templateDay, mealCards: cards,
     });
   }
+  // командировки вне цикла — тоже с командировочным меню
+  const inCycle = new Set(planDays.map((d) => d.date));
+  for (const t of ctx.trips) for (const date of tripDates(t)) if (!inCycle.has(date)) planDays.push(tripPlanDay(cfg, t, date, null, false));
+  planDays.sort((a, b) => a.date.localeCompare(b.date));
 
   // ---- готовки
   const cookingEvents: CookingEvent[] = [];
   for (const b of TEMPLATE.blocks) {
-    const sc = scheduleBlock(cfg, b, today);
+    const mapped = b.items.map((it) => ({ dish: it.dish, uses: it.uses.filter((u) => layout.homeOf.has(u.day)) })).filter((it) => it.uses.length);
+    if (!mapped.length) continue;
+    const firsts = mapped.flatMap((it) => it.uses).map((u) => ({ date: layout.homeOf.get(u.day)!, slot: u.slot }));
+    const first = firsts.reduce((a, c) => (c.date < a.date || (c.date === a.date && SLOT_ORDER[c.slot] < SLOT_ORDER[a.slot]) ? c : a));
+    const sc = scheduleBlock(cfg, ctx, layout, b, first);
     const id = cookId(cfg, b.id);
     const items: CookItem[] = [];
     const useDates: ISODate[] = [];
     let frozen = 0;
-    for (const it of b.items) {
+    for (const it of mapped) {
       const uses: CookUse[] = it.uses.map((u) => {
-        const date = dateAt(cfg, positionOf(u.day, cfg.relaxDay));
-        const storage = storageFor(it.dish, sc.date, date);
+        const date = layout.homeOf.get(u.day)!;
+        const storage = storageFor(ctx, it.dish, sc.date, date);
+        const thawOn = storage === 'freeze' ? thawDate(ctx, date) : null;
         if (storage === 'freeze') frozen++;
         if (storage === 'freeze' && !DISHES[it.dish].storage.freezable) issues.push({ level: 'error', text: `${DISHES[it.dish].title}: не хранится до ${fmtShort(date)}` });
         if (storage !== 'pantry') useDates.push(date);
         const card = cardsByDate.get(date)?.[u.slot];
         const part = card?.parts.find((p) => (u.via ? p.dishId === u.via : p.dishId === it.dish && !p.fresh));
-        if (part && !u.via) { part.cookEventId = id; part.storage = storage; part.thawOn = storage === 'freeze' ? addDays(date, -1) : null; }
-        return { date, slot: u.slot, qty: u.qty, via: u.via, storage, thawOn: storage === 'freeze' ? addDays(date, -1) : null };
+        if (part && !u.via) { part.cookEventId = id; part.storage = storage; part.thawOn = thawOn; }
+        return { date, slot: u.slot, qty: u.qty, via: u.via, storage, thawOn };
       });
       items.push({ dishId: it.dish, qty: Math.round(uses.reduce((s, u) => s + u.qty, 0) * 1000) / 1000, uses });
     }
@@ -189,7 +283,7 @@ export function buildInstance(cfg: PlanSettings, today: ISODate | null = null): 
   cookingEvents.sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')));
 
   // ---- закупки
-  const shopping = buildShopping(cfg, planDays, cookingEvents, today, issues);
+  const shopping = buildShopping(cfg, ctx, planDays, cookingEvents, issues);
 
   // разморозка сырых продуктов к готовке
   for (const ce of cookingEvents) {
@@ -198,9 +292,11 @@ export function buildInstance(cfg: PlanSettings, today: ISODate | null = null): 
     ce.thawProducts = Array.from(thaw, ([productId, qty]) => ({ productId, qty: Math.round(qty) }));
   }
   for (const d of planDays) if (d.mealCards) for (const s of MEAL_SLOTS) d.meals![s] = d.mealCards[s].title;
-  const totalCost = shopping.events.reduce((s, e) => s + (e.lines ?? []).reduce((x, l) => x + l.cost, 0), 0);
-  if (totalCost > BUDGET_RUB) issues.push({ level: 'warn', text: `Ориентировочная сумма закупок ${Math.round(totalCost)} ₽ больше бюджета ${BUDGET_RUB} ₽. Можно заменить сёмгу на форель или хек и часть греческого йогурта — на кефир.` });
-  return { cfg, planDays, cookingEvents, shoppingEvents: shopping.events, issues, totalCost };
+  const sum = (kinds: string[]) => shopping.events.filter((e) => kinds.includes(e.kind ?? 'main')).reduce((s, e) => s + (e.lines ?? []).reduce((x, l) => x + l.cost, 0), 0);
+  const totalCost = sum(['main', 'topup']);
+  const tripCost = sum(['trip']);
+  if (totalCost > BUDGET_RUB) issues.push({ level: 'warn', text: `Ориентировочная сумма домашних закупок ${Math.round(totalCost)} ₽ больше бюджета ${BUDGET_RUB} ₽. Можно заменить сёмгу на хек или скумбрию и часть греческого йогурта — на кефир.` });
+  return { cfg, ctx, layout, planDays, cookingEvents, shoppingEvents: shopping.events, issues, totalCost, tripCost };
 }
 
 export function mealTitle(parts: MealCardPart[]): string {
@@ -221,7 +317,7 @@ function gross(productId: string, net: number): number {
   return p.unit === 'pcs' || p.edible_ratio >= 1 ? net : net / p.edible_ratio;
 }
 
-export function collectNeeds(planDays: PlanDay[], cookingEvents: CookingEvent[]): Need[] {
+export function collectNeeds(planDays: PlanDay[], cookingEvents: CookingEvent[], trips: Trip[] = []): Need[] {
   const needs: Need[] = [];
   for (const ce of cookingEvents) {
     const tot = new Map<string, number>();
@@ -233,8 +329,9 @@ export function collectNeeds(planDays: PlanDay[], cookingEvents: CookingEvent[])
     for (const slot of MEAL_SLOTS) {
       for (const part of d.mealCards[slot].parts) {
         if (!part.fresh) continue;
-        // завтрак, обед и перекус в будни собираются накануне вечером
-        const date = slot === 'dinner' ? d.date : addDays(d.date, -1);
+        // завтрак, обед и перекус собираются накануне вечером; в командировке купить нельзя — раньше
+        let date = slot === 'dinner' ? d.date : addDays(d.date, -1);
+        for (let i = 0; i < 62 && tripOn(trips, date); i++) date = addDays(date, -1);
         for (const [k, v] of dishProducts(part.dishId, part.qty, false)) needs.push({ productId: k, qty: gross(k, v), date, label: `${MEAL_LABELS[slot]} ${fmtShort(d.date)}`, cookId: null });
       }
     }
@@ -250,19 +347,21 @@ function isByWeight(productId: string) {
   return /по весу/.test(PRODUCTS[productId].pack.label);
 }
 
-function shopTime(date: ISODate, kind: 'main' | 'topup'): string {
+function shopTime(date: ISODate, kind: 'main' | 'topup' | 'trip'): string {
   if (kind === 'main') return isWeekend(date) ? '09:30' : '18:00';
   return isWeekend(date) ? '10:00' : '18:30';
 }
 
 interface ShopBuild { events: ShoppingEvent[]; thawNeeds: { cookId: string; productId: string; qty: number }[] }
 
-function buildShopping(cfg: PlanSettings, planDays: PlanDay[], cooks: CookingEvent[], today: ISODate | null, issues: PlanIssue[]): ShopBuild {
-  const needs = collectNeeds(planDays, cooks);
+function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[], cooks: CookingEvent[], issues: PlanIssue[]): ShopBuild {
+  const today = ctx.today;
+  const trips = ctx.trips;
+  const needs = collectNeeds(planDays, cooks, trips);
   const mainBlocks = cooks.filter((c) => c.kind === 'main');
   const m1Cook = cooks.find((c) => c.blockId === 'd0') ?? mainBlocks[0];
-  const second = TEMPLATE.blocks.filter((b) => b.kind === 'main' && b.day >= SECOND_SHOP_DAY).sort((a, b) => a.day - b.day)[0];
-  const m2Cook = cooks.find((c) => c.blockId === second?.id) ?? null;
+  if (!m1Cook) return { events: tripShopping(cfg, ctx), thawNeeds: [] };
+  const m2Cook = mainBlocks.find((c) => c !== m1Cook && c.date >= addDays(cfg.startDate, SECOND_SHOP_DAY - 1)) ?? null;
   const mains = [
     { id: `shop-${cfg.instanceId}-m1`, date: m1Cook.date, title: 'Основная закупка 1' },
     ...(m2Cook ? [{ id: `shop-${cfg.instanceId}-m2`, date: m2Cook.date, title: 'Основная закупка 2' }] : []),
@@ -279,10 +378,14 @@ function buildShopping(cfg: PlanSettings, planDays: PlanDay[], cooks: CookingEve
     const m = mainOf(n.date);
     const gap = diffDays(n.date, m.date);
     if (p.storage !== 'fridge' || gap <= p.shelf_days) continue;
-    if (p.freezable) freezeAt.set(n, m.id);
+    // к готовке сразу после поездки разморозить заранее некому — купить свежее в день готовки
+    const afterTrip = !!n.cookId && !!tripOn(trips, addDays(n.date, -1));
+    if (p.freezable && !afterTrip) freezeAt.set(n, m.id);
     else topupNeeds.push(n);
   }
-  const candidates = Array.from(new Set(TEMPLATE.topup_candidates.map((d) => dateAt(cfg, positionOf(d, cfg.relaxDay))))).sort();
+  // докупка — в дни готовки или в первый день дома после поездки
+  const backHome = trips.map((t) => addDays(t.to, 1)).filter((d) => d > mains[0].date && d <= planEnd(cfg) && !tripOn(trips, d));
+  const candidates = Array.from(new Set([...cooks.map((c) => c.date), ...backHome])).filter((d) => d > mains[0].date).sort();
   const chosen: ISODate[] = [];
   const topupOf = new Map<Need, ISODate>();
   const intervals = topupNeeds.map((n) => ({ n, from: addDays(n.date, -PRODUCTS[n.productId].shelf_days), to: n.date })).sort((a, b) => a.to.localeCompare(b.to));
@@ -384,12 +487,55 @@ function buildShopping(cfg: PlanSettings, planDays: PlanDay[], cooks: CookingEve
       items, lines, source: 'seed', patchId: null, instanceId: cfg.instanceId,
     });
   }
+  events.push(...tripShopping(cfg, ctx));
   if (topups.length) issues.push({ level: 'info', text: `Скоропортящиеся продукты (молочное, бананы, зелень, томаты и т. п.) нельзя купить на 2 недели вперёд: запланировано ${topups.length} ${plural(topups.length, 'небольшая докупка', 'небольшие докупки', 'небольших докупок')} свежего.` });
   if (today && mains[0].date < today && cfg.startDate >= today) issues.push({ level: 'warn', text: 'Первая закупка уже должна была пройти.' });
   return { events, thawNeeds };
 }
 
 const THAW_CATEGORIES = ['Рыба и морепродукты', 'Мясо и птица'];
+
+/** Небольшой список на поездку: перекусы (и завтраки без гостиницы) из супермаркета на месте. */
+function tripShopping(cfg: PlanSettings, ctx: PlanContext): ShoppingEvent[] {
+  const out: ShoppingEvent[] = [];
+  for (const t of ctx.trips) {
+    const plan = tripShoppingPlan(t);
+    const byProduct = new Map<string, Need[]>();
+    for (const p of plan) {
+      for (const it of p.variant.items) {
+        if (!it.productId || !it.qty || !PRODUCTS[it.productId]) continue;
+        const a = byProduct.get(it.productId) ?? [];
+        a.push({ productId: it.productId, qty: it.qty, date: p.date, label: `${MEAL_LABELS[p.slot]} ${fmtShort(p.date)} (${p.variant.title.toLowerCase()})`, cookId: null });
+        byProduct.set(it.productId, a);
+      }
+    }
+    const lines: ShopLine[] = [];
+    for (const [pid, ns] of byProduct) {
+      const p = PRODUCTS[pid];
+      const need = ns.reduce((s, n) => s + gross(pid, n.qty), 0);
+      let buy = need, packs: number | null = null;
+      if (isByWeight(pid) && p.piece_g) {
+        const pcs = Math.ceil(ns.reduce((s, n) => s + n.qty, 0) / p.piece_g - 0.05);
+        buy = Math.max(need, Math.round(pcs * p.piece_g / (p.edible_ratio || 1)));
+      } else if (!isByWeight(pid)) { packs = Math.ceil(need / p.pack.size - 1e-9); buy = packs * p.pack.size; }
+      const notes = [t.fridge ? 'В номере есть холодильник — можно купить на 2–3 дня.' : 'Холодильника нет — молочное и яйца покупайте в день, когда будете есть.'];
+      lines.push({
+        productId: pid, need: round1(need), fromStock: 0, buy: round1(buy), packs, cost: Math.round((p.unit === 'pcs' ? buy : buy / 1000) * p.price),
+        leftover: round1(Math.max(0, buy - need)), freezeNow: 0, notes,
+        needs: ns.map((n) => ({ date: n.date, label: n.label, qty: round1(gross(pid, n.qty)) })),
+      });
+    }
+    const cats = TEMPLATE.categories;
+    lines.sort((a, b) => cats.indexOf(PRODUCTS[a.productId].category) - cats.indexOf(PRODUCTS[b.productId].category));
+    out.push({
+      id: `shop-trip-${t.id}`, date: t.from, title: `Перекусы в командировку: ${t.city}`, kind: 'trip', tripId: t.id, time: null,
+      forDatesText: rangeText([t.from, t.to]), covers: { from: t.from, to: t.to },
+      items: lines.map((l) => ({ itemId: l.productId, category: PRODUCTS[l.productId].category, name: PRODUCTS[l.productId].name, unit: PRODUCTS[l.productId].unit === 'g' ? 'г' : PRODUCTS[l.productId].unit === 'ml' ? 'мл' : 'шт.', qty: l.buy, pricePerUnit: PRODUCTS[l.productId].price, priceEstimate: l.cost, note: null })),
+      lines, source: 'seed', patchId: null, instanceId: cfg.instanceId,
+    });
+  }
+  return out;
+}
 
 function round1(x: number) { return Math.round(x * 10) / 10; }
 
@@ -441,7 +587,7 @@ export interface ReplanResult {
   importedKept: number;
 }
 
-function hasDayMarks(data: AppData, date: ISODate): boolean {
+export function hasDayMarks(data: AppData, date: ISODate): boolean {
   return Object.values(data.taskStatus).some((s) => s.status !== 'planned' && (s.taskId.startsWith(`meal:${date}:`) || s.taskId === `box:${date}`));
 }
 
@@ -450,16 +596,19 @@ function hasDayMarks(data: AppData, date: ISODate): boolean {
  * Прошедшие дни с отметками остаются историей; тренировки, вес, фото и отметки не удаляются.
  * force — заменить и прошедшие дни (миграция: даты те же, меню подробнее).
  */
-export function replanOps(data: AppData, cfg: PlanSettings, today: ISODate, opts: { force?: boolean; now?: string } = {}): ReplanResult {
-  const inst = buildInstance(cfg, today);
+export function replanOps(data: AppData, cfg: PlanSettings, today: ISODate, opts: { force?: boolean; now?: string; ctx?: PlanContext } = {}): ReplanResult {
+  const inst = buildInstance(cfg, opts.ctx ?? planContext(data, today));
   const ops: Op[] = [];
   const newDays = new Map(inst.planDays.map((d) => [d.date, d]));
   let mealMarks = 0, importedKept = 0;
+  // прошедшие дни прежнего плана с отметками — история; без отметок прошлое тоже не трогаем
   const keepOld = (date: ISODate) => !opts.force && date < today && hasDayMarks(data, date);
   for (const old of Object.values(data.planDays)) {
     if (old.source !== 'seed') continue;
     if (keepOld(old.date)) { newDays.delete(old.date); continue; }
-    if (!newDays.has(old.date)) ops.push({ store: 'planDays', del: old.date });
+    if (newDays.has(old.date)) continue;
+    if (!opts.force && (old.date < today || hasDayMarks(data, old.date))) continue;
+    ops.push({ store: 'planDays', del: old.date });
   }
   for (const d of newDays.values()) {
     const old = data.planDays[d.date];

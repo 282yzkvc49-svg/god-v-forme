@@ -19,6 +19,7 @@ import {
   PiPlus, PiSun, PiBookOpen, PiSnowflake, StepperIcon,
 } from '../ui/icons';
 import { DayPlanSections, MealCardView, PlanStartSheet, ThawSheet } from './planViews';
+import { TripMealCard } from './Trips';
 import { DISHES, cookedWeight, dishAmount } from '../domain/catalog';
 import { planEnd } from '../domain/plan';
 import { TEMPLATE_NAMES } from '../domain/templates';
@@ -42,12 +43,13 @@ export function KindIcon({ t }: { t: Pick<DayTask, 'kind' | 'templateId'> }) {
 
 const STATUS_TEXT: Record<DisplayStatus, string> = {
   planned: '', done: 'готово', skipped: 'пропущено', in_progress: 'начата', postponed: 'отложено', unknown: 'не отмечено',
+  rest: 'плановый отдых',
 };
 
 function checkState(s: DisplayStatus): CheckState {
   if (s === 'done') return 'on';
   if (s === 'skipped') return 'skip';
-  if (s === 'unknown' || s === 'postponed') return 'idle';
+  if (s === 'unknown' || s === 'postponed' || s === 'rest') return 'idle';
   return 'off';
 }
 
@@ -101,6 +103,7 @@ function TaskRow({ t, compact, onMenu, onOpenMeal, onOpenWeigh, onOpenBox }: {
   };
 
   const toggle = () => {
+    if (t.kind === 'meal' && t.tripId) { onOpenMeal(); return; }
     if (t.postponed && raw === 'planned') { onMenu(); return; }
     if (t.kind === 'weigh' && raw !== 'done') { onOpenWeigh(); return; }
     if (t.kind === 'photo' && raw !== 'done') { go('/progress', { tab: 'photos', add: t.date }); return; }
@@ -131,7 +134,8 @@ function TaskRow({ t, compact, onMenu, onOpenMeal, onOpenWeigh, onOpenBox }: {
         <span className="task-top">
           <span className="task-title">{t.title}</span>
           {time && <span className="task-time">{time}</span>}
-          {STATUS_TEXT[ds] && <span className={`status-tag ${ds === 'done' ? 'done' : ''}`}>{STATUS_TEXT[ds]}{ds === 'postponed' && data.settings.trainingStartDate ? ` до ${fmtShort(data.settings.trainingStartDate)}` : ''}</span>}
+          {t.tripId && t.kind === 'meal' && data.taskStatus[t.id]?.choice === 'other' && <span className="status-tag done">другое блюдо</span>}
+          {STATUS_TEXT[ds] && !(t.tripId && t.kind === 'meal' && data.taskStatus[t.id]?.choice === 'other') && <span className={`status-tag ${ds === 'done' ? 'done' : ''}`}>{STATUS_TEXT[ds]}{ds === 'postponed' && data.settings.trainingStartDate ? ` до ${fmtShort(data.settings.trainingStartDate)}` : ''}</span>}
         </span>
         {sub && !compact && <span className="task-sub">{sub}</span>}
         {(t.movedFrom || data.taskMoves[t.id]) && (
@@ -249,6 +253,14 @@ export function MealParts({ parts, date }: { parts: MealPart[]; date?: ISODate }
 export function MealSheet({ task, onClose }: { task: DayTask | null; onClose: () => void }) {
   const data = useApp();
   if (!task || !task.slot || !task.dish) return null;
+  if (planDay(data, task.originDate)?.tripId) {
+    return (
+      <Sheet open onClose={onClose} title={`${MEAL_LABELS[task.slot]} в командировке`} wide>
+        <p className="muted mt0">{fmtLong(task.date)}. Граммы — ориентир на глаз, взвешивать и считать не нужно.</p>
+        <TripMealCard date={task.originDate} slot={task.slot} task={task} onDone={onClose} />
+      </Sheet>
+    );
+  }
   const card = planDay(data, task.originDate)?.mealCards?.[task.slot];
   if (card) {
     return (

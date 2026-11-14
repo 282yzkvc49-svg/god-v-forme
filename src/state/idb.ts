@@ -4,7 +4,7 @@
 import { STORE_KEYS } from './types';
 
 export const DB_NAME = 'god-v-forme';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 type Migration = (db: IDBDatabase, tx: IDBTransaction) => void;
 
@@ -14,7 +14,12 @@ const MIGRATIONS: Record<number, Migration> = {
       if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath });
     }
   },
-  // 2: (db, tx) => { ... } — пример будущей миграции: добавить хранилище/индекс, преобразовать записи.
+  // v2: хранилище командировок
+  2: (db) => {
+    for (const [name, keyPath] of Object.entries(STORE_KEYS)) {
+      if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath });
+    }
+  },
 };
 
 export type Op =

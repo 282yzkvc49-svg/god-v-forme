@@ -6,7 +6,7 @@ export {
   PiPrinter, PiShareNetwork, PiListChecks, PiFileZip, PiLock, PiPersonSimpleWalk, PiClock, PiImages, PiCamera,
   PiCalendarCheck, PiSnowflake, PiThermometer, PiBookOpen, PiMagnifyingGlass, PiArrowsClockwise, PiDotsThreeBold, PiSun,
   PiScales, PiPackage, PiArrowsLeftRight, PiSkipForward, PiCloudSlash, PiSparkle, PiLeaf, PiDrop, PiCalendarPlus, PiHeartbeat,
-  PiArrowRight, PiFlame, PiNotePencil, PiEye, PiEyeSlash, PiTimer,
+  PiArrowRight, PiFlame, PiNotePencil, PiEye, PiEyeSlash, PiTimer, PiSuitcase, PiAirplane,
 } from 'react-icons/pi';
 
 type P = { size?: number; className?: string };

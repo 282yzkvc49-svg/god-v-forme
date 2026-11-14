@@ -12,8 +12,9 @@ import { isStandalone } from '../lib/files';
 import { Note, Ring, toast } from '../ui/kit';
 import { AddTaskSheet, KindIcon, NoPlanCard, RelaxCard, TaskList, WeightSheet } from './shared';
 import { PlanStartSheet } from './planViews';
+import { PiSuitcase } from '../ui/icons';
 import { PLAN_LENGTH, planEnd } from '../domain/plan';
-import { fmtFull } from '../lib/dates';
+import { fmtFull, fmtShort } from '../lib/dates';
 import { MEAL_LABELS } from '../state/types';
 import { PiCalendarBlank, PiPlus, PiShareNetwork, PiShieldCheck, PiX } from '../ui/icons';
 
@@ -32,9 +33,11 @@ export function Today() {
   const [weigh, setWeigh] = useState(false);
   const [planSheet, setPlanSheet] = useState(false);
   const cfg = data.settings.plan;
-  const range = planRange(data);
   const p = planDay(data, today);
-  const beforePlan = !!range && today < range.from;
+  const startAt = cfg?.startDate ?? planRange(data)?.from ?? null;
+  const range = startAt ? { from: startAt } : null;
+  const beforePlan = !!startAt && today < startAt && !p?.mealCards && !p?.tripId;
+  const trip = p?.tripId ? data.trips[p.tripId] : null;
   const tasks = useMemo(() => tasksForDate(data, today), [data, today]);
   const prog = dayProgress(data, today);
   const now = pickNow(data, tasks, today, true);
@@ -82,7 +85,7 @@ export function Today() {
       {cfg && !cfg.confirmed && (
         <div className="banner">
           <PiCalendarBlank />
-          <span className="grow">Меню обновлено: у каждого приёма пищи — продукты с граммовками, порции готовок и закупки пересчитаны, тренировки — только с гирями 12 и 16 кг. План питания идёт с {fmtFull(cfg.startDate)} по {fmtFull(planEnd(cfg))}. Отметки сохранены.</span>
+          <span className="grow">Программа обновлена: старт питания и тренировок — {fmtFull(cfg.startDate)}, первый цикл по {fmtFull(planEnd(cfg))}.{Object.keys(data.trips).length ? ` Командировки: ${Object.values(data.trips).sort((a, b) => a.from.localeCompare(b.from)).map((t) => `${t.city} ${fmtShort(t.from)}–${fmtShort(t.to)}`).join(', ')} — командировочное питание, без готовки и обязательных тренировок.` : ''} Меню, готовка и закупки пересчитаны; прежние отметки, вес и фото сохранены.</span>
           <button className="btn small" onClick={() => A.updateSettings({ plan: { ...cfg, confirmed: true } })}>Оставить</button>
           <button className="btn small" onClick={() => setPlanSheet(true)}>Другая дата</button>
         </div>
@@ -107,7 +110,14 @@ export function Today() {
               </div>
             </div>
           )}
-          {p?.relax && <RelaxCard date={today} />}
+          {trip && (
+            <div className="card" style={{ borderLeft: '5px solid var(--sea)' }}>
+              <h2 className="mt0"><PiSuitcase style={{ display: 'inline', verticalAlign: '-4px' }} /> Командировка: {trip.city}</h2>
+              <p className="muted mt0">Завтрак {trip.hotelBreakfast ? 'в гостинице' : 'из супермаркета или кафе'}, обед и ужин — в кафе или доставкой, перекус из супермаркета. Отмечайте «предложенный вариант», «другое подходящее блюдо» или «пропустил» — отличие от вариантов не срыв. Тренировки — плановый отдых.</p>
+              <a className="btn" href={href(`/day/${today}`)}>Варианты на сегодня</a>
+            </div>
+          )}
+          {p?.relax && !trip && <RelaxCard date={today} />}
           {now && !p?.relax && <NowCard task={now} />}
           {!p && !beforePlan && <NoPlanCard date={today} onAdd={() => setAdding(true)} />}
           {tasks.length > 0 && (

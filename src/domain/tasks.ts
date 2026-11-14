@@ -9,6 +9,7 @@ import {
 } from '../lib/dates';
 import { isStrength, TEMPLATE_NAMES } from './templates';
 import { DISHES, PRODUCTS, fmtAmount } from './catalog';
+import { daysAfterTrip, isRelaxDate, relaxDatesBetween, tripDates, tripList, tripOn, tripTrainingNote } from './trips';
 
 export interface DayTask {
   id: string;
@@ -29,9 +30,11 @@ export interface DayTask {
   postponed?: boolean;
   movedFrom?: ISODate | null;
   movedTo?: ISODate | null;
+  /** Командировка: плановый отдых вместо тренировки, командировочный приём пищи. */
+  tripId?: string | null;
 }
 
-export type DisplayStatus = 'planned' | 'done' | 'skipped' | 'in_progress' | 'postponed' | 'unknown';
+export type DisplayStatus = 'planned' | 'done' | 'skipped' | 'in_progress' | 'postponed' | 'unknown' | 'rest';
 
 const BOX_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'snack'];
 
@@ -65,27 +68,82 @@ function countWeekdays(from: ISODate, to: ISODate, days: number[]): number {
   return count;
 }
 
+export interface ScheduledTraining extends PlanTraining {
+  note?: string | null;
+  /** Почему день отличается от обычной схемы. */
+  reason?: 'trip' | 'after_trip' | 'relax' | null;
+  tripId?: string | null;
+  /** Что было бы по обычной схеме (для отчёта: «Силовая Б → плановый отдых»). */
+  replaced?: TemplateId | null;
+}
+
+type BaseKind = 'strength' | 'stepper' | 'recovery' | 'rest';
+
+function baseKind(tr: AppData['settings']['training'], date: ISODate): BaseKind {
+  const wd = isoWeekday(date);
+  if (tr.strengthDays.includes(wd)) return 'strength';
+  if (tr.cardioDays.includes(wd)) return 'stepper';
+  return wd === 7 ? 'rest' : 'recovery';
+}
+
+/** Силовые дни в [from, to), которые не проводятся: командировка, релакс-день, первый день после поездки. */
+function skippedStrength(data: AppData, from: ISODate, to: ISODate): number {
+  const tr = data.settings.training;
+  const trips = tripList(data);
+  const skip = new Set<ISODate>();
+  const consider = (d: ISODate) => { if (d >= from && d < to && tr.strengthDays.includes(isoWeekday(d))) skip.add(d); };
+  for (const t of trips) { for (const d of tripDates(t)) consider(d); consider(addDays(t.to, 1)); }
+  for (const d of relaxDatesBetween(data.settings, from, addDays(to, -1))) consider(d);
+  return skip.size;
+}
+
 /**
- * Тренировка на дату: своё расписание (по умолчанию силовые пн/ср/пт с чередованием А/Б, степпер вт/сб),
- * не зависит от даты старта питания. Импортированный план может переопределить конкретный день.
+ * Тренировка на дату: своё расписание (по умолчанию силовые пн/ср/пт с чередованием А/Б, степпер вт/сб,
+ * чт — восстановление, вс — отдых), не зависит от даты старта питания.
+ * Командировка — плановый отдых (прогулка по желанию); первый день дома — восстановление; силовые
+ * не переносятся и не удваиваются, чередование А/Б продолжается по проведённым дням.
+ * Импортированный план может переопределить конкретный день.
  */
-export function scheduledTraining(data: AppData, date: ISODate): PlanTraining | null {
+export function scheduledTraining(data: AppData, date: ISODate): ScheduledTraining | null {
   const override = data.planDays[date]?.training;
   if (override) return override;
   const tr = data.settings.training;
   if (!tr || date < tr.startDate) return null;
-  const wd = isoWeekday(date);
-  if (tr.strengthDays.includes(wd)) {
-    const id: TemplateId = countWeekdays(tr.startDate, date, tr.strengthDays) % 2 === 0 ? 'strength_a' : 'strength_b';
-    return { templateId: id, label: TEMPLATE_NAMES[id], time: null };
+  const base = baseKind(tr, date);
+  const strengthId = (): TemplateId => ((countWeekdays(tr.startDate, date, tr.strengthDays) - skippedStrength(data, tr.startDate, date)) % 2 === 0 ? 'strength_a' : 'strength_b');
+  const baseId: TemplateId | 'rest' = base === 'strength' ? strengthId() : base === 'stepper' ? 'stepper' : base === 'recovery' ? 'recovery' : 'rest';
+  const trips = tripList(data);
+  const trip = tripOn(trips, date);
+  if (trip) {
+    return { templateId: 'recovery', label: `Командировка (${trip.city}): плановый отдых`, time: null, note: tripTrainingNote(trip), reason: 'trip', tripId: trip.id, replaced: baseId === 'rest' || baseId === 'recovery' ? null : baseId };
   }
-  if (tr.cardioDays.includes(wd)) return { templateId: 'stepper', label: TEMPLATE_NAMES.stepper, time: null };
-  return { templateId: 'recovery', label: TEMPLATE_NAMES.recovery, time: null };
+  if (isRelaxDate(data.settings, date)) {
+    return { templateId: 'rest', label: 'Релакс-день, отдых', time: null, reason: 'relax', replaced: baseId === 'rest' || baseId === 'recovery' ? null : baseId };
+  }
+  const after = daysAfterTrip(trips, date, 3);
+  if (after === 1) {
+    if (base === 'rest') return { templateId: 'rest', label: TEMPLATE_NAMES.rest ?? 'Отдых', time: null, reason: 'after_trip' };
+    return { templateId: 'recovery', label: 'Восстановление после командировки', time: null, note: 'Прогулка по самочувствию; силовую не переносим и не удваиваем.', reason: 'after_trip', replaced: baseId === 'recovery' ? null : baseId as TemplateId };
+  }
+  if (base === 'strength') {
+    const id = baseId as TemplateId;
+    return after === 2
+      ? { templateId: id, label: `${TEMPLATE_NAMES[id]} по самочувствию`, time: null, note: 'Второй день после поездки: обычные веса, без форсирования; если тяжело — меньше подходов.', reason: 'after_trip' }
+      : { templateId: id, label: TEMPLATE_NAMES[id], time: null };
+  }
+  if (base === 'stepper') {
+    return after != null
+      ? { templateId: 'stepper', label: 'Степпер 15–20 минут или прогулка', time: null, reason: 'after_trip' }
+      : { templateId: 'stepper', label: TEMPLATE_NAMES.stepper, time: null };
+  }
+  if (base === 'recovery') return { templateId: 'recovery', label: TEMPLATE_NAMES.recovery, time: null };
+  return { templateId: 'rest', label: 'Отдых', time: null };
 }
 
 /** Что достать из морозилки вечером date: сырое к завтрашней готовке и готовые порции к завтрашним приёмам. */
 export function thawList(data: AppData, date: ISODate): string[] {
   const out: string[] = [];
+  if (tripOn(tripList(data), date)) return out; // в командировке — некому перекладывать
   const next = addDays(date, 1);
   for (const e of Object.values(data.cookingEvents)) {
     const cookDay = e.date;
@@ -122,16 +180,16 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
   const weekend = isWeekend(date);
   const installDate = data.meta?.installDate ?? '0000-00-00';
 
-  if (plan && !plan.relax && plan.meals) {
+  if (plan && (plan.tripId || !plan.relax) && plan.meals) {
     for (const slot of MEAL_SLOTS) {
       const dish = plan.meals[slot];
       if (!dish) continue;
-      const time = weekend ? null : s.mealTimes[slot];
+      const time = weekend || plan.tripId ? null : s.mealTimes[slot];
       out.push({
         id: `meal:${date}:${slot}`, kind: 'meal', originDate: date, date, slot, dish,
-        title: MEAL_LABELS[slot], time,
+        title: MEAL_LABELS[slot], time, subtitle: plan.tripId ? 'командировка — выберите подходящий вариант' : null,
         sortMin: timeToMinutes(s.mealTimes[slot]) ?? 0,
-        movable: false,
+        movable: false, tripId: plan.tripId ?? null,
       });
     }
   }
@@ -141,11 +199,14 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
   if (training && training.templateId !== 'rest') {
     const tid = (log?.templateId ?? training.templateId) as TemplateId;
     const time = tid === 'recovery' ? null : trainingTime(data, date, training.time);
+    const sched = training as ScheduledTraining;
     out.push({
       id: `train:${date}`, kind: 'training', originDate: date, date, templateId: tid,
-      title: tid === 'recovery' ? TEMPLATE_NAMES.recovery : (log ? TEMPLATE_NAMES[tid] : training.label) || TEMPLATE_NAMES[tid],
+      title: log && log.templateId !== training.templateId ? TEMPLATE_NAMES[tid] : training.label || TEMPLATE_NAMES[tid],
+      subtitle: sched.note ?? null,
       time, sortMin: timeToMinutes(time) ?? 1100,
-      movable: true, optional: tid === 'recovery', postponed: isPostponed(data, date, tid),
+      movable: sched.reason !== 'trip', optional: tid === 'recovery', postponed: isPostponed(data, date, tid),
+      tripId: sched.tripId ?? null,
     });
   }
 
@@ -164,7 +225,7 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
   for (const e of shoppingEventsOn(data, date)) {
     out.push({
       id: `shop:${e.id}`, kind: 'shopping', originDate: date, date, eventId: e.id,
-      title: e.kind === 'topup' ? 'Докупка свежего' : 'Закупка', subtitle: e.lines ? `${e.title}: ${e.lines.length} поз.` : e.title,
+      title: e.kind === 'topup' ? 'Докупка свежего' : e.kind === 'trip' ? 'Перекусы в поездку' : 'Закупка', subtitle: e.lines ? `${e.title}: ${e.lines.length} поз.` : e.title,
       time: e.time ?? null, sortMin: timeToMinutes(e.time) ?? (weekend ? 650 : 1080), movable: true,
     });
   }
@@ -177,10 +238,10 @@ export function baseTasksForDate(data: AppData, date: ISODate): DayTask[] {
     });
   }
 
-  if (s.containersEnabled && !plan?.relax) {
+  if (s.containersEnabled && !plan?.relax && !plan?.tripId) {
     const tomorrow = addDays(date, 1);
     const tp = data.planDays[tomorrow];
-    if (tp && !tp.relax && tp.meals && !isWeekend(tomorrow)) {
+    if (tp && !tp.relax && !tp.tripId && tp.meals && !isWeekend(tomorrow)) {
       out.push({
         id: `box:${date}`, kind: 'containers', originDate: date, date,
         title: 'Подготовить контейнеры на завтра', subtitle: BOX_SLOTS.map((sl) => MEAL_LABELS[sl].toLowerCase()).join(', '),
@@ -261,6 +322,7 @@ export function displayStatus(data: AppData, t: DayTask, today: ISODate): Displa
   const s = statusOf(data, t);
   if (s === 'done' || s === 'skipped' || s === 'in_progress') return s;
   if (t.postponed) return 'postponed';
+  if (t.kind === 'training' && t.tripId) return 'rest'; // командировка — плановый отдых, не пропуск
   if (t.date < today) return 'unknown';
   return 'planned';
 }

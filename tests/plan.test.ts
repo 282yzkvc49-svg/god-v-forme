@@ -2,8 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { apply, freshData, NOW } from './helpers';
 import {
-  BUDGET_RUB, buildInstance, collectNeeds, makePlanSettings, portionsLeft, positionOf, replanOps, templateDayAt,
+  BUDGET_RUB, buildInstance, collectNeeds, makePlanSettings, portionsLeft, replanOps,
 } from '../src/domain/plan';
+import { relaxDatesBetween } from '../src/domain/trips';
+import { previewChange, tripOps } from '../src/domain/planDiff';
 import { checkEquipment, checkInstance, checkShift } from '../src/domain/planCheck';
 import { scheduledTraining, tasksForDate, thawList } from '../src/domain/tasks';
 import { applyOps, dataMigrationOps, DATA_VERSION, emptyData, seedOps } from '../src/state/model';
@@ -12,7 +14,7 @@ import { addDays, diffDays, isoWeekday } from '../src/lib/dates';
 import { DISHES } from '../src/domain/catalog';
 import type { AppData } from '../src/state/types';
 
-const cfg = (start: string, relax = 28) => makePlanSettings(start, relax, NOW);
+const cfg = (start: string) => makePlanSettings(start, NOW);
 
 test('план 02.11: все проверки согласованности проходят, бюджет в пределах 30 000 ₽', () => {
   const inst = buildInstance(cfg('2026-11-02'), null);
@@ -70,33 +72,34 @@ test('закупки: потребности покрыты, скоропорт�
   assert.ok(chicken.freezeNow > 0 && chicken.notes.some((n) => /заморозить/.test(n)), 'курица к готовке 08.11 — заморозить в день покупки');
 });
 
-test('дата старта: план, готовка, закупки и релакс-день переносятся по номеру дня', () => {
+test('дата старта: меню, готовка и закупки переносятся; релакс-день — календарный (последнее воскресенье)', () => {
   for (const start of ['2026-12-07', '2026-12-09', '2027-01-15', '2027-03-28']) {
     const c = cfg(start);
     const inst = buildInstance(c, null);
     for (const r of checkInstance(inst)) assert.ok(r.ok, `${start}: ${r.title}: ${r.details.join('; ')}`);
     assert.equal(inst.planDays[0].date, start);
     assert.equal(inst.planDays[29].date, addDays(start, 29));
-    assert.equal(inst.planDays.find((d) => d.relax)!.date, addDays(start, 27), 'релакс — 28-й день');
-    assert.equal(inst.cookingEvents[0].date, addDays(start, -1));
-    assert.equal(inst.shoppingEvents[0].date, addDays(start, -1));
+    const relax = inst.planDays.filter((d) => d.relax).map((d) => d.date);
+    assert.deepEqual(relax, relaxDatesBetween({ relaxOverrides: {} }, start, addDays(start, 29)), 'релакс — последнее воскресенье месяца');
+    for (const r of relax) assert.equal(isoWeekday(r), 7);
+    if (!relax.includes(addDays(start, -1))) assert.equal(inst.cookingEvents[0].date, addDays(start, -1));
+    assert.equal(inst.shoppingEvents[0].date, inst.cookingEvents[0].date);
     for (const e of inst.cookingEvents) {
       // утренняя готовка в будни не планируется: переносится на вечер накануне
       if (e.time === '10:00') assert.ok(isoWeekday(e.date) >= 6, `${start}: готовка ${e.date} 10:00 в будний день`);
+      assert.ok(!relax.includes(e.date), `${start}: готовка в релакс-день ${e.date}`);
     }
   }
-  assert.equal(checkShift(cfg('2026-11-02')).ok, true);
+  assert.equal(checkShift(cfg('2026-11-02'), { trips: [], relaxOverrides: {}, today: null }).ok, true);
 });
 
-test('релакс-день можно выбрать другой: один в месяц, меню сдвигается без потери порций', () => {
-  const inst = buildInstance(cfg('2026-11-02', 10), null);
+test('релакс-день можно выбрать другой: один в месяц, меню идёт дальше без потери порций', () => {
+  const inst = buildInstance(cfg('2026-11-02'), { trips: [], relaxOverrides: { '2026-11': '2026-11-21' }, today: null });
   assert.equal(inst.planDays.filter((d) => d.relax).length, 1);
-  assert.equal(inst.planDays[9].relax, true);
-  assert.equal(inst.planDays[27].relax, false, 'бывший релакс-день теперь с меню');
+  assert.equal(inst.planDays.find((d) => d.date === '2026-11-21')!.relax, true);
+  assert.equal(inst.planDays.find((d) => d.date === '2026-11-29')!.relax, false, 'последнее воскресенье теперь с меню');
   for (const r of checkInstance(inst)) assert.ok(r.ok, `${r.title}: ${r.details.join('; ')}`);
-  assert.equal(positionOf(27, 10), 28);
-  assert.equal(templateDayAt(28, 10), 27);
-  assert.equal(templateDayAt(10, 10), null);
+  assert.ok(!inst.cookingEvents.some((e) => e.date === '2026-11-21'), 'в релакс-день не готовим');
 });
 
 test('старт сегодня: первая закупка и готовка — сегодня до обеда', () => {
@@ -142,8 +145,9 @@ test('расписание тренировок своё: пн/ср/пт сил�
   const d = freshData();
   const at = (date: string) => scheduledTraining(d, date)!.templateId;
   assert.deepEqual(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09'].map(at),
-    ['strength_a', 'stepper', 'strength_b', 'recovery', 'strength_a', 'stepper', 'recovery', 'strength_b']);
-  assert.equal(at('2027-06-07'), diffDays('2027-06-07', '2026-11-02') / 7 * 3 % 2 === 0 ? 'strength_a' : 'strength_b');
+    ['strength_a', 'stepper', 'strength_b', 'recovery', 'strength_a', 'stepper', 'rest', 'strength_b']);
+  const relaxStrength = relaxDatesBetween(d.settings, '2026-11-02', '2027-06-06').filter((x) => [1, 3, 5].includes(isoWeekday(x))).length;
+  assert.equal(at('2027-06-07'), (diffDays('2027-06-07', '2026-11-02') / 7 * 3 - relaxStrength) % 2 === 0 ? 'strength_a' : 'strength_b');
   const d2 = applyOps(d, replanOps(d, cfg('2026-11-20'), '2026-11-01').ops);
   assert.equal(scheduledTraining(d2, '2026-11-04')!.templateId, 'strength_b', 'смена старта питания не сдвигает тренировки');
 });
@@ -186,14 +190,15 @@ function v1State(): AppData {
   return d;
 }
 
-test('миграция v4: план с граммовками на те же даты, отметки и галочки сохраняются, без дублей', () => {
+test('миграция v3 → v5: граммовки, затем старт 16.11 с командировками; отметки и галочки сохраняются, без дублей', () => {
   const d = v1State();
   const ops = dataMigrationOps(d, '2026-11-04', NOW);
   const d2 = applyOps(d, ops);
   assert.equal(d2.meta!.dataVersion, DATA_VERSION);
-  assert.equal(d2.settings.plan!.startDate, '2026-11-02');
+  assert.equal(d2.settings.plan!.startDate, '2026-11-16');
   assert.equal(d2.settings.plan!.confirmed, false, 'пользователю показывается подтверждение даты');
-  assert.equal(d2.settings.training.startDate, '2026-11-02');
+  assert.equal(d2.settings.training.startDate, '2026-11-16');
+  assert.equal(Object.keys(d2.trips).length, 2);
   assert.ok(d2.planDays['2026-11-02'].mealCards, 'у дня появились карточки с граммовками');
   assert.equal(d2.planDays['2026-11-02'].training, null, 'тренировки — по своему расписанию');
   assert.equal(d2.taskStatus['meal:2026-11-02:lunch'].status, 'done');
@@ -215,4 +220,136 @@ test('свежая установка: план появляется тольк�
   const d2 = applyOps(d, replanOps(d, cfg('2026-11-05'), '2026-11-04').ops);
   assert.equal(Object.keys(d2.planDays).length, 30);
   assert.equal(d2.settings.plan!.startDate, '2026-11-05');
+});
+
+
+// ------------------------------------------------------------------ ноябрь 2026: старт 16.11 и командировки
+
+function v4State(): AppData {
+  // установленное приложение версии 1.1: план со стартом 02.11, отметки до 14.11
+  let d = freshData('2026-10-30', '2026-11-02');
+  d = applyOps(d, [
+    { store: 'meta', put: { ...d.meta!, dataVersion: 4 } },
+    { store: 'taskStatus', put: { taskId: 'meal:2026-11-03:breakfast', date: '2026-11-03', kind: 'meal', status: 'done', updatedAt: NOW } },
+    { store: 'trainingLogs', put: { id: 'train:2026-11-04', plannedDate: '2026-11-04', date: '2026-11-04', templateId: 'strength_b', templateVersionId: 'strength_b@seed', status: 'done', exercises: [], updatedAt: NOW } },
+    { store: 'weights', put: { id: 'w1', date: '2026-11-09', kg: 106.1, createdAt: NOW } },
+    { store: 'photos', put: { id: 'ph1', date: '2026-11-09', pose: 'front', width: 1, height: 1, bytes: 1, type: 'image/jpeg', createdAt: NOW } },
+    { store: 'customTasks', put: { id: 'c26', date: '2026-11-26', title: 'Командировка в СПб', kind: 'custom', createdAt: NOW } },
+    { store: 'customTasks', put: { id: 'c27', date: '2026-11-27', title: 'Позвонить маме', kind: 'custom', createdAt: NOW } },
+  ]);
+  return d;
+}
+
+test('ноябрь 2026: 12 пунктов проверки после обновления', () => {
+  const before = v4State();
+  const d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
+  const day = (x: string) => d.planDays[x];
+  const tasks = (x: string) => tasksForDate(d, x);
+  // 1. старт 16.11, первый цикл 16.11–15.12
+  assert.equal(d.settings.plan!.startDate, '2026-11-16');
+  assert.equal(d.settings.training.startDate, '2026-11-16');
+  assert.equal(day('2026-11-16').dayNumber, 1);
+  assert.equal(day('2026-12-15').dayNumber, 30);
+  assert.equal(day('2026-12-16'), undefined);
+  // 2–3. командировки строго на 18–20.11 и 24–25.11, на 26.11 — ничего командировочного
+  const trip = (x: string) => day(x)?.tripId ? d.trips[day(x)!.tripId!].city : null;
+  assert.deepEqual(['2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21'].map(trip), [null, 'Екатеринбург', 'Екатеринбург', 'Екатеринбург', null]);
+  assert.deepEqual(['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26'].map(trip), [null, 'Санкт-Петербург', 'Санкт-Петербург', null]);
+  assert.equal(d.customTasks.c26, undefined, 'старое событие командировки на 26.11 убрано');
+  assert.ok(d.customTasks.c27, 'другие задачи на эти дни не тронуты');
+  assert.ok(!tasks('2026-11-26').some((t) => t.tripId), '26.11 — не командировка');
+  // 4. завтраки в гостинице
+  for (const t of Object.values(d.trips)) assert.equal(t.hotelBreakfast, true);
+  assert.equal(day('2026-11-19').meals!.breakfast, 'Завтрак в гостинице');
+  // 5. в командировках нет обязательных тренировок; календарь 16–30.11 как задан
+  for (const x of ['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-24', '2026-11-25']) {
+    const t = tasks(x).find((k) => k.kind === 'training')!;
+    assert.ok(t.optional && t.tripId, `${x}: плановый отдых`);
+  }
+  const plan: Record<string, string> = {
+    '2026-11-16': 'Силовая А', '2026-11-17': 'Степпер', '2026-11-21': 'Восстановление после командировки', '2026-11-22': 'Отдых',
+    '2026-11-23': 'Силовая Б', '2026-11-26': 'Восстановление после командировки', '2026-11-27': 'Силовая А по самочувствию',
+    '2026-11-28': 'Степпер 15–20 минут или прогулка', '2026-11-29': 'Релакс-день, отдых', '2026-11-30': 'Силовая Б',
+  };
+  for (const [x, label] of Object.entries(plan)) assert.equal(scheduledTraining(d, x)!.label, label, x);
+  for (const x of ['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-24', '2026-11-25']) assert.match(scheduledTraining(d, x)!.label, /Командировка/);
+  assert.equal(scheduledTraining(d, '2026-12-02')!.templateId, 'strength_a', 'дальше — обычная схема А/Б');
+  // 6. на командировочные дни не расходуются домашние порции, нет готовки и домашних закупок
+  for (const e of Object.values(d.cookingEvents)) {
+    if (e.instanceId !== d.settings.plan!.instanceId) continue;
+    assert.ok(!['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-24', '2026-11-25', '2026-11-29'].includes(e.date), `готовка ${e.date}`);
+    for (const it of e.items ?? []) for (const u of it.uses) assert.ok(!day(u.date)?.tripId, `${it.dishId}: порция на ${u.date}`);
+  }
+  for (const x of ['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-24', '2026-11-25']) assert.equal(day(x).mealCards, null);
+  // 15.11 — подготовка к первому этапу; 22.11 и раньше — готовка к 23.11; 29.11 — без готовки
+  const cooks = Object.values(d.cookingEvents).filter((e) => e.instanceId === d.settings.plan!.instanceId);
+  assert.ok(cooks.some((e) => e.date === '2026-11-15'), 'готовка 15.11');
+  assert.ok(cooks.some((e) => e.date >= '2026-11-21' && e.date <= '2026-11-22' && e.items!.some((i) => i.uses.some((u) => u.date === '2026-11-23'))), 'блюда к 23.11 готовятся 21–22.11');
+  // 7. порции соответствуют расписанию
+  const inst = buildInstance(d.settings.plan!, { trips: Object.values(d.trips), relaxOverrides: d.settings.relaxOverrides, today: '2026-11-14' });
+  for (const c of checkInstance(inst)) assert.ok(c.ok, `${c.title}: ${c.details.join('; ')}`);
+  // готовая еда не ждёт в холодильнике всю поездку
+  for (const e of cooks) for (const it of e.items ?? []) for (const u of it.uses) {
+    if (u.date > '2026-11-20' && e.date < '2026-11-18' || u.date > '2026-11-25' && e.date < '2026-11-24') assert.equal(u.storage === 'pantry' ? 'freeze' : u.storage, 'freeze', `${it.dishId} ${u.date}`);
+  }
+  // 8. закупки по фактическому меню: нет домашних продуктов на дни командировок, перекусы — отдельно
+  const needs = collectNeeds(inst.planDays, inst.cookingEvents, inst.ctx.trips);
+  for (const n of needs) assert.ok(!inst.ctx.trips.some((t) => t.from <= n.date && n.date <= t.to), `${n.productId} нужен ${n.date}`);
+  assert.equal(inst.shoppingEvents.filter((e) => e.kind === 'main').length, 2);
+  assert.equal(inst.shoppingEvents.filter((e) => e.kind === 'trip').length, 2);
+  assert.ok(inst.totalCost <= BUDGET_RUB, `домашние закупки ${Math.round(inst.totalCost)}`);
+  for (const e of inst.shoppingEvents) for (const l of e.lines ?? []) {
+    assert.ok(l.productId && l.needs.length && l.needs.every((n) => n.date >= e.date) && l.buy >= 0, `${e.id}: ${JSON.stringify(l)}`);
+  }
+  // 9. релакс-день 29.11 и при смене даты старта не уезжает на 13.12
+  assert.equal(day('2026-11-29').relax, true);
+  const moved = applyOps(d, replanOps(d, makePlanSettings('2026-11-18', NOW), '2026-11-14').ops);
+  assert.equal(moved.planDays['2026-11-29'].relax, true);
+  assert.notEqual(moved.planDays['2026-12-13']?.relax, true);
+  for (const x of ['2026-11-18', '2026-11-24']) assert.ok(moved.planDays[x].tripId, 'командировки не сдвинулись');
+  // 10. программа продолжается после 30 дней
+  assert.ok(scheduledTraining(d, '2027-03-01'), 'тренировки на год вперёд');
+  const next = buildInstance(makePlanSettings('2026-12-16', NOW), { trips: Object.values(d.trips), relaxOverrides: d.settings.relaxOverrides, today: null });
+  for (const c of checkInstance(next)) assert.ok(c.ok, `следующий цикл: ${c.title}`);
+  assert.ok(next.planDays.some((x) => x.date === '2026-12-27' && x.relax), 'релакс в декабре — последнее воскресенье');
+  // 11. прежние данные сохранены
+  assert.equal(d.taskStatus['meal:2026-11-03:breakfast'].status, 'done');
+  assert.ok(d.planDays['2026-11-03']?.mealCards, 'прошедший день с отметкой — история');
+  assert.ok(d.planDays['2026-11-10'], 'прошедшие дни прежнего плана не удаляются');
+  assert.equal(d.trainingLogs['train:2026-11-04'].status, 'done');
+  assert.equal(d.weights.w1.kg, 106.1);
+  assert.ok(d.photos.ph1);
+  assert.equal(dataMigrationOps(d, '2026-11-14', NOW).length, 0);
+  // 12. даты — календарные строки без часовых поясов (переход через месяц и смену времени)
+  assert.equal(addDays('2026-11-30', 1), '2026-12-01');
+  assert.equal(addDays('2027-03-27', 2), '2027-03-29');
+  assert.equal(diffDays('2026-12-15', '2026-11-16'), 29);
+});
+
+test('новая командировка: предпросмотр показывает изменения, конфликт с релакс-днём не удаляет задачи', () => {
+  const before = v4State();
+  const d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
+  const trip = { id: 'trip-x', city: 'Казань', from: '2026-12-26', to: '2026-12-28', hotelBreakfast: false, fridge: true, canTrain: true, comment: null, createdAt: NOW, updatedAt: NOW };
+  const diff = previewChange(d, tripOps(trip, null), '2026-11-14', ['2026-12-26', '2026-12-27', '2026-12-28']);
+  assert.deepEqual(diff.conflicts.relax, ['2026-12-27'], 'релакс-день декабря попадает на поездку');
+  assert.ok(diff.trainings.length > 0, 'видно, какие тренировки станут отдыхом');
+  assert.equal(Object.keys(d.trips).length, 2, 'до подтверждения ничего не меняется');
+  const after = applyOps(d, diff.ops);
+  assert.equal(after.trips['trip-x'].city, 'Казань');
+  assert.ok(Object.keys(after.taskStatus).length >= Object.keys(d.taskStatus).length, 'отметки не удалены');
+  const inst = buildInstance(after.settings.plan!, { trips: Object.values(after.trips), relaxOverrides: after.settings.relaxOverrides, today: '2026-11-14' });
+  for (const c of checkInstance(inst)) assert.ok(c.ok, `${c.title}: ${c.details.join('; ')}`);
+  assert.equal(after.planDays['2026-12-26'].tripId, 'trip-x', 'командировка вне цикла тоже с командировочным меню');
+});
+
+test('свежая установка в ноябре 2026 (второе устройство): командировки, старт 16.11, релакс 29.11', () => {
+  const d = freshData('2026-11-14', '2026-11-16', true);
+  assert.deepEqual(Object.values(d.trips).map((t) => `${t.city} ${t.from}–${t.to}`).sort(), ['Екатеринбург 2026-11-18–2026-11-20', 'Санкт-Петербург 2026-11-24–2026-11-25']);
+  assert.equal(d.settings.training.startDate, '2026-11-16');
+  assert.equal(d.planDays['2026-11-19'].tripId, 'trip-2026-11-18-ekb');
+  assert.equal(d.planDays['2026-11-29'].relax, true);
+  assert.equal(scheduledTraining(d, '2026-11-16')!.label, 'Силовая А');
+  // после командировок свежая установка их не добавляет
+  const later = freshData('2026-12-20', '2026-12-21', true);
+  assert.equal(Object.keys(later.trips).length, 0);
 });

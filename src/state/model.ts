@@ -6,9 +6,10 @@ import {
 } from './types';
 import { SEED_ID, defaultSettings, seedTemplateVersions } from '../lib/seed';
 import type { ISODate } from '../lib/dates';
-import { BASE_START, DEFAULT_RELAX, buildInstance, makePlanSettings, replanOps } from '../domain/plan';
+import { BASE_START, buildInstance, makePlanSettings, replanOps } from '../domain/plan';
+import type { Trip } from './types';
 
-export const DATA_VERSION = 4;
+export const DATA_VERSION = 5;
 
 export function emptyData(): AppData {
   const d: any = { ready: false, settings: defaultSettings(), meta: null };
@@ -52,7 +53,14 @@ export function applyOps(data: AppData, ops: Op[]): AppData {
 export function seedOps(now: string, today: ISODate): Op[] {
   const ops: Op[] = [];
   for (const t of seedTemplateVersions(now)) ops.push({ store: 'templateVersions', put: t });
-  ops.push({ store: 'settings', put: defaultSettings() });
+  const settings = defaultSettings();
+  // ноябрь 2026: известные командировки и релакс-день попадают и в свежую установку (например, на втором устройстве)
+  if (today <= NOV_2026_TRIPS[NOV_2026_TRIPS.length - 1].to) {
+    for (const t of NOV_2026_TRIPS) ops.push({ store: 'trips', put: { ...t, createdAt: now, updatedAt: now } });
+    settings.relaxOverrides = { ...settings.relaxOverrides, '2026-11': '2026-11-29' };
+  }
+  if (today <= NOV_2026_START) settings.training = { ...settings.training, startDate: NOV_2026_START };
+  ops.push({ store: 'settings', put: settings });
   const meta: Meta = {
     key: 'main', seedId: SEED_ID, seedIds: [SEED_ID], seedAppliedAt: now, createdAt: now, installDate: today, dataVersion: DATA_VERSION,
   };
@@ -77,11 +85,14 @@ export function seedUpgradeOps(data: AppData, now: string): Op[] {
 }
 
 /** Миграции формата записей внутри хранилищ (не схемы IndexedDB). */
-export function dataMigrationOps(data: AppData, today: ISODate = BASE_START, now = new Date().toISOString()): Op[] {
+export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, now = new Date().toISOString()): Op[] {
   const ops: Op[] = [];
-  if (!data.meta) return ops;
-  const v = data.meta.dataVersion || 1;
-  if (v < 4) ops.push(...planV4Ops(data, today, now));
+  if (!data0.meta) return ops;
+  const v = data0.meta.dataVersion || 1;
+  let data = data0;
+  const step = (more: Op[]) => { ops.push(...more); data = applyOps(data, more); };
+  if (v < 4) step(planV4Ops(data, today, now));
+  if (v < 5) step(planV5Ops(data, today, now));
   if (v < 2) {
     // v2: у позиции «Апельсины» из стартовых закупок убрано примечание (по решению пользователя)
     for (const e of Object.values(data.shoppingEvents)) {
@@ -94,7 +105,7 @@ export function dataMigrationOps(data: AppData, today: ISODate = BASE_START, now
   if (rest.photo && typeof rest.photo.weekday !== 'number') rest.photo = { enabled: rest.photo.enabled !== false, weekday: defaultSettings().photo.weekday };
   const settings = { ...defaultSettings(), ...rest };
   // v4: план питания из шаблона с выбором даты старта; тренировки — своё расписание
-  if (v < 4 && !settings.plan) settings.plan = makePlanSettings(BASE_START, DEFAULT_RELAX, now, false);
+  if (v < 4 && !settings.plan) settings.plan = makePlanSettings(BASE_START, now, false);
   if (JSON.stringify(settings) !== JSON.stringify(data.settings)) ops.push({ store: 'settings', put: settings });
   if (v !== DATA_VERSION) ops.push({ store: 'meta', put: { ...data.meta, dataVersion: DATA_VERSION } });
   return ops;
@@ -120,7 +131,7 @@ const V1_ITEMS: Record<string, string[]> = {
  * и переносы переходят на новые события. Ничего пользовательского не удаляется.
  */
 export function planV4Ops(data: AppData, today: ISODate, now: string): Op[] {
-  const cfg = data.settings.plan ?? makePlanSettings(BASE_START, DEFAULT_RELAX, now, false);
+  const cfg = data.settings.plan ?? makePlanSettings(BASE_START, now, false);
   const hasSeedPlan = Object.values(data.planDays).some((d) => d.source === 'seed');
   if (!hasSeedPlan && !data.settings.onboarded) return [];
   const res = replanOps(data, cfg, today, { force: true, now });
@@ -162,7 +173,48 @@ export function planV4Ops(data: AppData, today: ISODate, now: string): Op[] {
 
 /** План для свежей установки (тесты и режим без IndexedDB): старт с базовой даты. */
 export function freshPlanOps(data: AppData, startDate: ISODate, today: ISODate, now: string): Op[] {
-  return replanOps(data, makePlanSettings(startDate, DEFAULT_RELAX, now), today).ops;
+  return replanOps(data, makePlanSettings(startDate, now), today).ops;
+}
+
+// ------------------------------------------------------------------ v5: старт 16.11 и командировки
+
+export const NOV_2026_START = '2026-11-16';
+export const NOV_2026_TRIPS: Omit<Trip, 'createdAt' | 'updatedAt'>[] = [
+  { id: 'trip-2026-11-18-ekb', city: 'Екатеринбург', from: '2026-11-18', to: '2026-11-20', hotelBreakfast: true, fridge: false, canTrain: false, comment: 'Гостиница, завтрак включён' },
+  { id: 'trip-2026-11-24-spb', city: 'Санкт-Петербург', from: '2026-11-24', to: '2026-11-25', hotelBreakfast: true, fridge: false, canTrain: false, comment: 'Гостиница, завтрак включён' },
+];
+
+/** Старые события командировки на 26.11 (даты поездки исправлены: 24–25.11). */
+function staleTripTask(title: string): boolean {
+  return /командир|петербург|спб|поездк/i.test(title);
+}
+
+/**
+ * v5: программа питания и тренировок стартует 16.11.2026; командировки 18–20.11 (Екатеринбург) и 24–25.11
+ * (Санкт-Петербург); релакс-день ноября — 29.11. План пересобирается, прошедшее остаётся историей,
+ * отметки, тренировки, вес и фото не трогаются.
+ */
+export function planV5Ops(data: AppData, today: ISODate, now: string): Op[] {
+  const ops: Op[] = [];
+  for (const t of NOV_2026_TRIPS) {
+    const same = Object.values(data.trips ?? {}).some((x) => x.from === t.from && x.to === t.to);
+    if (!same) ops.push({ store: 'trips', put: { ...t, createdAt: now, updatedAt: now } });
+  }
+  for (const c of Object.values(data.customTasks)) {
+    if (c.date === '2026-11-26' && c.date >= today && staleTripTask(`${c.title} ${c.note ?? ''}`)) ops.push({ store: 'customTasks', del: c.id });
+  }
+  const imp = data.planDays['2026-11-26'];
+  if (imp && imp.source === 'import' && staleTripTask(`${imp.note ?? ''} ${Object.values(imp.meals ?? {}).join(' ')}`)) ops.push({ store: 'planDays', del: '2026-11-26' });
+  const cfg = makePlanSettings(NOV_2026_START, now, false);
+  const settings = {
+    ...data.settings, plan: cfg,
+    relaxOverrides: { ...(data.settings.relaxOverrides ?? {}), '2026-11': '2026-11-29' },
+    training: { ...data.settings.training, startDate: NOV_2026_START },
+  };
+  ops.push({ store: 'settings', put: settings });
+  const d2 = applyOps(data, ops);
+  if (!data.settings.onboarded && !Object.values(data.planDays).length) return ops;
+  return [...ops, ...replanOps(d2, cfg, today, { now }).ops];
 }
 
 export { buildInstance };

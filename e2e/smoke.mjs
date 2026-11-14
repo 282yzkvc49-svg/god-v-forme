@@ -1,4 +1,4 @@
-// Сквозная проверка 11 сценариев из ТЗ на собранной версии (dist) в Chromium.
+// Сквозная проверка 12 сценариев из ТЗ на собранной версии (dist) в Chromium.
 // Запуск: npm run test:e2e   (собирает dist и проверяет; скриншоты — в e2e/screens/)
 import { chromium } from 'playwright';
 import JSZip from 'jszip';
@@ -259,6 +259,64 @@ await step('11. Резервная копия → восстановление �
   await go(p2, '/today');
   await p2.screenshot({ path: path.join(shots, '11-today-iphone.png'), fullPage: false });
   await ctx2.close();
+});
+
+await step('12. Ноябрь 2026: старт 16.11, Екатеринбург 18–20.11, Санкт-Петербург 24–25.11, релакс 29.11', async () => {
+  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, locale: 'ru-RU', timezoneId: 'Asia/Yekaterinburg' });
+  const p3 = await newPage(ctx3);
+  active = p3;
+  await p3.goto(`${BASE}?today=2026-11-14#/today`);
+  await p3.getByRole('heading', { name: 'Когда начинаем программу питания?' }).waitFor();
+  assert(await p3.locator('.sheet input[type=date]').inputValue() === '2026-11-16', 'дата старта по умолчанию — 16.11');
+  assert(await p3.getByText(/Екатеринбург/).count() > 0 && await p3.getByText(/Санкт-Петербург/).count() > 0, 'командировки в предпросмотре старта');
+  await p3.getByRole('button', { name: 'Дальше' }).click();
+  await p3.getByRole('heading', { name: 'Когда начать тренировки?' }).waitFor();
+  assert(await p3.locator('.sheet input[type=date]').inputValue() === '2026-11-16', 'тренировки — с 16.11');
+  await p3.getByRole('button', { name: 'Начать', exact: true }).click();
+  await p3.waitForTimeout(400);
+  await go(p3, '/day/2026-11-16');
+  await p3.getByText('Силовая А').first().waitFor();
+  await go(p3, '/day/2026-11-19');
+  await p3.getByRole('heading', { name: /Командировка: Екатеринбург/ }).waitFor();
+  assert(await p3.getByText(/день 2 из 3/).count() >= 1, 'день 2 из 3');
+  assert(await p3.getByText(/Гостиница, завтрак включён/).count() > 0, 'завтрак в гостинице');
+  assert(await p3.locator('.trip-variant').count() === 12, '4 приёма × 3 варианта');
+  assert(await p3.getByText(/Командировка \(Екатеринбург\): плановый отдых/).count() > 0, 'тренировка — плановый отдых');
+  const lunch = p3.locator('.meal-card', { hasText: 'Обед' }).first();
+  await lunch.getByRole('button', { name: 'Выбрал другое подходящее блюдо' }).click();
+  await lunch.locator('textarea').fill('суп и курица с овощами');
+  await lunch.getByRole('button', { name: 'Сохранить: другое блюдо' }).click();
+  await lunch.getByText('другое подходящее блюдо', { exact: true }).waitFor();
+  await p3.screenshot({ path: path.join(shots, '12-trip-day-iphone.png'), fullPage: true });
+  for (const [d, city] of [['2026-11-18', 'Екатеринбург'], ['2026-11-20', 'Екатеринбург'], ['2026-11-24', 'Санкт-Петербург'], ['2026-11-25', 'Санкт-Петербург']]) {
+    await go(p3, `/day/${d}`);
+    await p3.getByRole('heading', { name: `Командировка: ${city}` }).waitFor();
+  }
+  for (const d of ['2026-11-17', '2026-11-21', '2026-11-23', '2026-11-26']) {
+    await go(p3, `/day/${d}`);
+    await p3.waitForTimeout(150);
+    assert(await p3.getByRole('heading', { name: /Командировка:/ }).count() === 0, `${d} — не командировка`);
+  }
+  assert(await p3.getByText('Восстановление после командировки').count() > 0, '26.11 — восстановление после командировки');
+  await go(p3, '/day/2026-11-29');
+  await p3.getByText(/Релакс/).first().waitFor();
+  await go(p3, '/shopping');
+  await p3.getByRole('heading', { name: 'Перекусы в командировки' }).waitFor();
+  await p3.screenshot({ path: path.join(shots, '12-shopping-iphone.png'), fullPage: true });
+  await go(p3, '/trips');
+  await p3.getByRole('button', { name: /Новая командировка/ }).click();
+  await p3.locator('.sheet input').first().fill('Казань');
+  const dates = p3.locator('.sheet input[type=date]');
+  await dates.nth(0).fill('2026-12-26');
+  await dates.nth(1).fill('2026-12-28');
+  await p3.getByRole('button', { name: 'Показать изменения' }).click();
+  await p3.getByText(/Релакс-день .* попадает на командировку/).waitFor();
+  await p3.getByText(/Домашних приёмов пищи станет/).waitFor();
+  await p3.screenshot({ path: path.join(shots, '12-new-trip-preview-iphone.png'), fullPage: true });
+  await p3.getByRole('button', { name: 'Отмена' }).click();
+  await p3.waitForTimeout(200);
+  assert(await p3.getByText('Казань').count() === 0, 'без подтверждения командировка не добавлена');
+  await ctx3.close();
 });
 
 await step('Нет ошибок в консоли и внешних запросов', async () => {

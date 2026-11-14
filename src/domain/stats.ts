@@ -1,5 +1,6 @@
 // Честная статистика: считаем только введённые данные. Пустая запись ≠ пропуск, план ≠ факт.
 import type { AppData, Difficulty, Feeling, MealSlot, TemplateId, TrainingLog } from '../state/types';
+import { scheduledTraining } from './tasks';
 import { MEAL_SLOTS } from '../state/types';
 import { addDays, diffDays, range, type ISODate } from '../lib/dates';
 import { baseTasksForDate, statusOf, type DayTask } from './tasks';
@@ -78,7 +79,7 @@ export function weightSummary(data: AppData, from?: ISODate, to?: ISODate): Weig
 
 // ------------------------------------------------------------------ тренировки
 
-export type TrainingRowStatus = 'done' | 'skipped' | 'postponed' | 'not_logged' | 'planned' | 'in_progress';
+export type TrainingRowStatus = 'done' | 'skipped' | 'postponed' | 'not_logged' | 'planned' | 'in_progress' | 'trip_rest';
 
 export interface ExerciseRow {
   index: number;
@@ -116,6 +117,9 @@ export interface TrainingRow {
   feeling: Feeling | null;
   note: string | null;
   exercises: ExerciseRow[];
+  /** Командировка: «Плановый отдых / Командировка» вместо тренировки по схеме. */
+  trip: string | null;
+  replaced: TemplateId | null;
 }
 
 function trainingTasksInRange(data: AppData, from: ISODate, to: ISODate): DayTask[] {
@@ -137,7 +141,9 @@ export function trainingRows(data: AppData, from: ISODate, to: ISODate, today: I
     const effectiveDate = mv?.toDate ?? t.originDate;
     const raw = statusOf(data, t);
     let status: TrainingRowStatus;
+    const sched = t.tripId ? scheduledTraining(data, t.originDate) : null;
     if (raw === 'done' || raw === 'skipped' || raw === 'in_progress') status = raw;
+    else if (t.tripId) status = 'trip_rest';
     else if (t.postponed) status = 'postponed';
     else status = effectiveDate < today ? 'not_logged' : 'planned';
 
@@ -177,6 +183,8 @@ export function trainingRows(data: AppData, from: ISODate, to: ISODate, today: I
       feeling: log?.feeling ?? null,
       note: log?.note ?? null,
       exercises,
+      trip: t.tripId ? data.trips[t.tripId]?.city ?? 'командировка' : null,
+      replaced: sched?.replaced ?? null,
     };
   });
 }
@@ -195,14 +203,25 @@ export interface TrainingStats {
   stepperMinutes: number;
   warmupMinutes: number;
   setsDone: number;
+  /** Дни командировки: плановый отдых (не пропуск). */
+  tripRest: number;
+  /** Тренировки по схеме, замененные плановым отдыхом из-за командировки. */
+  replacedByTrip: { date: ISODate; templateId: TemplateId; trip: string }[];
 }
 
 export function trainingStats(rows: TrainingRow[]): TrainingStats {
   const s: TrainingStats = {
     planned: 0, done: 0, skipped: 0, notLogged: 0, moved: 0, postponed: 0, upcoming: 0,
     strengthDone: 0, cardioDone: 0, recoveryDone: 0, stepperMinutes: 0, warmupMinutes: 0, setsDone: 0,
+    tripRest: 0, replacedByTrip: [],
   };
   for (const r of rows) {
+    if (r.trip) {
+      s.tripRest++;
+      if (r.replaced) s.replacedByTrip.push({ date: r.plannedDate, templateId: r.replaced, trip: r.trip });
+      if (r.status === 'done') s.recoveryDone++;
+      continue;
+    }
     if (r.kind === 'recovery') {
       if (r.status === 'done') s.recoveryDone++;
       continue;
@@ -246,8 +265,12 @@ export function exerciseLabel(id: string): string {
 
 // ------------------------------------------------------------------ питание
 
+export interface TripMealAdherence { planned: number; suggested: number; other: number; skipped: number; unknown: number; days: number }
+
 export interface MealAdherence {
-  planned: number; // плановые приёмы пищи с датой ≤ сегодня (без релакс-дней)
+  /** Командировочные приёмы пищи: предложенный вариант / другое подходящее блюдо / пропуск. */
+  trip: TripMealAdherence;
+  planned: number; // домашние приёмы пищи с датой ≤ сегодня (без релакс-дней и командировок)
   done: number;
   skipped: number;
   unknown: number; // нет отметки — не считается ни выполнением, ни пропуском
@@ -256,20 +279,22 @@ export interface MealAdherence {
   percentOfMarked: number | null;
 }
 
-export interface MealDayRow { date: ISODate; relax: boolean; meals: { slot: MealSlot; dish: string; status: 'done' | 'skipped' | 'unknown' | 'planned' }[] }
+export interface MealDayRow { date: ISODate; relax: boolean; trip: string | null; meals: { slot: MealSlot; dish: string; status: 'done' | 'skipped' | 'unknown' | 'planned'; choice?: 'suggested' | 'other' | null; comment?: string | null }[] }
 
 export function mealRows(data: AppData, from: ISODate, to: ISODate, today: ISODate): MealDayRow[] {
   const out: MealDayRow[] = [];
   for (const date of range(from, to)) {
     const p = data.planDays[date];
     if (!p) continue;
-    if (p.relax || !p.meals) { out.push({ date, relax: true, meals: [] }); continue; }
+    const trip = p.tripId ? data.trips[p.tripId]?.city ?? 'командировка' : null;
+    if ((p.relax && !trip) || !p.meals) { out.push({ date, relax: true, trip: null, meals: [] }); continue; }
     out.push({
-      date, relax: false,
+      date, relax: false, trip,
       meals: MEAL_SLOTS.filter((s) => p.meals![s]).map((slot) => {
-        const st = data.taskStatus[`meal:${date}:${slot}`]?.status;
+        const rec = data.taskStatus[`meal:${date}:${slot}`];
+        const st = rec?.status;
         const status = st === 'done' || st === 'skipped' ? st : date > today ? 'planned' : 'unknown';
-        return { slot, dish: p.meals![slot], status };
+        return { slot, dish: p.meals![slot], status, choice: trip && st === 'done' ? rec?.choice ?? 'suggested' : null, comment: rec?.comment ?? null };
       }),
     });
   }
@@ -277,9 +302,20 @@ export function mealRows(data: AppData, from: ISODate, to: ISODate, today: ISODa
 }
 
 export function mealAdherence(rows: MealDayRow[]): MealAdherence {
-  const a: MealAdherence = { planned: 0, done: 0, skipped: 0, unknown: 0, future: 0, relaxDays: [], percentOfMarked: null };
+  const a: MealAdherence = { trip: { planned: 0, suggested: 0, other: 0, skipped: 0, unknown: 0, days: 0 }, planned: 0, done: 0, skipped: 0, unknown: 0, future: 0, relaxDays: [], percentOfMarked: null };
   for (const r of rows) {
     if (r.relax) { a.relaxDays.push(r.date); continue; }
+    if (r.trip) {
+      a.trip.days++;
+      for (const m of r.meals) {
+        if (m.status === 'planned') continue;
+        a.trip.planned++;
+        if (m.status === 'skipped') a.trip.skipped++;
+        else if (m.status === 'done') { if (m.choice === 'other') a.trip.other++; else a.trip.suggested++; }
+        else a.trip.unknown++;
+      }
+      continue;
+    }
     for (const m of r.meals) {
       if (m.status === 'planned') { a.future++; continue; }
       a.planned++;

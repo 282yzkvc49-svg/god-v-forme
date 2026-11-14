@@ -15,6 +15,7 @@ import { ShoppingHub, ShopPage, CookPage } from '../screens/Shopping';
 import { ProgressScreen } from '../screens/Progress';
 import { AnalysisScreen } from '../screens/Analysis';
 import { SettingsScreen, MoreScreen } from '../screens/Settings';
+import { TripsScreen } from '../screens/Trips';
 import { Onboarding } from '../screens/Onboarding';
 import { onUpdateReady, applyUpdate } from './sw';
 
@@ -27,7 +28,7 @@ const NAV: NavItem[] = [
   { path: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart />, match: ['shopping', 'shop', 'cook'] },
   { path: '/progress', label: 'Прогресс', icon: <PiChartLineUp />, match: ['progress'] },
   { path: '/analysis', label: 'Анализ с ChatGPT', icon: <PiChatsCircle />, match: ['analysis'] },
-  { path: '/settings', label: 'Настройки', icon: <PiGear />, match: ['settings'] },
+  { path: '/settings', label: 'Настройки', icon: <PiGear />, match: ['settings', 'trips'] },
 ];
 const TABS = [NAV[0], NAV[1], NAV[2], NAV[3]];
 
@@ -83,6 +84,7 @@ export function App() {
     case 'progress': screen = <ProgressScreen />; break;
     case 'analysis': screen = <AnalysisScreen />; break;
     case 'settings': screen = <SettingsScreen />; break;
+    case 'trips': screen = <TripsScreen />; break;
     case 'more': screen = <MoreScreen />; break;
     default: screen = <Today />;
   }

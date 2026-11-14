@@ -53,8 +53,11 @@ export function ShoppingHub() {
   const cooks = useMemo(() => Object.values(data.cookingEvents).filter((e) => e.eventType === 'meal_prep').sort((a, b) => (a.date + (a.time ?? '') < b.date + (b.time ?? '') ? -1 : 1)), [data.cookingEvents]);
   const nextShop = shops.find((e) => effDate(data, `shop:${e.id}`, e.date) >= today && statusOf(data, taskById(data, `shop:${e.id}`)!) !== 'done');
   const nextCook = cooks.find((e) => effDate(data, `cook:${e.id}`, e.date) >= today && statusOf(data, taskById(data, `cook:${e.id}`)!) !== 'done');
-  const current = shops.filter((e) => !cfg || e.instanceId === cfg.instanceId || !e.instanceId);
+  const current = shops.filter((e) => (!cfg || e.instanceId === cfg.instanceId || !e.instanceId) && e.kind !== 'trip');
+  const tripShops = shops.filter((e) => e.kind === 'trip');
+  const homeShops = shops.filter((e) => e.kind !== 'trip');
   const modelTotal = current.reduce((s, e) => s + shopTotals(data, e).est, 0);
+  const tripTotal = tripShops.reduce((s, e) => s + shopTotals(data, e).est, 0);
   const actualTotal = current.reduce((s, e) => s + shopTotals(data, e).actual, 0);
   return (
     <div className="page">
@@ -63,10 +66,13 @@ export function ShoppingHub() {
       <div className="cols even">
         <div className="stack">
           {nextShop ? <ShopSummaryCard e={nextShop} highlight /> : <div className="card"><Empty title="Ближайших закупок нет">Закупки появятся, когда вы выберете дату старта или загрузите план на следующий месяц.</Empty></div>}
-          <h2 className="section-title">Все закупки</h2>
-          {shops.map((e) => <ShopSummaryCard key={e.id} e={e} />)}
+          <h2 className="section-title">Домашние закупки</h2>
+          {homeShops.map((e) => <ShopSummaryCard key={e.id} e={e} />)}
+          {tripShops.length > 0 && <h2 className="section-title">Перекусы в командировки</h2>}
+          {tripShops.map((e) => <ShopSummaryCard key={e.id} e={e} />)}
           <div className="card flat">
-            <div className="row between"><span>Ориентир по всем закупкам месяца</span><b className="num">{fmtRub(modelTotal)}</b></div>
+            <div className="row between"><span>Ориентир по домашним закупкам цикла</span><b className="num">{fmtRub(modelTotal)}</b></div>
+            {tripShops.length > 0 && <div className="row between small"><span>Перекусы в командировки (отдельно, не входят в бюджет)</span><span className="num">{fmtRub(tripTotal)}</span></div>}
             <div className="row between"><span>Бюджет</span><b className="num">{fmtRub(BUDGET_RUB)}</b></div>
             {modelTotal > BUDGET_RUB && <Note kind="warn">Ориентир больше бюджета на {fmtRub(modelTotal - BUDGET_RUB)}. Можно заменить сёмгу на хек или скумбрию и часть греческого йогурта — на кефир.</Note>}
             {actualTotal > 0 && <div className="row between"><span>Введено фактических цен</span><b className="num">{fmtRub(actualTotal)}</b></div>}
@@ -116,6 +122,7 @@ function ShopSummaryCard({ e, highlight }: { e: ShoppingEvent; highlight?: boole
       </div>
       <div className="budget-bar"><i style={{ width: `${((t.bought + t.atHome) / Math.max(1, t.total)) * 100}%` }} /></div>
       {e.kind === 'topup' && <p className="small muted" style={{ marginBottom: 0 }}>Небольшая докупка: эти продукты не хранятся до следующей основной закупки.</p>}
+      {e.kind === 'trip' && <p className="small muted" style={{ marginBottom: 0 }}>Купить в супермаркете на месте; без готовки. Не входит в домашний бюджет.</p>}
     </a>
   );
 }
@@ -145,7 +152,8 @@ function listText(e: ShoppingEvent, data: Data): string {
       const p = PRODUCTS[l.productId];
       if (p.category !== cat) { cat = p.category; out.push('', `${cat}:`); }
       const c = data.shoppingChecks[`${e.id}:${l.productId}`];
-      out.push(`${c?.bought ? '☑' : '☐'} ${p.name} — ${c?.atHome ? 'есть дома' : buyText(l)}${l.notes.length ? ` (${l.notes.join(' ')})` : ''}`);
+      const by = l.needs.length ? l.needs.reduce((m, n) => (n.date < m ? n.date : m), l.needs[0].date) : null;
+      out.push(`${c?.bought ? '☑' : '☐'} ${p.name} — ${c?.atHome ? 'есть дома' : buyText(l)}${by ? `, к ${fmtShort(by)}` : ''}${l.notes.length ? ` (${l.notes.join(' ')})` : ''}`);
     }
     return out.join('\n');
   }
@@ -187,6 +195,7 @@ export function ShopPage({ id }: { id: string }) {
         </>
       } />
       <div className="print-only"><h2>{e.title}, {fmtLong(d)}</h2></div>
+      {e.kind === 'trip' && <Note kind="info">Перекусы в командировку: купить в обычном супермаркете на месте, готовить не нужно. Варианты чередуются по дням — можно взять любой доступный. Сумма не входит в домашний бюджет на продукты.</Note>}
       {e.kind === 'topup' && <Note kind="info">Небольшая докупка свежего: молочные продукты, бананы, зелень, томаты и т. п. не хранятся до следующей основной закупки — их лучше купить ближе к дате.</Note>}
       {e.lines && <p className="hint">Количество посчитано из меню и готовок этого периода; учтены остатки прошлых закупок и несъедобная часть (кожура, сердцевина). Отметьте «есть дома», если продукт уже есть — он не войдёт в сумму.</p>}
       <div className="cols">
@@ -258,7 +267,7 @@ function ShopLineRow({ e, l, editPrices }: { e: ShoppingEvent; l: ShopLine; edit
       <div style={{ minWidth: 0 }}>
         <div className="name">{p.name}</div>
         <div className="small muted">
-          Нужно {needText(l)}{l.fromStock > 0 ? `, из остатков ${fmtAmount(l.fromStock, p.unit)}` : ''}{l.leftover > 0 && l.buy > 0 ? `, останется ${fmtAmount(l.leftover, p.unit)}` : ''}. Ориентир {fmtRub(atHome ? 0 : l.cost)}.
+          Нужно {needText(l)}{l.needs.length ? ` к ${fmtShort(l.needs.reduce((m, n) => (n.date < m ? n.date : m), l.needs[0].date))}` : ''}{l.fromStock > 0 ? `, из остатков ${fmtAmount(l.fromStock, p.unit)}` : ''}{l.leftover > 0 && l.buy > 0 ? `, останется ${fmtAmount(l.leftover, p.unit)}` : ''}. Ориентир {fmtRub(atHome ? 0 : l.cost)}.
         </div>
         {l.notes.map((n, i) => <div key={i} className="small" style={{ color: 'var(--sea)' }}><PiSnowflake style={{ display: 'inline', verticalAlign: '-2px' }} /> {n}</div>)}
         <Disclosure summary={<span className="small">На что</span>}>
