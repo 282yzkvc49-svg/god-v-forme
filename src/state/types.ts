@@ -454,6 +454,8 @@ export interface Settings {
   lastBackupAt: string | null;
   /** Пользователь выбрал свой адрес доставки на av.ru перед проверкой товаров. */
   avAddressConfirmedAt?: string | null;
+  /** id резервной копии автоматического обновления меню, отчёт о котором ещё не показан. */
+  menuReportUnseen?: string | null;
 }
 
 export interface PlanSettings {
@@ -530,6 +532,10 @@ export interface MigrationReport {
   mackerel: { removedPast: string[]; keptHistory: string[]; future: number };
   unknownRefsFixed: string[];
   keptMarks: string[];
+  /** Применено автоматически при запуске новой версии (а не кнопкой). */
+  auto?: boolean;
+  /** Даты прежнего меню со скумбрией (с сегодняшнего дня), которые заменены новым меню. */
+  mackerelDates?: { days: ISODate[]; cooks: ISODate[]; shops: ISODate[] };
 }
 
 export interface AppData {

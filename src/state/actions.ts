@@ -335,6 +335,13 @@ export function applyMenuUpdate(startDate: ISODate) {
 }
 
 export function rollbackMenuUpdate(backupId: string) {
-  return commit(rollbackMenuOps(getData(), backupId));
+  return commit(rollbackMenuOps(getData(), backupId, todayFn()));
+}
+
+/** Отчёт об автоматическом обновлении меню показан. */
+export function markMenuReportSeen() {
+  const s = getData().settings;
+  if (!s.menuReportUnseen) return Promise.resolve();
+  return commit([{ store: 'settings', put: { ...s, menuReportUnseen: null } }]);
 }
 

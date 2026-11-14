@@ -262,26 +262,66 @@ await step('11. Резервная копия → восстановление �
 });
 
 async function step13(p3) {
-  // установленное приложение с прежним меню: в настройках плана нет id нового меню
-  await p3.evaluate(() => new Promise((res, rej) => {
+  // база устройства, где после версии 1.2.0 новое меню так и не применили (tests/fixtures/state_1.2.0.json):
+  // прежнее меню со скумбрией 28.11, 30.11, 07.12, 08.12, 09.12 и готовками 28.11, 07.12
+  const fixture = JSON.parse(await fs.readFile(path.join(root, 'tests/fixtures/state_1.2.0.json'), 'utf8'));
+  await p3.evaluate((fx) => new Promise((res, rej) => {
     const rq = indexedDB.open('god-v-forme');
     rq.onerror = () => rej(rq.error);
     rq.onsuccess = () => {
       const db = rq.result;
-      const tx = db.transaction('settings', 'readwrite');
-      const st = tx.objectStore('settings');
-      const g = st.getAll();
-      g.onsuccess = () => { for (const s of g.result) if (s.plan) { delete s.plan.menuId; st.put(s); } };
+      const names = Array.from(db.objectStoreNames);
+      const tx = db.transaction(names, 'readwrite');
+      for (const n of names) tx.objectStore(n).clear();
+      for (const [k, v] of Object.entries(fx)) {
+        if (!names.includes(k)) continue;
+        for (const r of (k === 'settings' || k === 'meta' ? [v] : Object.values(v))) tx.objectStore(k).put(r);
+      }
       tx.oncomplete = () => { db.close(); res(true); };
       tx.onerror = () => rej(tx.error);
     };
-  }));
+  }), fixture);
   await p3.goto(`${BASE}?today=2026-11-14#/today`);
   await p3.reload();
-  // после обновления приложение само открывает экран миграции
-  await p3.getByRole('heading', { name: 'Новое меню «Азбука вкуса»' }).waitFor();
-  assert(await p3.locator('input[type=date]').first().inputValue() === '2026-11-16', 'старт по комплекту — 16.11');
+  // при запуске новое меню применяется само (после внутренней копии) и открывается отчёт
+  await p3.getByRole('heading', { name: 'Отчёт о миграции' }).waitFor();
+  await p3.getByText(/Новое меню применено автоматически/).waitFor();
+  await p3.getByText(/дни 28\.11, 30\.11, 07\.12, 08\.12, 09\.12; готовки 28\.11, 07\.12; закупки 15\.11, 01\.12/).waitFor();
+  await p3.getByText(/Резервная копия: /).waitFor();
+  await p3.screenshot({ path: path.join(shots, '13-auto-migration-iphone.png'), fullPage: true });
+  // файл копии до обновления: прежний план целиком
+  await p3.getByRole('button', { name: 'Файл копии до обновления' }).click();
+  const [bdl] = await Promise.all([p3.waitForEvent('download'), p3.getByRole('button', { name: 'Сохранить в «Файлы»' }).click()]);
+  const bf = path.join(shots, 'backup-before-update.zip');
+  await bdl.saveAs(bf);
+  const bz = await JSZip.loadAsync(await fs.readFile(bf));
+  const bj = JSON.parse(await bz.file('backup.json').async('string'));
+  assert(bj.stores.planDays.length === Object.keys(fixture.planDays).length, 'в копии все дни прежнего плана');
+  assert(bj.stores.settings[0].plan.menuId === undefined, 'копия — до обновления');
+  for (const d of ['2026-11-28', '2026-11-30', '2026-12-07', '2026-12-08', '2026-12-09']) {
+    await go(p3, `/day/${d}`);
+    await p3.locator('.meal-card').first().waitFor();
+    assert(await p3.getByText(/Скумбрия/).count() === 0, `${d}: скумбрии нет`);
+  }
+  await go(p3, '/day/2026-11-10');
+  await p3.getByText(/Скумбрия \+ рис/).first().waitFor(); // отмеченный съеденным обед — история
+  // экспорт всех товаров в JSON
+  await go(p3, '/shopping');
+  const [dl] = await Promise.all([p3.waitForEvent('download'), p3.getByRole('button', { name: 'Экспорт всех товаров в JSON' }).click()]);
+  const jf = path.join(shots, 'zakupki_vse_tovary.json');
+  await dl.saveAs(jf);
+  const js = JSON.parse(await fs.readFile(jf, 'utf8'));
+  assert(js.items.length === js.purchases.reduce((s, x) => s + x.items_count, 0) && js.items.length > 100, `позиций ${js.items.length}`);
+  assert(['main', 'topup', 'trip'].every((k) => js.purchases.some((x) => x.purchase_kind === k)), 'основные, докупки и поездки');
+  assert(!/скумбри|mackerel/i.test(JSON.stringify(js)), 'в экспорте нет скумбрии');
+  assert(js.history_items.length > 0 && js.history_items.every((i) => !i.purchase_in_current_plan), 'закупки прежнего плана — отдельно, как история');
+  assert(js.products.every((x) => /^https:\/\/av\.ru\/i\/\d+\/?$/.test(x.av_url)), 'справочник — только товары с карточками av.ru');
+  assert(js.items.filter((i) => i.purchase_in_current_plan).every((i) => /^https:\/\/av\.ru\/i\/\d+\/?$/.test(i.av_url) && i.pack_label && i.purchase_date && i.purchase_title), 'ссылка, фасовка, дата и название закупки');
+  // откат и ручное применение: тоже через копию и сводку замен
+  await go(p3, '/menu-update');
+  await p3.getByRole('button', { name: 'Вернуть прежнее меню' }).click();
   await p3.getByRole('heading', { name: '1. Резервная копия' }).waitFor();
+  assert(await p3.locator('input[type=date]').first().inputValue() === '2026-11-16', 'старт по комплекту — 16.11');
   await p3.getByRole('heading', { name: '2. Сводка замен' }).waitFor();
   await p3.getByText(/Петелинка, 865 г/).waitFor();
   await p3.getByText('всё сходится').waitFor();
@@ -319,8 +359,8 @@ async function step13(p3) {
   await p3.screenshot({ path: path.join(shots, '13-shop-blocked-iphone.png'), fullPage: true });
 }
 
-await step('12–13. Ноябрь 2026: старт 16.11, командировки, релакс 29.11, меню «Азбука вкуса» с av.ru; обновление меню через предпросмотр', async () => {
-  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, locale: 'ru-RU', timezoneId: 'Asia/Yekaterinburg' });
+await step('12–13. Ноябрь 2026: старт 16.11, командировки, релакс 29.11, меню «Азбука вкуса» с av.ru; база 1.2.0 со скумбрией → обновление при запуске, экспорт товаров JSON', async () => {
+  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, acceptDownloads: true, locale: 'ru-RU', timezoneId: 'Asia/Yekaterinburg' });
   const p3 = await newPage(ctx3);
   active = p3;
   await p3.goto(`${BASE}?today=2026-11-14#/today`);

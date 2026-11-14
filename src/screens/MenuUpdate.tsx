@@ -1,20 +1,23 @@
 // Обновление меню как миграция: резервная копия, сводка замен товаров, удаление скумбрии из старых данных,
-// что изменится в меню, готовках и закупках, проверки и отчёт. Применяется только по кнопке.
-import { useMemo, useState } from 'react';
-import { useApp } from '../state/store';
+// что изменится в меню, готовках и закупках, проверки и отчёт. С версии 1.5.0 применяется при запуске
+// автоматически (после внутренней резервной копии); вручную — только после отката.
+import { useEffect, useMemo, useState } from 'react';
+import { getAllPhotoBlobs, useApp } from '../state/store';
 import * as A from '../state/actions';
 import { useToday } from '../lib/clock';
 import { BASE_PRODUCTS, DISHES, TEMPLATE } from '../domain/catalog';
 import { BUDGET_RUB, KCAL_TARGET, dayNutrition, menuUpdatePending, planEnd } from '../domain/plan';
 import { checkActiveData, checkInstance, checkSeedPlan, checkUserData, kcalSummary } from '../domain/planCheck';
-import { applyOps, menuUpdateOps } from '../state/model';
+import { applyOps, menuUpdateOps, storesToData } from '../state/model';
+import { buildBackupZip } from '../domain/zipfiles';
+import { saveFile } from '../lib/files';
 import type { MigrationReport } from '../state/types';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
-import { fmtDayMonth, fmtLong, fmtShort, weekdayShort, type ISODate } from '../lib/dates';
+import { fmtDayMonth, fmtLong, fmtShort, localDate, weekdayShort, type ISODate } from '../lib/dates';
 import { fmtRub } from '../lib/util';
 import { href } from '../app/router';
 import { Disclosure, Note, PageHead, toast } from '../ui/kit';
-import { PiCheckBold, PiCookingPot, PiShoppingCart, PiSuitcase, PiWarning } from '../ui/icons';
+import { PiCheckBold, PiCookingPot, PiDownloadSimple, PiShoppingCart, PiSuitcase, PiWarning } from '../ui/icons';
 
 export function MenuUpdateScreen() {
   const data = useApp();
@@ -27,7 +30,7 @@ export function MenuUpdateScreen() {
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(date);
   const res = useMemo(() => (valid ? menuUpdateOps(data, date, today, new Date().toISOString(), __APP_VERSION__) : null), [date, today, data]);
   const inst = res?.instance ?? null;
-  const checks = useMemo(() => (inst && res ? [...checkInstance(inst), ...checkSeedPlan(inst), checkActiveData(applyOps(data, res.ops), today), ...checkUserData(data)] : []), [inst]);
+  const checks = useMemo(() => (inst && res ? [...checkInstance(inst), ...checkSeedPlan(inst), checkActiveData(pending ? applyOps(data, res.ops) : data, today), ...checkUserData(data)] : []), [inst]);
   const lastBackup = Object.values(data.backups ?? {}).filter((b) => b.report).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const kcal = useMemo(() => (inst ? kcalSummary(inst) : null), [inst]);
   if (!res || !inst) {
@@ -215,12 +218,36 @@ export function MenuUpdateScreen() {
 }
 
 function ReportCard({ report, backupId, createdAt }: { report: MigrationReport; backupId: string; createdAt: string }) {
+  const data = useApp();
   const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState<{ bytes: Uint8Array; name: string } | null>(null);
+  useEffect(() => { A.markMenuReportSeen(); }, []);
+  const md = report.mackerelDates;
+  const dates = (xs: string[]) => xs.map(fmtShort).join(', ');
+  const prepare = async () => {
+    const b = data.backups?.[backupId];
+    if (!b) return;
+    setBusy(true);
+    try {
+      const { bytes } = await buildBackupZip(storesToData(b.stores), await getAllPhotoBlobs(), b.appVersion, b.createdAt);
+      setFile({ bytes, name: `god-v-forme_backup_do-obnovleniya_${b.createdAt.slice(0, 16).replace('T', '_').replace(':', '')}.zip` });
+    } catch (e: any) {
+      toast(`Ошибка: ${e?.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="card">
       <h2>Отчёт о миграции</h2>
+      {report.auto && (
+        <Note kind="ok">
+          <p className="mt0">Новое меню применено автоматически при запуске{data.backups?.[backupId]?.appVersion ? ` версии ${data.backups[backupId].appVersion}` : ''}. До этого в базе на этом устройстве оставалось {data.backups?.[backupId]?.fromMenu ? `меню «${data.backups[backupId].fromMenu}»` : 'прежнее меню, собранное до перехода на «Азбуку вкуса»'}: новое меню ждало кнопки «Применить», поэтому прежнее продолжало показываться и попадало в экспорт.</p>
+          {md && (md.days.length + md.cooks.length + md.shops.length > 0) && <p style={{ marginBottom: 0 }}>Скумбрия была в прежнем меню: {md.days.length ? `дни ${dates(md.days)}` : ''}{md.cooks.length ? `; готовки ${dates(md.cooks)}` : ''}{md.shops.length ? `; закупки ${dates(md.shops)}` : ''}. Эти записи заменены новым меню.</p>}
+        </Note>
+      )}
       <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
-        <li>Резервная копия: {fmtLong(createdAt.slice(0, 10))}, {createdAt.slice(11, 16)} (внутренняя, все данные кроме фото).</li>
+        <li>Резервная копия: {fmtLong(localDate(new Date(createdAt)))}, {new Date(createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} (внутренняя, все данные кроме фото).</li>
         <li>Старт меню: {fmtLong(report.startDate)}; дней с новым меню: {report.replacedDays}; заменено будущих готовок прежнего меню: {report.removedFutureCooks}, закупок: {report.removedFutureShops}.</li>
         <li>Скумбрия: в будущих данных — {report.mackerel.future} записей заменено новым меню; в прошедших без отметок убрано — {report.mackerel.removedPast.length}; осталось историей (отмечено вами) — {report.mackerel.keptHistory.length}.</li>
         {report.mackerel.keptHistory.map((x, i) => <li key={i} className="muted">{x}</li>)}
@@ -230,6 +257,9 @@ function ReportCard({ report, backupId, createdAt }: { report: MigrationReport; 
       </ul>
       <div className="btn-row" style={{ marginTop: 10 }}>
         <a className="btn primary" href={href('/av-check')}>Проверить товары на av.ru</a>
+        {file
+          ? <button className="btn" onClick={async () => { const r = await saveFile(file.bytes, file.name, 'application/zip'); if (r !== 'cancelled') toast('Копия сохранена'); }}><PiDownloadSimple /> Сохранить в «Файлы»</button>
+          : <button className="btn" disabled={busy || !data.backups?.[backupId]} onClick={prepare}>Файл копии до обновления</button>}
         <button className="btn ghost" disabled={busy} onClick={() => { if (!confirm('Вернуть прежнее меню из резервной копии? Отметки, вес, фото и тренировки останутся.')) return; setBusy(true); A.rollbackMenuUpdate(backupId).then(() => toast('Прежнее меню восстановлено из копии')).finally(() => setBusy(false)); }}>Вернуть прежнее меню</button>
       </div>
     </div>

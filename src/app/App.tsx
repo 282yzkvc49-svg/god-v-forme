@@ -64,9 +64,9 @@ export function App() {
   const [update, setUpdate] = useState(false);
   useTheme(data.settings.theme);
   useEffect(() => onUpdateReady(() => setUpdate(true)), []);
-  // новое меню после обновления приложения: сразу показать экран с резервной копией и сводкой изменений
+  // новое меню применено при запуске (или ждёт применения после отката): один раз показать отчёт о миграции
   useEffect(() => {
-    if (!data.ready || menuPromptShown || !menuUpdatePending(data)) return;
+    if (!data.ready || menuPromptShown || !(data.settings.menuReportUnseen || menuUpdatePending(data))) return;
     menuPromptShown = true;
     if (!route.path[0] || route.path[0] === 'today') go('/menu-update');
   }, [data.ready]);

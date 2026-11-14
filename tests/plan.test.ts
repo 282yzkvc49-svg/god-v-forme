@@ -295,54 +295,62 @@ function v4State(): AppData {
   return d;
 }
 
-test('обновление меню: после миграции — только предпросмотр; меню меняется после подтверждения и резервной копии', () => {
+test('обновление меню при запуске: сначала резервная копия, затем новое меню; отчёт показывается один раз', () => {
   const before = v4State();
-  const d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
-  assert.equal(menuUpdatePending(d), true, 'новое меню ждёт предпросмотра');
-  assert.equal(d.settings.plan!.startDate, '2026-11-02', 'до подтверждения план не меняется');
-  assert.equal(JSON.stringify(d.planDays['2026-11-20']), JSON.stringify(before.planDays['2026-11-20']));
+  const ops = dataMigrationOps(before, '2026-11-14', NOW, '1.5.0');
+  const d = applyOps(before, ops);
+  assert.equal(menuUpdatePending(d), false, 'новое меню применено без кнопки');
+  assert.equal(d.settings.plan!.startDate, '2026-11-16');
+  assert.equal(d.settings.plan!.menuId, TEMPLATE.id);
   assert.equal(Object.keys(d.trips).length, 2, 'командировки добавлены');
   assert.equal(d.customTasks.c26, undefined, 'старое событие командировки на 26.11 убрано');
   assert.ok(d.customTasks.c27);
-  // применение: в той же транзакции — резервная копия всех данных до изменения
-  const res = menuUpdateOps(d, '2026-11-16', '2026-11-14', NOW, '1.4.0');
-  assert.equal(res.ops[0].store, 'backups', 'копия — первой операцией');
-  const after = applyOps(d, res.ops);
-  const bk = after.backups[res.backupId];
-  assert.equal(bk.stores.planDays.length, Object.keys(d.planDays).length, 'в копии все дни прежнего плана');
+  // резервная копия — до изменения плана, в той же транзакции
+  const bi = ops.findIndex((o) => o.store === 'backups');
+  assert.ok(bi >= 0 && ops.findIndex((o) => o.store === 'planDays') > bi, 'копия раньше изменений плана');
+  const bk = d.backups[d.settings.menuReportUnseen!];
+  assert.ok(bk, 'отчёт ждёт показа');
+  assert.equal(bk.stores.planDays.length, Object.keys(before.planDays).length, 'в копии все дни прежнего плана');
   assert.equal(bk.stores.weights.length, 1);
   assert.equal(bk.fromMenu, null);
   assert.equal(bk.toMenu, TEMPLATE.id);
-  assert.equal(menuUpdatePending(after), false);
-  assert.equal(after.settings.plan!.startDate, '2026-11-16');
-  assert.equal(after.settings.plan!.menuId, TEMPLATE.id);
-  assert.equal(after.planDays['2026-11-16'].mealCards!.lunch.parts[0].dishId, 'L01');
-  okAll(checkInstance(res.instance));
-  okAll(checkSeedPlan(res.instance));
+  assert.equal(bk.appVersion, '1.5.0');
+  assert.equal(bk.report!.auto, true);
+  assert.equal(d.planDays['2026-11-16'].mealCards!.lunch.parts[0].dishId, 'L01');
+  const inst = buildInstance(d.settings.plan!, { trips: Object.values(d.trips), relaxOverrides: d.settings.relaxOverrides, today: '2026-11-14' });
+  okAll(checkInstance(inst));
+  okAll(checkSeedPlan(inst));
   // прежние данные: отметки, тренировки, вес, фото
-  assert.equal(after.taskStatus['meal:2026-11-03:breakfast'].status, 'done');
-  assert.equal(after.trainingLogs['train:2026-11-04'].status, 'done');
-  assert.equal(after.weights.w1.kg, 106.1);
-  assert.ok(after.photos.ph1);
-  assert.ok(checkUserData(after).every((c) => c.ok));
-  assert.equal(dataMigrationOps(after, '2026-11-14', NOW).length, 0);
+  assert.equal(d.taskStatus['meal:2026-11-03:breakfast'].status, 'done');
+  assert.equal(d.trainingLogs['train:2026-11-04'].status, 'done');
+  assert.equal(d.weights.w1.kg, 106.1);
+  assert.ok(d.photos.ph1);
+  assert.ok(checkUserData(d).every((c) => c.ok));
+  assert.equal(dataMigrationOps(d, '2026-11-14', NOW).length, 0, 'повторно не применяется');
+  // ручное применение (например, после отката) — тоже с копией первой операцией
+  const res = menuUpdateOps(before, '2026-11-16', '2026-11-14', NOW, '1.5.0');
+  assert.equal(res.ops[0].store, 'backups');
+  assert.equal(res.report.auto, false);
 });
 
 test('скумбрия: убрана из активных и неотмеченных старых данных, отмеченное осталось историей; проверка активных данных', () => {
   const before = v4State();
-  const d = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
-  assert.equal(checkActiveData(d, '2026-11-14').ok, false, 'до миграции в будущих днях прежнего меню есть скумбрия');
-  const res = menuUpdateOps(d, '2026-11-16', '2026-11-14', NOW);
-  const after = applyOps(d, res.ops);
+  assert.equal(checkActiveData(before, '2026-11-14').ok, false, 'до миграции в будущих днях прежнего меню есть скумбрия');
+  const after = applyOps(before, dataMigrationOps(before, '2026-11-14', NOW));
+  const report = after.backups[after.settings.menuReportUnseen!].report!;
   const check = checkActiveData(after, '2026-11-14');
   assert.ok(check.ok, check.details.join('; '));
-  // 09.11 — день прежнего меню без отметок: удалён; 10.11 обед со скумбрией отмечен съеденным — история
-  assert.equal(after.planDays['2026-11-09'], undefined);
+  assert.deepEqual(report.mackerelDates!.days, ['2026-11-28']);
+  // 09.11 — день прежнего меню без отметок: день остаётся, убран только ужин со скумбрией
+  assert.equal(after.planDays['2026-11-09'].mealCards!.dinner.title, 'Блюдо прежнего меню удалено');
+  assert.equal(JSON.stringify(after.planDays['2026-11-09'].mealCards!.lunch), JSON.stringify(before.planDays['2026-11-09'].mealCards!.lunch), 'остальные приёмы дня не меняются');
+  // 10.11 обед со скумбрией отмечен съеденным — история
   assert.equal(after.planDays['2026-11-10'].mealCards!.lunch.parts[0].dishId, 'mackerel');
   assert.equal(after.planDays['2026-11-10'].mealCards!.dinner.title, 'Блюдо прежнего меню удалено', 'неотмеченный ужин со скумбрией убран');
-  assert.ok(res.report.mackerel.keptHistory.some((x) => x.startsWith('2026-11-10 lunch')));
-  assert.ok(res.report.mackerel.removedPast.length >= 2);
-  assert.ok(res.report.mackerel.future > 0);
+  assert.equal(after.taskStatus['meal:2026-11-10:lunch'].status, 'done');
+  assert.ok(report.mackerel.keptHistory.some((x) => x.startsWith('10.11 обед')));
+  assert.ok(report.mackerel.removedPast.length >= 2);
+  assert.ok(report.mackerel.future > 0);
   // прошлая закупка: купленная скумбрия — история, не купленная — убрана
   const shop = after.shoppingEvents['old-shop'];
   assert.deepEqual(shop.lines!.map((l) => l.productId), ['mackerel_fillet', 'potato', 'tomato'], 'прочие строки не трогаются');
@@ -352,12 +360,14 @@ test('скумбрия: убрана из активных и неотмечен
   assert.ok(!TEMPLATE.products.some((p) => !p.archived && /скумбри/i.test(p.name)));
   for (const x of Object.values(after.planDays)) if (x.date >= '2026-11-14') assert.ok(!/скумбри|mackerel/i.test(JSON.stringify(x)), x.date);
   for (const e of [...Object.values(after.cookingEvents), ...Object.values(after.shoppingEvents)]) if (e.date >= '2026-11-14') assert.ok(!/скумбри|mackerel/i.test(JSON.stringify(e)), e.id);
-  // откат из копии возвращает прежнее меню, записи пользователя не трогаются
-  const back = applyOps(after, rollbackMenuOps(after, res.backupId));
+  // откат из копии возвращает прежнее меню без скумбрии; записи пользователя не трогаются; само не применяется снова
+  const back = applyOps(after, rollbackMenuOps(after, after.settings.menuReportUnseen!, '2026-11-14'));
   assert.equal(back.settings.plan!.startDate, '2026-11-02');
   assert.equal(menuUpdatePending(back), true);
   assert.equal(back.weights.w1.kg, 106.1);
   assert.ok(back.planDays['2026-11-09']);
+  for (const x of Object.values(back.planDays)) if (x.date >= '2026-11-14') assert.ok(!/скумбри|mackerel/i.test(JSON.stringify(x.mealCards ?? x.meals)), x.date);
+  assert.equal(dataMigrationOps(back, '2026-11-14', NOW).length, 0);
 });
 
 test('проверка av.ru: недоступный товар блокируется; замена пересчитывает граммовки, упаковки, цены и калорийность', () => {

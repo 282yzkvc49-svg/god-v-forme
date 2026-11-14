@@ -12,8 +12,9 @@ import { DISHES, PRODUCTS, TEMPLATE, cookedWeight, dishAmount, fmtAmount, ingred
 import { BUDGET_RUB, buyText, needText, planEnd, portionsLeft } from '../domain/plan';
 import { MEAL_LABELS, type CookingEvent, type ShopLine, type ShoppingEvent } from '../state/types';
 import { CheckButton, Disclosure, Empty, Note, PageHead, toast } from '../ui/kit';
-import { copyText, shareText } from '../lib/files';
-import { PiBookOpen, PiCheck, PiCookingPot, PiCopy, PiPrinter, PiShareNetwork, PiShoppingCart, PiSnowflake, PiPackage, PiListChecks, PiHouse } from '../ui/icons';
+import { copyText, saveFile, shareText } from '../lib/files';
+import { buildShoppingExport, shoppingExportFileName } from '../domain/shopExport';
+import { PiBookOpen, PiCheck, PiCookingPot, PiCopy, PiDownloadSimple, PiPrinter, PiShareNetwork, PiShoppingCart, PiSnowflake, PiPackage, PiListChecks, PiHouse } from '../ui/icons';
 import { containersFor } from './planViews';
 import { AvLink } from '../ui/AvLink';
 import { AvStateChip, BasketSummary } from './AvCheck';
@@ -58,10 +59,17 @@ export function ShoppingHub() {
   const nextCook = cooks.find((e) => effDate(data, `cook:${e.id}`, e.date) >= today && statusOf(data, taskById(data, `cook:${e.id}`)!) !== 'done');
   const current = shops.filter((e) => (!cfg || e.instanceId === cfg.instanceId || !e.instanceId) && e.kind !== 'trip');
   const tripShops = shops.filter((e) => e.kind === 'trip');
-  const homeShops = shops.filter((e) => e.kind !== 'trip');
+  const homeShops = current;
+  // закупки прежних планов (до перехода на текущее меню) — история, отдельно от текущих
+  const oldShops = shops.filter((e) => e.kind !== 'trip' && !current.includes(e));
   const modelTotal = current.reduce((s, e) => s + shopTotals(data, e).est, 0);
   const tripTotal = tripShops.reduce((s, e) => s + shopTotals(data, e).est, 0);
   const actualTotal = current.reduce((s, e) => s + shopTotals(data, e).actual, 0);
+  const exportJson = async () => {
+    const json = buildShoppingExport(data, today, __APP_VERSION__, new Date().toISOString());
+    const r = await saveFile(JSON.stringify(json, null, 2), shoppingExportFileName(today), 'application/json');
+    if (r !== 'cancelled') toast(`Сохранено: ${json.totals.items} позиций из ${json.totals.purchases} закупок`);
+  };
   return (
     <div className="page">
       <PageHead title="Закупки и готовка" sub={`${PROFILE.shopping_text} ${PROFILE.cooking_days_text}`} />
@@ -69,6 +77,12 @@ export function ShoppingHub() {
         <div className="card flat" style={{ marginBottom: 12 }}>
           <div className="card-head"><h3 className="mt0">Товары av.ru: проверка по вашему адресу</h3><a className="btn small primary" href={href('/av-check')}>Проверить на av.ru</a></div>
           <BasketSummary ids={Array.from(new Set(current.filter((e) => e.date >= today).flatMap((e) => orderProductIds(e))))} compact />
+        </div>
+      )}
+      {shops.length > 0 && (
+        <div className="card flat" style={{ marginBottom: 12 }}>
+          <div className="card-head"><h3 className="mt0">Все товары одним файлом</h3><button className="btn small" onClick={exportJson}><PiDownloadSimple /> Экспорт всех товаров в JSON</button></div>
+          <p className="small muted" style={{ margin: 0 }}>Все закупки текущего меню — основные, докупки и перекусы в поездки ({homeShops.length + tripShops.length}){oldShops.length ? `, и отдельно закупки прежнего плана (${oldShops.length})` : ''}; каждая позиция отдельно: название, количество и единицы, упаковки и фасовка, дата и название закупки, ссылка на товар av.ru, плановая стоимость, ID продукта. Для сверки с каталогом «Азбуки вкуса», например в ChatGPT.</p>
         </div>
       )}
       {cfg && <p className="muted mt0">План питания: {fmtDayMonth(cfg.startDate)} — {fmtDayMonth(planEnd(cfg))}. <a href={href('/settings', { s: 'plan' })}>Изменить дату старта</a></p>}
@@ -79,11 +93,16 @@ export function ShoppingHub() {
           {homeShops.map((e) => <ShopSummaryCard key={e.id} e={e} />)}
           {tripShops.length > 0 && <h2 className="section-title">Перекусы в командировки</h2>}
           {tripShops.map((e) => <ShopSummaryCard key={e.id} e={e} />)}
+          {oldShops.length > 0 && (
+            <Disclosure summary={<span>Закупки прежнего плана — история ({oldShops.length})</span>}>
+              <div className="stack">{oldShops.map((e) => <ShopSummaryCard key={e.id} e={e} />)}</div>
+            </Disclosure>
+          )}
           <div className="card flat">
             <div className="row between"><span>Ориентир по домашним закупкам цикла</span><b className="num">{fmtRub(modelTotal)}</b></div>
             {tripShops.length > 0 && <div className="row between small"><span>Перекусы в командировки (отдельно, не входят в бюджет)</span><span className="num">{fmtRub(tripTotal)}</span></div>}
             <div className="row between"><span>Бюджет</span><b className="num">{fmtRub(BUDGET_RUB)}</b></div>
-            {modelTotal > BUDGET_RUB && <Note kind="warn">Ориентир больше бюджета на {fmtRub(modelTotal - BUDGET_RUB)}. Можно заменить сёмгу на хек или горбушу и часть греческого йогурта — на кефир.</Note>}
+            {modelTotal > BUDGET_RUB && <Note kind="warn">Ориентир больше бюджета на {fmtRub(modelTotal - BUDGET_RUB)}. Можно заменить часть форели минтаем — он заметно дешевле.</Note>}
             {actualTotal > 0 && <div className="row between"><span>Введено фактических цен</span><b className="num">{fmtRub(actualTotal)}</b></div>}
             <p className="hint" style={{ marginBottom: 0 }}>{SHOPPING_META.price_warning} Позиции «есть дома» в сумму не входят. Остатки круп, масла, орехов и специй перейдут на следующий месяц.</p>
           </div>

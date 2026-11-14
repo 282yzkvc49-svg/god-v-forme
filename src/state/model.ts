@@ -6,12 +6,13 @@ import {
 } from './types';
 import { SEED_ID, defaultSettings, seedTemplateVersions } from '../lib/seed';
 import type { ISODate } from '../lib/dates';
-import { BASE_START, buildInstance, makePlanSettings, replanOps } from '../domain/plan';
+import { BASE_START, PLAN_LENGTH, buildInstance, makePlanSettings, menuUpdatePending, replanOps } from '../domain/plan';
+import { addDays, fmtShort } from '../lib/dates';
 import type { BackupRec, CookingEvent, MealCard, MealSlot, MigrationReport, PlanDay, ShoppingEvent, Trip } from './types';
-import { MEAL_SLOTS } from './types';
+import { MEAL_LABELS, MEAL_SLOTS } from './types';
 import { DISHES, PRODUCTS, TEMPLATE } from '../domain/catalog';
 
-export const DATA_VERSION = 6;
+export const DATA_VERSION = 7;
 
 export function emptyData(): AppData {
   const d: any = { ready: false, settings: defaultSettings(), meta: null };
@@ -87,7 +88,7 @@ export function seedUpgradeOps(data: AppData, now: string): Op[] {
 }
 
 /** Миграции формата записей внутри хранилищ (не схемы IndexedDB). */
-export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, now = new Date().toISOString()): Op[] {
+export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, now = new Date().toISOString(), appVersion = 'migration'): Op[] {
   const ops: Op[] = [];
   if (!data0.meta) return ops;
   const v = data0.meta.dataVersion || 1;
@@ -96,6 +97,7 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   if (v < 4) step(planV4Ops(data, today, now));
   if (v < 5) step(planV5Ops(data, today, now));
   if (v < 6) step(planV6Ops(data, today, now));
+  if (v < 7) step(planV7Ops(data, today, now, appVersion));
   if (v < 2) {
     // v2: у позиции «Апельсины» из стартовых закупок убрано примечание (по решению пользователя)
     for (const e of Object.values(data.shoppingEvents)) {
@@ -232,17 +234,45 @@ export function planV6Ops(_data: AppData, _today: ISODate, _now: string): Op[] {
 }
 
 /**
- * Переход на новое меню (шаблон с другим id) после предпросмотра: план пересобирается с выбранной датой старта.
+ * v7: прежнее меню больше не остаётся активным до нажатия кнопки. В 1.3.0–1.4.0 новое меню применялось только
+ * по кнопке на экране обновления, и на устройствах, где её не нажали, в базе оставался план версии 1.2.0
+ * (старт 16.11) со скумбрией 28.11, 30.11, 07.12, 08.12, 09.12, готовками 28.11 и 07.12 и строками закупок.
+ * Теперь обновление на комплект v2 применяется при запуске: сначала внутренняя резервная копия, затем новое меню,
+ * затем удаление скумбрии из оставшихся данных; отмеченное пользователем остаётся историей, отчёт показывается
+ * один раз. Если меню уже новое — только проверка, что в данных нет удалённых блюд и товаров.
+ */
+export function planV7Ops(data: AppData, today: ISODate, now: string, appVersion = 'migration'): Op[] {
+  if (!data.settings.onboarded || !data.settings.plan) return [];
+  if (!menuUpdatePending(data)) return purgeRemovedOps(data, today).ops;
+  const base = TEMPLATE.base_start;
+  const start = today <= addDays(base, PLAN_LENGTH - 1) ? base : today;
+  const res = menuUpdateOps(data, start, today, now, appVersion, true);
+  const after = applyOps(data, res.ops);
+  return [...res.ops, { store: 'settings', put: { ...after.settings, menuReportUnseen: res.backupId } }];
+}
+
+/** Даты прежнего меню со скумбрией начиная с сегодняшнего дня (для отчёта). */
+export function removedDates(data: AppData, today: ISODate): { days: ISODate[]; cooks: ISODate[]; shops: ISODate[] } {
+  const sorted = (xs: ISODate[]) => Array.from(new Set(xs)).sort();
+  return {
+    days: sorted(Object.values(data.planDays).filter((d) => d.date >= today && dayHasRemoved(d)).map((d) => d.date)),
+    cooks: sorted(Object.values(data.cookingEvents).filter((e) => e.date >= today && cookHasRemoved(e)).map((e) => e.date)),
+    shops: sorted(Object.values(data.shoppingEvents).filter((e) => e.date >= today && shopHasRemoved(e)).map((e) => e.date)),
+  };
+}
+
+/**
+ * Переход на новое меню (шаблон с другим id): план пересобирается с выбранной датой старта.
  * Прошедшие дни — история; тренировки, вес, фото, отметки, командировки и релакс-дни не меняются.
  */
-export function menuUpdateOps(data: AppData, startDate: ISODate, today: ISODate, now: string, appVersion = 'test') {
+export function menuUpdateOps(data: AppData, startDate: ISODate, today: ISODate, now: string, appVersion = 'test', auto = false) {
   const res = replanOps(data, makePlanSettings(startDate, now, true), today, { now });
   const after = applyOps(data, res.ops);
-  const purge = purgeRemovedOps(after, today);
+  const purge = purgeRemovedOps(after, today, res.instance);
   const newDays = new Set(res.instance.planDays.map((d) => d.date));
   const replacedDays = res.instance.planDays.filter((d) => d.date >= today && JSON.stringify(data.planDays[d.date]?.meals ?? null) !== JSON.stringify(d.meals)).length;
-  const newIds = new Set([...res.instance.cookingEvents.map((e) => e.id), ...res.instance.shoppingEvents.map((e) => e.id)]);
-  const gone = (store: 'cookingEvents' | 'shoppingEvents') => Object.values(data[store]).filter((e) => e.source === 'seed' && e.date >= today && !newIds.has(e.id)).length;
+  // будущие готовки и закупки прежнего плана заменяются все (удаляются или перезаписываются новыми с тем же id)
+  const gone = (store: 'cookingEvents' | 'shoppingEvents') => Object.values(data[store]).filter((e) => e.source === 'seed' && e.date >= today).length;
   const futureMackerel = Object.values(data.planDays).filter((d) => d.date >= today && dayHasRemoved(d)).length
     + Object.values(data.cookingEvents).filter((e) => e.date >= today && cookHasRemoved(e)).length
     + Object.values(data.shoppingEvents).filter((e) => e.date >= today && shopHasRemoved(e)).length;
@@ -257,10 +287,12 @@ export function menuUpdateOps(data: AppData, startDate: ISODate, today: ISODate,
   const report: MigrationReport = {
     appliedAt: now, startDate, replacedDays, removedFutureCooks: gone('cookingEvents'), removedFutureShops: gone('shoppingEvents'),
     mackerel: { removedPast: purge.removed, keptHistory: purge.kept, future: futureMackerel }, unknownRefsFixed: purge.unknown, keptMarks,
+    auto, mackerelDates: removedDates(data, today),
   };
   // резервная копия всех данных (кроме самих фото) — до изменения базы, в той же транзакции
   const backup: BackupRec = {
-    id: `menu-${now.replace(/[^0-9]/g, '').slice(0, 14)}`, createdAt: now, reason: `Перед обновлением меню на «${TEMPLATE.id}»`, appVersion,
+    id: `menu-${now.replace(/[^0-9]/g, '').slice(0, 14)}`, createdAt: now,
+    reason: `${auto ? 'Автоматически при запуске версии ' + appVersion + ', перед' : 'Перед'} обновлением меню на «${TEMPLATE.id}»`, appVersion,
     fromMenu: data.settings.plan?.menuId ?? null, toMenu: TEMPLATE.id, stores: dataToStores(data), report,
   };
   const old = Object.values(data.backups ?? {}).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).slice(1);
@@ -308,38 +340,42 @@ const REMOVED_CARD: MealCard = { title: 'Блюдо прежнего меню у
 
 /**
  * Убирает скумбрию (и ссылки на удалённые товары) из сохранённых данных прежних меню.
- * Отмеченное пользователем (съедено, приготовлено, куплено) остаётся историей; неотмеченное — удаляется.
+ * Отмеченное пользователем (съедено, приготовлено, куплено) остаётся историей. Дни целиком не удаляются:
+ * неотмеченный приём со скумбрией с сегодняшнего дня получает блюдо нового плана на эту дату (inst),
+ * в прошедших днях — пометку «Блюдо прежнего меню удалено»; остальные приёмы дня не меняются.
  */
-export function purgeRemovedOps(data: AppData, today: ISODate): { ops: Op[]; removed: string[]; kept: string[]; unknown: string[] } {
+export function purgeRemovedOps(data: AppData, today: ISODate, inst?: { planDays: PlanDay[] } | null): { ops: Op[]; removed: string[]; kept: string[]; unknown: string[] } {
   const ops: Op[] = [];
   const removed: string[] = [], kept: string[] = [], unknown: string[] = [];
   const marked = (taskId: string) => { const st = data.taskStatus[taskId]?.status; return !!st && st !== 'planned'; };
+  const instDays = new Map((inst?.planDays ?? []).map((d) => [d.date, d]));
   for (const day of Object.values(data.planDays)) {
     const slots = MEAL_SLOTS.filter((s) => slotRemoved(day, s));
     if (!slots.length) continue;
-    const anyMark = MEAL_SLOTS.some((s) => marked(`meal:${day.date}:${s}`)) || marked(`box:${day.date}`);
-    if (!anyMark) { ops.push({ store: 'planDays', del: day.date }); removed.push(`${day.date}: день прежнего меню без отметок удалён`); continue; }
+    const repl = day.date >= today ? instDays.get(day.date) : undefined;
     const cards = day.mealCards ? { ...day.mealCards } : null;
     const meals = day.meals ? { ...day.meals } : null;
     let changed = false;
     for (const s of slots) {
       const title = day.mealCards?.[s]?.title ?? day.meals?.[s] ?? '';
-      if (marked(`meal:${day.date}:${s}`)) { kept.push(`${day.date} ${s}: «${title}» — отмечено, осталось в истории`); continue; }
-      if (cards) cards[s] = REMOVED_CARD;
-      if (meals) meals[s] = REMOVED_CARD.title;
+      const at = `${fmtShort(day.date)} ${MEAL_LABELS[s].toLowerCase()}`;
+      if (marked(`meal:${day.date}:${s}`)) { kept.push(`${at}: «${title}» — отмечено, осталось в истории`); continue; }
+      const card = repl?.mealCards?.[s] && !slotRemoved(repl, s) ? repl.mealCards[s] : REMOVED_CARD;
+      if (cards) cards[s] = card;
+      if (meals) meals[s] = card === REMOVED_CARD ? REMOVED_CARD.title : repl?.meals?.[s] ?? card.title;
       changed = true;
-      removed.push(`${day.date} ${s}: «${title}» без отметки — убрано`);
+      removed.push(`${at}: «${title}» без отметки — ${card === REMOVED_CARD ? 'убрано' : `заменено на «${card.title}»`}`);
     }
     if (changed) ops.push({ store: 'planDays', put: { ...day, mealCards: cards, meals } });
   }
   for (const e of Object.values(data.cookingEvents)) {
     if (!cookHasRemoved(e)) continue;
-    if (marked(`cook:${e.id}`)) { kept.push(`${e.date} готовка «${e.title}» — отмечена, осталась в истории`); continue; }
+    if (marked(`cook:${e.id}`)) { kept.push(`${fmtShort(e.date)} готовка «${e.title}» — отмечена, осталась в истории`); continue; }
     const items = (e.items ?? []).filter((i) => !partRemoved(i.dishId));
     const dishes = (e.dishes ?? []).filter((x) => !REMOVED_TEXT.test(x.text) && !x.recipeIds.some((r) => REMOVED_DISHES.includes(r)));
     if (!items.length && !dishes.length) ops.push({ store: 'cookingEvents', del: e.id });
     else ops.push({ store: 'cookingEvents', put: { ...e, items, dishes, sourceText: dishes.map((x) => x.text).join('; ') } });
-    removed.push(`${e.date} готовка: блюда со скумбрией убраны`);
+    removed.push(`${fmtShort(e.date)} готовка: блюда со скумбрией убраны`);
   }
   for (const e of Object.values(data.shoppingEvents)) {
     if (!shopHasRemoved(e)) continue;
@@ -347,8 +383,8 @@ export function purgeRemovedOps(data: AppData, today: ISODate): { ops: Op[]; rem
     const lines = (e.lines ?? []).filter((l) => !lineRemoved(l.productId) || check(l.productId));
     const items = (e.items ?? []).filter((i) => !(REMOVED_TEXT.test(i.name) || lineRemoved(i.itemId, i.name) && !!e.lines) || check(i.itemId));
     for (const l of e.lines ?? []) if (lineRemoved(l.productId)) {
-      if (check(l.productId)) kept.push(`${e.date} закупка: «${PRODUCTS[l.productId]?.name ?? l.productId}» — отмечено, осталось в истории`);
-      else (PRODUCTS[l.productId] ? removed : unknown).push(`${e.date} закупка: ${PRODUCTS[l.productId]?.name ?? l.productId} — строка убрана`);
+      if (check(l.productId)) kept.push(`${fmtShort(e.date)} закупка: «${PRODUCTS[l.productId]?.name ?? l.productId}» — отмечено, осталось в истории`);
+      else (PRODUCTS[l.productId] ? removed : unknown).push(`${fmtShort(e.date)} закупка: ${PRODUCTS[l.productId]?.name ?? l.productId} — строка убрана`);
     }
     if (!lines.length && !items.length && !marked(`shop:${e.id}`)) ops.push({ store: 'shoppingEvents', del: e.id });
     else ops.push({ store: 'shoppingEvents', put: { ...e, lines: e.lines ? lines : e.lines, items } });
@@ -360,8 +396,11 @@ export function purgeRemovedOps(data: AppData, today: ISODate): { ops: Op[]; rem
   return { ops, removed, kept, unknown };
 }
 
-/** Откат обновления меню: план (дни, готовки, закупки, дата старта) — как в копии; записи пользователя не трогаются. */
-export function rollbackMenuOps(data: AppData, backupId: string): Op[] {
+/**
+ * Откат обновления меню: план (дни, готовки, закупки, дата старта) — как в копии; записи пользователя не трогаются.
+ * Скумбрия и удалённые товары в активное меню не возвращаются.
+ */
+export function rollbackMenuOps(data: AppData, backupId: string, today: ISODate): Op[] {
   const b = data.backups?.[backupId];
   if (!b) return [];
   const ops: Op[] = [];
@@ -370,8 +409,8 @@ export function rollbackMenuOps(data: AppData, backupId: string): Op[] {
     for (const r of b.stores[store] ?? []) ops.push({ store, put: r });
   }
   const s = (b.stores.settings ?? [])[0];
-  if (s) ops.push({ store: 'settings', put: { ...data.settings, plan: s.plan ?? null } });
-  return ops;
+  if (s) ops.push({ store: 'settings', put: { ...data.settings, plan: s.plan ?? null, menuReportUnseen: null } });
+  return [...ops, ...purgeRemovedOps(applyOps(data, ops), today).ops];
 }
 
 export { buildInstance };

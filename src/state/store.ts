@@ -64,7 +64,8 @@ export async function replaceAll(ops: Op[]): Promise<void> {
   const now = nowStamp();
   const up = d.meta ? seedUpgradeOps(d, now) : [];
   d = applyOps(d, up);
-  const mig = d.meta ? dataMigrationOps(d, today(), now) : [];
+  applyProductSubs(d.avProducts);
+  const mig = d.meta ? dataMigrationOps(d, today(), now, __APP_VERSION__) : [];
   d = applyOps(d, mig);
   d.ready = true;
   data = d;
@@ -89,7 +90,9 @@ export async function init(): Promise<void> {
     } else {
       const up = seedUpgradeOps(d, now);
       d = applyOps(d, up);
-      const mig = dataMigrationOps(d, today(), now);
+      // замены товаров пользователя — до миграций: пересчёт плана идёт по заменённому справочнику
+      applyProductSubs(d.avProducts);
+      const mig = dataMigrationOps(d, today(), now, __APP_VERSION__);
       d = applyOps(d, mig);
       extra.push(...up, ...mig);
     }
