@@ -143,7 +143,8 @@ export function productCheckOps(data: AppData, productId: string, patch: Partial
   const next = applyOps(data, ops);
   applyProductSubs(next.avProducts);
   try {
-    return [...ops, ...replanOps(next, cfg, today, { now }).ops];
+    // с сегодняшнего дня: прошедшие закупки — история, купленное не меняется
+    return [...ops, ...replanOps(next, cfg, today, { now, keepPast: true, overwriteMarked: true }).ops];
   } finally {
     applyProductSubs(data.avProducts);
   }

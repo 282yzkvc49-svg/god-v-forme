@@ -91,6 +91,13 @@ export function Today() {
           <a className="btn small primary" href={href('/menu-update')}>Посмотреть</a>
         </div>
       )}
+      {data.settings.tripMovePending && (
+        <div className="banner">
+          <PiCalendarBlank />
+          <span className="grow">Командировка перенесена на {fmtShort(data.settings.tripMovePending.from)}–{fmtShort(data.settings.tripMovePending.to)}: перенос затрагивает уже отмеченное — посмотрите изменения и подтвердите.</span>
+          <a className="btn small primary" href={href('/trip-update')}>Посмотреть</a>
+        </div>
+      )}
       {!pendingMenu && cfg && !cfg.confirmed && (
         <div className="banner">
           <PiCalendarBlank />

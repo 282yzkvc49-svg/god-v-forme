@@ -110,6 +110,7 @@ export function TripsScreen() {
       <PageHead title="Командировки" sub="В поездке — командировочное питание и плановый отдых вместо тренировок; меню, готовка и закупки дома пересчитываются" backTo="/settings" right={
         <button className="btn primary small" onClick={() => setEdit('new')}><PiPlus /> Новая командировка</button>
       } />
+      {Object.values(data.backups ?? {}).some((b) => b.tripReport) && <p className="small"><a href={href('/trip-update')}>Отчёт о последнем переносе командировки</a></p>}
       {!trips.length && <div className="card"><Empty title="Командировок нет">Добавьте поездку — приложение покажет, что изменится в меню, готовке, закупках и тренировках, и применит изменения только после подтверждения.</Empty></div>}
       {upcoming.length > 0 && <h2 className="section-title">Предстоящие</h2>}
       {upcoming.map((t) => <TripRow key={t.id} t={t} onEdit={() => setEdit(t)} />)}
@@ -138,7 +139,7 @@ function TripRow({ t, onEdit }: { t: Trip; onEdit: () => void }) {
         <h3><PiSuitcase style={{ display: 'inline', verticalAlign: '-4px' }} /> {t.city}</h3>
         <span className="chip sea">{fmtDayMonth(t.from)} — {fmtDayMonth(t.to)}, {days.length} дн.</span>
       </div>
-      <p className="small mt0">{t.hotelBreakfast ? 'Завтрак в гостинице' : 'Без завтрака в гостинице'} · {t.fridge ? 'есть холодильник' : 'без холодильника'} · {t.canTrain ? 'можно тренироваться' : 'без тренировок'}{t.comment ? ` · ${t.comment}` : ''}</p>
+      <p className="small mt0">{t.hotelBreakfast ? 'Завтрак в гостинице' : 'Без завтрака в гостинице'} · {t.fridge ? 'есть холодильник' : 'без холодильника'} · {t.canTrain ? 'можно тренироваться' : 'без тренировок'}{t.trainNextDay ? ' · на следующий день — тренировка по самочувствию' : ''}{t.comment ? ` · ${t.comment}` : ''}</p>
       <p className="small muted mt0">Приёмы пищи: по варианту {suggested}, другое блюдо {other}, пропущено {skipped} из {days.length * 4}.</p>
       <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
         <a className="btn small" href={href(`/day/${t.from}`)}>Открыть первый день</a>
@@ -165,6 +166,7 @@ export function TripEditor({ trip, onClose, initialFrom }: { trip: Trip | null; 
   const [hotelBreakfast, setHotelBreakfast] = useState(trip?.hotelBreakfast ?? true);
   const [fridge, setFridge] = useState(trip?.fridge ?? false);
   const [canTrain, setCanTrain] = useState(trip?.canTrain ?? false);
+  const [trainNextDay, setTrainNextDay] = useState(trip?.trainNextDay ?? false);
   const [comment, setComment] = useState(trip?.comment ?? '');
   const [step, setStep] = useState<'form' | 'preview'>('form');
   const [relaxChoice, setRelaxChoice] = useState<'move' | 'keep'>('move');
@@ -172,7 +174,7 @@ export function TripEditor({ trip, onClose, initialFrom }: { trip: Trip | null; 
   const [ack, setAck] = useState(false);
   const errors = validateTrip({ id: trip?.id, city, from, to }, tripList(data));
   const draft: Trip = {
-    id: trip?.id ?? uid('trip'), city: city.trim(), from, to, hotelBreakfast, fridge, canTrain, comment: comment.trim() || null,
+    id: trip?.id ?? uid('trip'), city: city.trim(), from, to, hotelBreakfast, fridge, canTrain, trainNextDay, comment: comment.trim() || null,
     foodExpensesRub: trip?.foodExpensesRub ?? null, createdAt: trip?.createdAt ?? nowStamp(), updatedAt: nowStamp(),
   };
   const focus = useMemo(() => (errors.length ? [] : tripDates(draft)), [from, to, errors.length]);
@@ -194,7 +196,7 @@ export function TripEditor({ trip, onClose, initialFrom }: { trip: Trip | null; 
   const diff: PlanDiff | null = useMemo(() => {
     if (step !== 'preview' || errors.length) return null;
     return previewChange(data, [...tripOps(draft, trip?.id ?? null), ...relaxOps()], today, focus);
-  }, [step, city, from, to, hotelBreakfast, fridge, canTrain, comment, relaxChoice, relaxTo, data]);
+  }, [step, city, from, to, hotelBreakfast, fridge, canTrain, trainNextDay, comment, relaxChoice, relaxTo, data]);
   const needAck = !!diff && (diff.conflicts.markedDays.length > 0 || diff.conflicts.trainingLogs.length > 0 || diff.conflicts.doneEvents.length > 0);
   const apply = () => {
     if (!diff) return;
@@ -219,6 +221,7 @@ export function TripEditor({ trip, onClose, initialFrom }: { trip: Trip | null; 
           <label className="row nowrap" style={{ gap: 8 }}><input type="checkbox" checked={hotelBreakfast} onChange={(e) => setHotelBreakfast(e.target.checked)} /> Завтрак включён в гостинице</label>
           <label className="row nowrap" style={{ gap: 8 }}><input type="checkbox" checked={fridge} onChange={(e) => setFridge(e.target.checked)} /> В номере есть холодильник</label>
           <label className="row nowrap" style={{ gap: 8 }}><input type="checkbox" checked={canTrain} onChange={(e) => setCanTrain(e.target.checked)} /> Можно тренироваться (комплекс с собственным весом по желанию)</label>
+          <label className="row nowrap" style={{ gap: 8 }}><input type="checkbox" checked={trainNextDay} onChange={(e) => setTrainNextDay(e.target.checked)} /> На следующий день после возвращения — тренировка по схеме, по самочувствию (вместо восстановления)</label>
           <label className="field" style={{ margin: 0 }}><span>Комментарий</span><input className="input" value={comment} onChange={(e) => setComment(e.target.value)} /></label>
           {errors.map((e, i) => <Note key={i} kind="warn">{e}</Note>)}
           <div className="btn-row">

@@ -18,6 +18,7 @@ import { AnalysisScreen } from '../screens/Analysis';
 import { SettingsScreen, MoreScreen } from '../screens/Settings';
 import { TripsScreen } from '../screens/Trips';
 import { MenuUpdateScreen } from '../screens/MenuUpdate';
+import { TripUpdateScreen } from '../screens/TripUpdate';
 import { AvCheckScreen } from '../screens/AvCheck';
 import { Onboarding } from '../screens/Onboarding';
 import { onUpdateReady, applyUpdate } from './sw';
@@ -31,7 +32,7 @@ const NAV: NavItem[] = [
   { path: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart />, match: ['shopping', 'shop', 'cook', 'av-check'] },
   { path: '/progress', label: 'Прогресс', icon: <PiChartLineUp />, match: ['progress'] },
   { path: '/analysis', label: 'Анализ с ChatGPT', icon: <PiChatsCircle />, match: ['analysis'] },
-  { path: '/settings', label: 'Настройки', icon: <PiGear />, match: ['settings', 'trips', 'menu-update'] },
+  { path: '/settings', label: 'Настройки', icon: <PiGear />, match: ['settings', 'trips', 'menu-update', 'trip-update'] },
 ];
 const TABS = [NAV[0], NAV[1], NAV[2], NAV[3]];
 
@@ -66,9 +67,13 @@ export function App() {
   useEffect(() => onUpdateReady(() => setUpdate(true)), []);
   // новое меню применено при запуске (или ждёт применения после отката): один раз показать отчёт о миграции
   useEffect(() => {
-    if (!data.ready || menuPromptShown || !(data.settings.menuReportUnseen || menuUpdatePending(data))) return;
+    if (!data.ready || menuPromptShown) return;
+    const menu = !!(data.settings.menuReportUnseen || menuUpdatePending(data));
+    // перенос командировки применён при запуске или ждёт подтверждения — один раз показать
+    const trip = !!(data.settings.tripReportUnseen || data.settings.tripMovePending);
+    if (!menu && !trip) return;
     menuPromptShown = true;
-    if (!route.path[0] || route.path[0] === 'today') go('/menu-update');
+    if (!route.path[0] || route.path[0] === 'today') go(menu ? '/menu-update' : '/trip-update');
   }, [data.ready]);
 
   if (!data.ready) return <div className="boot">Загрузка…</div>;
@@ -97,6 +102,7 @@ export function App() {
     case 'settings': screen = <SettingsScreen />; break;
     case 'trips': screen = <TripsScreen />; break;
     case 'menu-update': screen = <MenuUpdateScreen />; break;
+    case 'trip-update': screen = <TripUpdateScreen />; break;
     case 'av-check': screen = <AvCheckScreen />; break;
     case 'more': screen = <MoreScreen />; break;
     default: screen = <Today />;

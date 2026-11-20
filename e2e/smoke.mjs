@@ -298,6 +298,12 @@ async function step13(p3) {
   const bj = JSON.parse(await bz.file('backup.json').async('string'));
   assert(bj.stores.planDays.length === Object.keys(fixture.planDays).length, 'в копии все дни прежнего плана');
   assert(bj.stores.settings[0].plan.menuId === undefined, 'копия — до обновления');
+  // в базе 1.2.0 Санкт-Петербург ещё 24–25.11 — перенесена на 25–26.11 при запуске, с отчётом
+  await go(p3, '/trip-update');
+  await p3.getByRole('heading', { name: 'Командировка перенесена: Санкт-Петербург' }).waitFor();
+  await p3.getByText('Теперь 25–26 ноября (было 24–25 ноября)').waitFor();
+  await p3.getByText(/переносится с 26\.11 07:00 на 24\.11 07:00/).waitFor();
+  await p3.screenshot({ path: path.join(shots, '13-trip-move-iphone.png'), fullPage: true });
   for (const d of ['2026-11-28', '2026-11-30', '2026-12-07', '2026-12-08', '2026-12-09']) {
     await go(p3, `/day/${d}`);
     await p3.locator('.meal-card').first().waitFor();
@@ -386,16 +392,22 @@ await step('12–13. Ноябрь 2026: старт 16.11, командировк
   await lunch.getByRole('button', { name: 'Сохранить: другое блюдо' }).click();
   await lunch.getByText('другое подходящее блюдо', { exact: true }).waitFor();
   await p3.screenshot({ path: path.join(shots, '12-trip-day-iphone.png'), fullPage: true });
-  for (const [d, city] of [['2026-11-18', 'Екатеринбург'], ['2026-11-20', 'Екатеринбург'], ['2026-11-24', 'Санкт-Петербург'], ['2026-11-25', 'Санкт-Петербург']]) {
+  // Санкт-Петербург — 25–26.11 (перенесена с 24–25.11)
+  for (const [d, city] of [['2026-11-18', 'Екатеринбург'], ['2026-11-20', 'Екатеринбург'], ['2026-11-25', 'Санкт-Петербург'], ['2026-11-26', 'Санкт-Петербург']]) {
     await go(p3, `/day/${d}`);
     await p3.getByRole('heading', { name: `Командировка: ${city}` }).waitFor();
   }
-  for (const d of ['2026-11-17', '2026-11-21', '2026-11-23', '2026-11-26']) {
+  for (const d of ['2026-11-17', '2026-11-23', '2026-11-24', '2026-11-27', '2026-11-21']) {
     await go(p3, `/day/${d}`);
     await p3.waitForTimeout(150);
     assert(await p3.getByRole('heading', { name: /Командировка:/ }).count() === 0, `${d} — не командировка`);
   }
-  assert(await p3.getByText('Восстановление после командировки').count() > 0, '26.11 — восстановление после командировки');
+  assert(await p3.getByText('Восстановление после командировки').count() > 0, '21.11 — восстановление после командировки');
+  await go(p3, '/day/2026-11-24');
+  await p3.getByText('Курица в йогуртовом соусе, булгур, кабачки').first().waitFor();
+  assert(await p3.getByText(/Степпер/).count() > 0, '24.11 — степпер');
+  await go(p3, '/day/2026-11-27');
+  await p3.getByText('Силовая А по самочувствию').first().waitFor();
   await go(p3, '/day/2026-11-28');
   await p3.getByText('Курица с нутом, кабачком и рисом').first().waitFor();
   await go(p3, '/recipe/D05');

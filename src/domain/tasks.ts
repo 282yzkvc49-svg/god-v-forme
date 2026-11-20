@@ -92,7 +92,7 @@ function skippedStrength(data: AppData, from: ISODate, to: ISODate): number {
   const trips = tripList(data);
   const skip = new Set<ISODate>();
   const consider = (d: ISODate) => { if (d >= from && d < to && tr.strengthDays.includes(isoWeekday(d))) skip.add(d); };
-  for (const t of trips) { for (const d of tripDates(t)) consider(d); consider(addDays(t.to, 1)); }
+  for (const t of trips) { for (const d of tripDates(t)) consider(d); if (!t.trainNextDay) consider(addDays(t.to, 1)); }
   for (const d of relaxDatesBetween(data.settings, from, addDays(to, -1))) consider(d);
   return skip.size;
 }
@@ -121,14 +121,16 @@ export function scheduledTraining(data: AppData, date: ISODate): ScheduledTraini
     return { templateId: 'rest', label: 'Релакс-день, отдых', time: null, reason: 'relax', replaced: baseId === 'rest' || baseId === 'recovery' ? null : baseId };
   }
   const after = daysAfterTrip(trips, date, 3);
-  if (after === 1) {
+  // поездка, после которой на следующий день — тренировка по схеме, по самочувствию
+  const byFeel = after === 1 && !!tripOn(trips, addDays(date, -1))?.trainNextDay;
+  if (after === 1 && !byFeel) {
     if (base === 'rest') return { templateId: 'rest', label: TEMPLATE_NAMES.rest ?? 'Отдых', time: null, reason: 'after_trip' };
     return { templateId: 'recovery', label: 'Восстановление после командировки', time: null, note: 'Прогулка по самочувствию; силовую не переносим и не удваиваем.', reason: 'after_trip', replaced: baseId === 'recovery' ? null : baseId as TemplateId };
   }
   if (base === 'strength') {
     const id = baseId as TemplateId;
-    return after === 2
-      ? { templateId: id, label: `${TEMPLATE_NAMES[id]} по самочувствию`, time: null, note: 'Второй день после поездки: обычные веса, без форсирования; если тяжело — меньше подходов.', reason: 'after_trip' }
+    return after === 2 || byFeel
+      ? { templateId: id, label: `${TEMPLATE_NAMES[id]} по самочувствию`, time: null, note: `${byFeel ? 'Первый день после поездки' : 'Второй день после поездки'}: обычные веса, без форсирования; если тяжело — меньше подходов или прогулка.`, reason: 'after_trip' }
       : { templateId: id, label: TEMPLATE_NAMES[id], time: null };
   }
   if (base === 'stepper') {

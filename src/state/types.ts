@@ -270,6 +270,8 @@ export interface Trip {
   hotelBreakfast: boolean;
   fridge: boolean;
   canTrain: boolean;
+  /** На следующий день после возвращения — тренировка по схеме, по самочувствию (а не восстановление). */
+  trainNextDay?: boolean;
   comment: string | null;
   /** Фактические расходы на еду в поездке — отдельно от домашнего бюджета (необязательно). */
   foodExpensesRub?: number | null;
@@ -456,6 +458,10 @@ export interface Settings {
   avAddressConfirmedAt?: string | null;
   /** id резервной копии автоматического обновления меню, отчёт о котором ещё не показан. */
   menuReportUnseen?: string | null;
+  /** id резервной копии переноса командировки, отчёт о котором ещё не показан. */
+  tripReportUnseen?: string | null;
+  /** Перенос командировки ждёт подтверждения: затрагивает уже отмеченное. */
+  tripMovePending?: { tripId: string; from: ISODate; to: ISODate; createdAt: string } | null;
 }
 
 export interface PlanSettings {
@@ -521,6 +527,27 @@ export interface BackupRec {
   stores: Record<string, any[]>;
   /** Итог миграции для отчёта. */
   report?: MigrationReport | null;
+  /** Итог переноса командировки для отчёта. */
+  tripReport?: TripMoveReport | null;
+}
+
+/** Перенос командировки: что поменялось в днях, готовке, закупках и тренировках. */
+export interface TripMoveReport {
+  appliedAt: string;
+  today: ISODate;
+  city: string;
+  before: { from: ISODate; to: ISODate };
+  after: { from: ISODate; to: ISODate };
+  days: { date: ISODate; before: string; after: string }[];
+  cooks: { title: string; text: string }[];
+  shops: { title: string; text: string }[];
+  trainings: { date: ISODate; before: string; after: string }[];
+  costBefore: number;
+  costAfter: number;
+  frozenBefore: number;
+  frozenAfter: number;
+  /** Отмеченное пользователем, что пришлось изменить после подтверждения. */
+  confirmed: string[];
 }
 
 export interface MigrationReport {

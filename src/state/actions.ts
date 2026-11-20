@@ -9,6 +9,7 @@ import type {
 import { replanOps } from '../domain/plan';
 import { productCheckOps, resetChecksOps } from '../domain/avCheck';
 import { menuUpdateOps, rollbackMenuOps } from './model';
+import { applyTripMoveOps, planTripMove } from '../domain/tripMove';
 import { today as todayFn } from '../lib/clock';
 import type { DayTask } from '../domain/tasks';
 import { templateVersionFor } from '../domain/templates';
@@ -332,6 +333,30 @@ export function resetAvChecks(ids: string[]) {
 export function applyMenuUpdate(startDate: ISODate) {
   const res = menuUpdateOps(getData(), startDate, todayFn(), nowStamp(), __APP_VERSION__);
   return commit(res.ops).then(() => res);
+}
+
+/** Отчёт о переносе командировки показан. */
+export function markTripReportSeen() {
+  const s = getData().settings;
+  if (!s.tripReportUnseen) return Promise.resolve();
+  return commit([{ store: 'settings', put: { ...s, tripReportUnseen: null } }]);
+}
+
+/** Перенос командировки, который ждал подтверждения (затрагивает отмеченное): применить. */
+export function confirmTripMove() {
+  const data = getData();
+  const p = data.settings.tripMovePending;
+  const trip = p ? data.trips[p.tripId] : null;
+  if (!p || !trip) return Promise.resolve();
+  const now = nowStamp();
+  const mv = planTripMove(data, trip, p, todayFn(), now);
+  return commit(applyTripMoveOps(data, mv, now, __APP_VERSION__, mv.conflicts).ops);
+}
+
+/** Не переносить командировку (даты можно поменять позже вручную). */
+export function dismissTripMove() {
+  const s = getData().settings;
+  return commit([{ store: 'settings', put: { ...s, tripMovePending: null } }]);
 }
 
 export function rollbackMenuUpdate(backupId: string) {

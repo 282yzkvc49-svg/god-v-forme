@@ -8,11 +8,12 @@ import { SEED_ID, defaultSettings, seedTemplateVersions } from '../lib/seed';
 import type { ISODate } from '../lib/dates';
 import { BASE_START, PLAN_LENGTH, buildInstance, makePlanSettings, menuUpdatePending, replanOps } from '../domain/plan';
 import { addDays, fmtShort } from '../lib/dates';
+import { planV8Ops } from '../domain/tripMove';
 import type { BackupRec, CookingEvent, MealCard, MealSlot, MigrationReport, PlanDay, ShoppingEvent, Trip } from './types';
 import { MEAL_LABELS, MEAL_SLOTS } from './types';
 import { DISHES, PRODUCTS, TEMPLATE } from '../domain/catalog';
 
-export const DATA_VERSION = 7;
+export const DATA_VERSION = 8;
 
 export function emptyData(): AppData {
   const d: any = { ready: false, settings: defaultSettings(), meta: null };
@@ -98,6 +99,7 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   if (v < 5) step(planV5Ops(data, today, now));
   if (v < 6) step(planV6Ops(data, today, now));
   if (v < 7) step(planV7Ops(data, today, now, appVersion));
+  if (v < 8) step(planV8Ops(data, today, now, appVersion));
   if (v < 2) {
     // v2: у позиции «Апельсины» из стартовых закупок убрано примечание (по решению пользователя)
     for (const e of Object.values(data.shoppingEvents)) {
@@ -189,10 +191,11 @@ export function freshPlanOps(data: AppData, startDate: ISODate, today: ISODate, 
 export const NOV_2026_START = '2026-11-16';
 export const NOV_2026_TRIPS: Omit<Trip, 'createdAt' | 'updatedAt'>[] = [
   { id: 'trip-2026-11-18-ekb', city: 'Екатеринбург', from: '2026-11-18', to: '2026-11-20', hotelBreakfast: true, fridge: false, canTrain: false, comment: 'Гостиница, завтрак включён' },
-  { id: 'trip-2026-11-24-spb', city: 'Санкт-Петербург', from: '2026-11-24', to: '2026-11-25', hotelBreakfast: true, fridge: false, canTrain: false, comment: 'Гостиница, завтрак включён' },
+  // даты перенесены 20.11.2026 (было 24–25.11); на следующий день после возвращения — силовая по самочувствию
+  { id: 'trip-2026-11-24-spb', city: 'Санкт-Петербург', from: '2026-11-25', to: '2026-11-26', hotelBreakfast: true, fridge: false, canTrain: false, trainNextDay: true, comment: 'Гостиница, завтрак включён' },
 ];
 
-/** Старые события командировки на 26.11 (даты поездки исправлены: 24–25.11). */
+/** Старые события командировки на 26.11 из первого плана (до версии 1.2.0). */
 function staleTripTask(title: string): boolean {
   return /командир|петербург|спб|поездк/i.test(title);
 }

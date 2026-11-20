@@ -72,7 +72,8 @@ function trainingLabel(data: AppData, date: ISODate): string {
 export function previewChange(data: AppData, changeOps: Op[], today: ISODate, focus: ISODate[]): PlanDiff {
   const mid = applyOps(data, changeOps);
   const cfg = mid.settings.plan;
-  const rp = cfg ? replanOps(mid, cfg, today) : null;
+  // с сегодняшнего дня: прошедшие дни, готовки и закупки не меняются; отмеченное — после подтверждения в окне
+  const rp = cfg ? replanOps(mid, cfg, today, { keepPast: true, overwriteMarked: true }) : null;
   const ops = [...changeOps, ...(rp?.ops ?? [])];
   const after = applyOps(data, ops);
   const replaced = { breakfast: 0, lunch: 0, snack: 0, dinner: 0 } as Record<MealSlot, number>;
