@@ -465,7 +465,7 @@ async function injectState(p, file) {
   }), fixture);
 }
 
-await step('14. 22.11: корректировка по фактическим покупкам → запасы → предпросмотр → копия и применение; «Мои запасы», «Приготовлено»', async () => {
+await step('14. 22.11: корректировка → запасы → предпросмотр меню 22–24.11 → копия и применение; «Мои запасы», «Приготовлено»', async () => {
   const ctx4 = await browser.newContext({ viewport: { width: 1024, height: 1366 }, hasTouch: true, locale: 'ru-RU', timezoneId: 'Europe/Moscow' });
   ctx4.setDefaultTimeout(12000);
   const p4 = await newPage(ctx4);
@@ -479,7 +479,14 @@ await step('14. 22.11: корректировка по фактическим п
   await p4.getByRole('heading', { name: 'Корректировка по фактическим покупкам' }).waitFor();
   await p4.getByRole('heading', { name: /1\. Проверьте запасы/ }).waitFor();
   await p4.getByRole('heading', { name: 'Какие блюда изменены' }).waitFor();
-  await p4.getByText(/Индейка с булгуром и овощами/).first().waitFor();
+  const preview = p4.getByTestId('menu-preview');
+  await preview.getByRole('heading', { name: 'Меню на 22, 23 и 24 ноября' }).waitFor();
+  assert(await preview.locator('tr').count() === 12, '12 приёмов пищи 22–24.11');
+  for (const t of ['Нут с булгуром и овощами', 'Индейка с гречкой и морковью', 'Курица с рисом и брокколи', 'Пропущен', 'Овсяный стакан с грушей и миндалём']) await preview.getByText(t, { exact: true }).first().waitFor();
+  assert(await p4.getByText('Индейка с булгуром и овощами').count() === 0, 'прежнего блюда нет');
+  const check = p4.getByTestId('stock-check');
+  assert(await check.locator('tbody tr').count() === 10, '10 продуктов к новым блюдам');
+  await check.getByText(/На 22–24\.11 закупка не нужна/).waitFor();
   await p4.getByText(/небольшая закупка к 27–28\.11/).waitFor();
   assert(await p4.getByText(/Масло оливковое/).count() > 0, 'масло пока в закупке');
   await p4.getByLabel('Масло оливковое Extra Virgin: есть дома, мл').fill('300');
@@ -488,15 +495,22 @@ await step('14. 22.11: корректировка по фактическим п
   assert(!(await p4.locator('.card', { hasText: 'Что докупить' }).innerText()).includes('Масло оливковое'), 'масло есть дома — не покупать');
   await p4.screenshot({ path: path.join(shots, '14-correction-preview-ipad.png'), fullPage: true });
   assert(await p4.getByRole('button', { name: 'Создать резервную копию и применить' }).isDisabled(), 'без подтверждения кнопка неактивна');
-  await p4.getByLabel('Проверил запасы и изменения').check();
+  await p4.getByLabel('Проверил меню 22–24.11 и запасы').check();
   await p4.getByRole('button', { name: 'Создать резервную копию и применить' }).click();
-  await p4.getByRole('heading', { name: 'Корректировка по факту применена' }).waitFor();
+  await p4.getByRole('heading', { name: 'Меню 22–24.11 и запасы обновлены' }).waitFor();
   await p4.getByText(/Резервная копия перед изменениями/).waitFor();
   await p4.screenshot({ path: path.join(shots, '14-correction-report-ipad.png'), fullPage: true });
-  // день 22.11: обед отменён, ужин — новое блюдо
+  // день 22.11: обед пропущен, ужин — нут с булгуром; 23.11 — индейка с гречкой и курица с рисом
   await go(p4, '/day/2026-11-22');
-  await p4.getByText('Обед отменён (по факту)').first().waitFor();
-  await p4.getByText('Индейка с булгуром и овощами').first().waitFor();
+  await p4.getByText('Пропущен', { exact: true }).first().waitFor();
+  await p4.getByText('Нут с булгуром и овощами').first().waitFor();
+  await go(p4, '/day/2026-11-23');
+  await p4.getByText('Индейка с гречкой и морковью').first().waitFor();
+  await p4.getByText('Курица с рисом и брокколи').first().waitFor();
+  // рецепт — один, в списке без дублей
+  await go(p4, '/recipes');
+  assert(await p4.getByText('Нут с булгуром и овощами', { exact: true }).count() === 1, 'рецепт нута — один');
+  assert(await p4.getByText('Индейка с булгуром и овощами').count() === 0, 'прежний рецепт убран из списка');
   // «Мои запасы»
   await go(p4, '/shopping?tab=stock');
   await p4.getByRole('heading', { name: 'Морозилка' }).waitFor();
@@ -504,16 +518,22 @@ await step('14. 22.11: корректировка по фактическим п
   assert((await turkeyRow.innerText()).includes('714'), 'индейка: 894 − 180 = 714 г');
   assert(await p4.getByText('требует подтверждения').count() > 0, 'расчётные остатки помечены');
   await p4.screenshot({ path: path.join(shots, '14-stock-ipad.png'), fullPage: true });
-  // готовка 22.11: проверить продукты → «Приготовлено» → индейка списана
-  await go(p4, '/cook/cook-p20261116-x2211');
+  // готовка 22.11: граммовки и распределение → проверить продукты → «Приготовлено» → индейка списана
+  await go(p4, '/cook/cook-p20261116-x2211b');
+  await p4.getByText(/обед 23\.11 в 12:00, обед 24\.11 в 12:00/).first().waitFor();
+  await p4.getByText(/куриное филе \(360 г\) из морозилки в холодильник/).first().waitFor();
   await p4.getByRole('heading', { name: 'Перед готовкой — проверьте продукты' }).waitFor();
+  await p4.screenshot({ path: path.join(shots, '14-cook-2211-ipad.png'), fullPage: true });
   await p4.getByLabel('Проверил продукты').check();
   await p4.getByRole('button', { name: 'Приготовлено' }).click();
   await p4.waitForTimeout(400);
   await go(p4, '/shopping?tab=stock');
-  assert((await p4.getByRole('row', { name: /^Филе грудки индейки/ }).innerText()).includes('174'), 'после готовки индейки 174 г');
+  assert((await p4.getByRole('row', { name: /^Филе грудки индейки/ }).innerText()).includes('354'), 'после готовки индейки 714 − 360 = 354 г');
   await p4.getByRole('heading', { name: 'Готовая еда' }).waitFor();
-  assert(await p4.getByText(/Индейка с булгуром и овощами/).count() >= 2, 'порции в готовой еде');
+  assert(await p4.getByText(/Индейка с гречкой и морковью/).count() >= 2, 'порции в готовой еде');
+  // вечером 22.11 — переложить курицу к готовке 23.11
+  await go(p4, '/today');
+  await p4.getByText('Разморозка на завтра').first().waitFor();
   // календарь: готовка 21.11 отменена
   await go(p4, '/calendar?d=2026-11-21&m=2026-11-21');
   assert(await p4.locator('.i-cook.cancelled').count() > 0, 'отменённая готовка видна в календаре');

@@ -9,7 +9,7 @@ import type {
 import { replanOps } from '../domain/plan';
 import { applyOps as applyToData } from './model';
 import { cookStockOps, emptyStock, mealStockOps, readyFoodOps, stockRemaining, type ReadyPortion } from '../domain/stock';
-import { buildCorrection, type CorrectionInput } from '../domain/correction';
+import { buildCorrection, correctionApplied, revisionBlocked, type CorrectionInput } from '../domain/correction';
 import { productCheckOps, resetChecksOps } from '../domain/avCheck';
 import { menuUpdateOps, rollbackMenuOps } from './model';
 import { applyTripMoveOps, planTripMove } from '../domain/tripMove';
@@ -100,7 +100,10 @@ export function readyFoodAction(p: ReadyPortion, status: 'frozen' | 'writeoff' |
 
 /** Корректировка по фактическим покупкам: резервная копия, затем изменения (после предпросмотра). */
 export function applyCorrection(input: CorrectionInput) {
-  const res = buildCorrection(getData(), todayFn(), nowStamp(), input, __APP_VERSION__);
+  const data = getData();
+  // уже применено (вторая вкладка, двойное нажатие) или обновление потеряло бы отметки — ничего не делаем
+  if (correctionApplied(data) || revisionBlocked(data)) return Promise.resolve(null);
+  const res = buildCorrection(data, todayFn(), nowStamp(), input, __APP_VERSION__);
   return commit(res.ops).then(() => res.report);
 }
 

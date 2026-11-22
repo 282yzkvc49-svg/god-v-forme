@@ -6,7 +6,7 @@ import { go, href, useRoute } from '../app/router';
 import { StockView } from './Stock';
 import { CookStockCheck } from './CookCheck';
 import { inventoryOn } from '../domain/stock';
-import { correctionApplied, correctionPending } from '../domain/correction';
+import { correctionPending } from '../domain/correction';
 import { fmtDayMonth, fmtLong, fmtShort, weekdayShort, type ISODate } from '../lib/dates';
 import { fmtNum, fmtRub, parseNum } from '../lib/util';
 import { PROFILE, SHOPPING_META, STORAGE_GUIDE } from '../lib/seed';
@@ -82,10 +82,10 @@ export function ShoppingHub() {
         <Seg value={tab} onChange={(v) => go('/shopping', v === 'stock' ? { tab: 'stock' } : {}, true)} label="Раздел" options={[{ value: 'shop', label: 'Закупки' }, { value: 'stock', label: 'Мои запасы' }]} />
       } />
       {correctionPending(data, today) && (
-        <Note kind="warn"><p className="mt0">Корректировка по фактическим покупкам ещё не применена: проверьте запасы и посмотрите пересчитанные закупки.</p><a className="btn small primary" href={href('/correction')}>Проверить и применить</a></Note>
+        <Note kind="warn"><p className="mt0">Новое меню и готовка на 22–24.11 ещё не применены: проверьте запасы и посмотрите предварительный просмотр меню.</p><a className="btn small primary" href={href('/correction')}>Посмотреть и применить</a></Note>
       )}
       {tab === 'stock' ? <StockView /> : <>
-      {correctionApplied(data) && <p className="small mt0">Закупки пересчитаны по фактическим остаткам. <a href={href('/correction')}>Отчёт о корректировке</a></p>}
+      {data.settings.inventory && !correctionPending(data, today) && <p className="small mt0">Закупки пересчитаны по фактическим остаткам. <a href={href('/correction')}>Отчёт о корректировке</a></p>}
       {cfg && (
         <div className="card flat" style={{ marginBottom: 12 }}>
           <div className="card-head"><h3 className="mt0">Товары av.ru: проверка по вашему адресу</h3><a className="btn small primary" href={href('/av-check')}>Проверить на av.ru</a></div>
@@ -456,7 +456,7 @@ function CookItemCard({ e, dishId }: { e: CookingEvent; dishId: string }) {
         {d.spices.map((s, j) => <li key={`s${j}`}><span className="ing-dot text" /><span className="grow small muted">{s}</span></li>)}
       </ul>
       <h4 style={{ marginBottom: 4 }}>Как готовить</h4>
-      <ol className="tech-list small">{d.steps.map((s, j) => <li key={j}>{s.text}{s.temperature_c ? ` ${s.temperature_c} °C` : ''}{s.minutes && !/мин|ч$/.test(s.text + s.minutes) ? `, ${s.minutes} мин` : s.minutes && /ч$/.test(s.minutes) ? `, ${s.minutes}` : ''}</li>)}</ol>
+      <ol className="tech-list small">{d.steps.map((s, j) => <li key={j}>{s.text}{s.temperature_c && !s.text.includes(`${s.temperature_c} °C`) ? ` ${s.temperature_c} °C` : ''}{s.minutes && !/мин|ч$/.test(s.text + s.minutes) ? `, ${s.minutes} мин` : s.minutes && /ч$/.test(s.minutes) ? `, ${s.minutes}` : ''}</li>)}</ol>
       <h4 style={{ marginBottom: 4 }}>Куда идут порции</h4>
       <div className="list">
         {it.uses.map((u, j) => {

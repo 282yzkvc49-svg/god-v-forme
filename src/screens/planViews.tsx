@@ -61,7 +61,7 @@ export function MealCardView({ date, slot, card, task, showCheck = true }: {
       </div>
       <div className="meal-dish">{card.title}</div>
       {card.note && !card.cancelled && <p className="small mt0"><span className="chip accent">изменено</span> {card.note}</p>}
-      {card.cancelled && <p className="small muted mt0">Приём пищи отменён корректировкой — продукты на него не планируются.</p>}
+      {card.cancelled && <p className="small muted mt0">Пропущен (по факту) — продукты на него не планируются и не списываются.</p>}
       <div className="stack" style={{ gap: 12 }}>
         {card.parts.map((p, i) => {
           const d = DISHES[p.dishId];

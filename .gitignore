@@ -6,3 +6,4 @@ e2e/screens/
 *.log
 .DS_Store
 __pycache__/
+.cache/

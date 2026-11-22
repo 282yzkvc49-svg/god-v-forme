@@ -648,6 +648,36 @@ export interface CorrectionReport {
   deficits: string[];
   notes: string[];
   conflicts: string[];
+  /** Редакция корректировки: 2 — меню 22–24.11 «нут с булгуром, индейка с гречкой, курица с рисом». */
+  rev?: number;
+  /** Обновление уже применённой первой редакции (запасы не пересоздаются). */
+  revision?: boolean;
+  /** Меню 22–24.11 целиком — для предпросмотра. */
+  menu?: CorrectionMenuRow[];
+  /** Проверка минимальных остатков к новым блюдам. */
+  checks?: CorrectionCheck[];
+  /** Закупка на 22–24.11 не нужна: блюда этих дней — из запасов. */
+  noPurchaseUntil?: ISODate | null;
+}
+
+export interface CorrectionMenuRow {
+  date: ISODate;
+  slot: MealSlot;
+  title: string;
+  /** kept — из текущего меню; new — новое блюдо из готовки; swap — замена из запасов; cancel — пропущен; marked — уже отмечено. */
+  source: 'kept' | 'new' | 'swap' | 'cancel' | 'marked';
+  note: string;
+}
+
+export interface CorrectionCheck {
+  productId: string;
+  name: string;
+  need: string;
+  have: number;
+  haveText: string;
+  /** ok — хватает; confirm — хватает по расчёту, проверьте дома; short — не хватает. */
+  state: 'ok' | 'confirm' | 'short';
+  text: string;
 }
 
 /** Перенос командировки: что поменялось в днях, готовке, закупках и тренировках. */
