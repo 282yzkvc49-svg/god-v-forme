@@ -3,6 +3,7 @@
 // Здесь — пищевая ценность, развёртка блюда в продукты и форматирование количеств.
 import tpl from '../data/plan_template.json';
 import type { AvProductRec, MealSlot, ProductSub } from '../state/types';
+import { EXTRA_DISHES } from './extraDishes';
 
 export interface Nutr { kcal: number; p: number; f: number; c: number }
 
@@ -66,6 +67,8 @@ export interface Dish {
   storage_text?: string | null;
   /** Оценка из комплекта (для сверки; в приложении калорийность считается по продуктам). */
   nutrition_estimate?: Nutr;
+  /** Не из комплекта: добавлено корректировкой по фактическим покупкам. */
+  extra?: boolean;
 }
 
 export interface TplPart { dish: string; qty: number; fresh: boolean }
@@ -110,6 +113,8 @@ export interface PlanTemplate {
 }
 
 export const TEMPLATE: PlanTemplate = tpl as any;
+// блюда корректировок по факту — к рецептам комплекта (помечены extra)
+for (const d of EXTRA_DISHES) if (!TEMPLATE.dishes.some((x) => x.id === d.id)) TEMPLATE.dishes.push(d);
 export const PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.products.map((p) => [p.id, p]));
 export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.map((d) => [d.id, d]));
 

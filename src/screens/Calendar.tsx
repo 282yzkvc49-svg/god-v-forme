@@ -28,7 +28,11 @@ function DayIcons({ data, date }: { data: AppData; date: ISODate }) {
       </span>,
     );
   }
-  if (tasks.some((t) => t.kind === 'cooking')) icons.push(<span key="c" className="i-cook" title="Готовка"><PiCookingPot /></span>);
+  const cooks = tasks.filter((t) => t.kind === 'cooking');
+  if (cooks.length) {
+    const cancelled = cooks.every((t) => data.taskStatus[t.id]?.status === 'skipped');
+    icons.push(<span key="c" className={`i-cook${cancelled ? ' cancelled' : ''}`} title={cancelled ? 'Готовка отменена' : 'Готовка'}><PiCookingPot /></span>);
+  }
   if (tasks.some((t) => t.kind === 'shopping')) icons.push(<span key="s" className="i-shop" title="Закупка"><PiShoppingCart /></span>);
   if (tasks.some((t) => t.kind === 'weigh')) icons.push(<span key="w" className="i-weigh" title="Взвешивание"><PiScales /></span>);
   if (tasks.some((t) => t.kind === 'photo')) icons.push(<span key="p" className="i-weigh" title="Фото"><PiCamera /></span>);
@@ -41,7 +45,8 @@ function dayLabel(data: AppData, date: ISODate): string {
   if (p?.relax) bits.push('релакс-день');
   const tr = tasksForDate(data, date).find((t) => t.kind === 'training');
   if (tr) bits.push(tr.title);
-  if (cookingEventsOn(data, date).some((e) => e.eventType === 'meal_prep')) bits.push('готовка');
+  const ce = cookingEventsOn(data, date).filter((e) => e.eventType === 'meal_prep');
+  if (ce.length) bits.push(ce.every((e) => data.taskStatus[`cook:${e.id}`]?.status === 'skipped') ? 'готовка отменена' : 'готовка');
   if (shoppingEventsOn(data, date).length) bits.push('закупка');
   const pr = dayProgress(data, date);
   if (pr.total) bits.push(`выполнено ${pr.done} из ${pr.total}`);

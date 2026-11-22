@@ -4,7 +4,7 @@
 import { STORE_KEYS } from './types';
 
 export const DB_NAME = 'god-v-forme';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 type Migration = (db: IDBDatabase, tx: IDBTransaction) => void;
 
@@ -22,6 +22,12 @@ const MIGRATIONS: Record<number, Migration> = {
   },
   // v3: проверка товаров av.ru и замены; внутренние резервные копии перед обновлением меню
   3: (db) => {
+    for (const [name, keyPath] of Object.entries(STORE_KEYS)) {
+      if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath });
+    }
+  },
+  // v4: учёт запасов продуктов и готовой еды
+  4: (db) => {
     for (const [name, keyPath] of Object.entries(STORE_KEYS)) {
       if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath });
     }

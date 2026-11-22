@@ -6,6 +6,7 @@ import type { ISODate } from '../lib/dates';
 import { BASE_PRODUCTS, PRODUCTS, TEMPLATE, qtyFactor, type Product } from './catalog';
 import { BUDGET_RUB, buyText, needText, planEnd } from './plan';
 import { avState } from './avCheck';
+import { stockSummary } from './stock';
 
 export const SHOP_EXPORT_SCHEMA = 'god-v-forme/shopping-products';
 export const SHOP_EXPORT_VERSION = '1.0.0';
@@ -185,6 +186,8 @@ export function buildShoppingExport(data: AppData, today: ISODate, appVersion: s
       'items и purchases — все закупки текущего меню: основные, докупки свежего и перекусы в командировки. Их и нужно сверять с каталогом «Азбуки вкуса».',
       'history_items и history_purchases — закупки прежних планов, которые остались в разделе «Закупки» как история (до перехода на «Азбуку вкуса»; товары без карточек av.ru). Для сверки с каталогом не нужны.',
       'products — справочник: каждый товар текущих закупок один раз, со ссылкой и суммой по всем закупкам; позиции закупок — в items.',
+      'stock — «Мои запасы»: куплено, использовано по факту, списано, остаток, место хранения, срок (best_before_from_pack = false — оценка по общему сроку); needs_confirmation — расчётный остаток, не проверен.',
+      'quantity_from_stock в закупках после корректировки по факту — то, что покрывается остатками дома.',
     ],
     totals: {
       purchases: purchases.length,
@@ -200,6 +203,16 @@ export function buildShoppingExport(data: AppData, today: ISODate, appVersion: s
     purchases,
     items,
     products,
+    // «Мои запасы» (если учёт включён): что реально есть дома
+    stock: data.settings.inventory ? Object.values(data.stock ?? {}).map((r) => {
+      const s = stockSummary(r, today);
+      return {
+        product_id: r.productId, name: PRODUCTS[r.productId]?.name ?? r.productId, unit: PRODUCTS[r.productId]?.unit ?? null,
+        bought: Math.round(s.bought), used: Math.round(s.used), written_off: Math.round(s.writtenOff), adjusted: Math.round(s.adjusted),
+        remaining: Math.round(s.remaining), location: r.location, best_before: s.until, best_before_from_pack: !!r.expiresOn,
+        needs_confirmation: s.needsConfirm, av_url: PRODUCTS[r.productId]?.url ?? null,
+      };
+    }).filter((x) => x.remaining > 0 || x.bought > 0) : null,
     history_purchases: historyPurchases,
     history_items: historyItems,
   };

@@ -15,6 +15,7 @@ import { addDays, diffDays, fmtShort, isWeekend, type ISODate } from '../lib/dat
 import {
   DISHES, PRODUCTS, TEMPLATE, dishNutrition, dishProducts, roundBatch, sumNutrition, type DishNutrition, type TplBlock,
 } from './catalog';
+import { stockContext } from './stock';
 import { relaxDatesBetween, tripBetween, tripDates, tripList, tripMeal, tripOn, tripShoppingPlan } from './trips';
 
 export const BASE_START: ISODate = TEMPLATE.base_start;
@@ -72,6 +73,11 @@ export interface PlanContext {
   bought?: ShoppingEvent[] | null;
   /** Дата → id существующей будущей докупки (чтобы id и отметки не съезжали при пересчёте). */
   shopIds?: Record<ISODate, string> | null;
+  /**
+   * Учёт запасов: что реально лежит дома сегодня (партии со сроками). Тогда будущие потребности покрываются
+   * сначала из запасов, а не из плана прошедших закупок; прошлые приёмы пищи уже учтены в остатках.
+   */
+  stock?: Map<string, { qty: number; date: ISODate; until: ISODate; frozen: boolean }[]> | null;
 }
 
 export function planContext(data: AppData, today: ISODate | null): PlanContext {
@@ -141,7 +147,11 @@ export interface PlanInstance {
   /** Домашние закупки (без командировочных перекусов). */
   totalCost: number;
   tripCost: number;
+  /** Учёт запасов: чего не хватает к блюдам «из того, что есть дома» (не докупается). */
+  deficits: StockDeficit[];
 }
+
+export interface StockDeficit { productId: string; qty: number; label: string; date: ISODate }
 
 function cookId(cfg: PlanSettings, blockId: string) { return `cook-${cfg.instanceId}-${blockId}`; }
 
@@ -181,11 +191,11 @@ function canCookOn(cfg: PlanSettings, ctx: PlanContext, layout: CycleLayout, dat
  * Время готовки: самое позднее возможное до первого приёма пищи из этой готовки.
  * Утром — только в выходные (10:00), вечером — 17:00 в выходные и 19:00 в будни, быстрая — 19:30.
  */
-function scheduleBlock(cfg: PlanSettings, ctx: PlanContext, layout: CycleLayout, b: TplBlock, first: { date: ISODate; slot: MealSlot }, lap = 0): Scheduled {
+function scheduleBlock(cfg: PlanSettings, ctx: PlanContext, layout: CycleLayout, b: TplBlock, first: { date: ISODate; slot: MealSlot }, lap = 0, pinAt?: ISODate | null): Scheduled {
   const quick = b.kind === 'quick';
   let found: Scheduled | null = null;
   // день готовки из комплекта: обед этого дня — из партии, поэтому в будни готовка утром
-  const pin = b.pinned ? pinnedCookDate(cfg, layout, b, lap) : null;
+  const pin = pinAt !== undefined ? pinAt : b.pinned ? pinnedCookDate(cfg, layout, b, lap) : null;
   if (pin && pin <= first.date && canCookOn(cfg, ctx, layout, pin)) {
     const lunchSame = pin === first.date && SLOT_ORDER[first.slot] <= 3;
     const mins = blockMinutes(b);
@@ -269,6 +279,8 @@ export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODa
   const ctx: PlanContext = ctxOrToday && typeof ctxOrToday === 'object' ? ctxOrToday : emptyContext(ctxOrToday as ISODate | null);
   const issues: PlanIssue[] = [];
   const layout = layoutCycle(cfg, ctx);
+  /** Приёмы пищи, заменённые корректировкой: в партии шаблона не входят. */
+  const overridden = new Set<string>();
   // ---- дни
   const planDays: PlanDay[] = [];
   const cardsByDate = new Map<ISODate, Record<MealSlot, MealCard>>();
@@ -288,7 +300,16 @@ export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODa
     }
     const tday = TEMPLATE.days.find((d) => d.day === cd.templateDay)!;
     const cards = {} as Record<MealSlot, MealCard>;
+    const ov = cfg.overrides?.days[date];
     for (const slot of MEAL_SLOTS) {
+      const o = ov?.[slot];
+      if (o) {
+        overridden.add(`${date}|${slot}`);
+        if (o.kind === 'cancel') { cards[slot] = { title: o.label, parts: [], cancelled: true, note: o.label }; continue; }
+        const parts: MealCardPart[] = [{ dishId: o.dishId, qty: 1, fresh: o.kind === 'dish', cookEventId: o.kind === 'cook' ? o.cookId : null, storage: null, thawOn: null, stockOnly: true }];
+        cards[slot] = { title: mealTitle(parts), parts, note: o.note ?? null };
+        continue;
+      }
       const parts: MealCardPart[] = tday.meals![slot].parts.map((p) => ({ dishId: p.dish, qty: p.qty, fresh: p.fresh, cookEventId: null, storage: null, thawOn: null }));
       cards[slot] = { title: mealTitle(parts), parts };
     }
@@ -309,11 +330,14 @@ export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODa
   const cookingEvents: CookingEvent[] = [];
   for (let lap = 0; lap < layout.laps; lap++) for (const b of TEMPLATE.blocks) {
     const at = (day: number) => layout.homeOf.get(homeKey(lap, day));
-    const mapped = b.items.map((it) => ({ dish: it.dish, uses: it.uses.filter((u) => !!at(u.day)) })).filter((it) => it.uses.length);
+    const mapped = b.items.map((it) => ({ dish: it.dish, uses: it.uses.filter((u) => !!at(u.day) && !overridden.has(`${at(u.day)}|${u.slot}`)) })).filter((it) => it.uses.length);
     if (!mapped.length) continue;
     const firsts = mapped.flatMap((it) => it.uses).map((u) => ({ date: at(u.day)!, slot: u.slot }));
     const first = firsts.reduce((a, c) => (c.date < a.date || (c.date === a.date && SLOT_ORDER[c.slot] < SLOT_ORDER[a.slot]) ? c : a));
-    const sc = scheduleBlock(cfg, ctx, layout, b, first, lap);
+    // если приёмы дня готовки из комплекта заменены корректировкой — готовка к первому оставшемуся приёму
+    const pinDate = b.pinned ? pinnedCookDate(cfg, layout, b, lap) : null;
+    const pinAt = pinDate && !firsts.some((f) => f.date === pinDate) && overridden.size ? first.date : undefined;
+    const sc = scheduleBlock(cfg, ctx, layout, b, first, lap, pinAt);
     const id = cookId(cfg, lap ? `${b.id}~${lap + 1}` : b.id);
     const items: CookItem[] = [];
     const useDates: ISODate[] = [];
@@ -345,6 +369,36 @@ export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODa
       items, thawProducts: [],
     });
   }
+  // свои готовки корректировки (не из партий шаблона)
+  for (const c of cfg.overrides?.cooks ?? []) {
+    const items: CookItem[] = [];
+    const useDates: ISODate[] = [];
+    let frozen = 0;
+    for (const it of c.items) {
+      if (!DISHES[it.dishId]) continue;
+      const uses: CookUse[] = it.uses.map((u) => {
+        const storage = storageFor(ctx, it.dishId, c.date, u.date);
+        const thawOn = storage === 'freeze' ? thawDate(ctx, u.date) : null;
+        if (storage === 'freeze') frozen++;
+        if (storage !== 'pantry') useDates.push(u.date);
+        const part = cardsByDate.get(u.date)?.[u.slot]?.parts.find((p) => p.cookEventId === c.id && p.dishId === it.dishId);
+        if (part) { part.storage = storage; part.thawOn = thawOn; }
+        return { date: u.date, slot: u.slot, qty: 1, via: null, storage, thawOn };
+      });
+      items.push({ dishId: it.dishId, qty: uses.length, uses });
+    }
+    if (!items.length) continue;
+    const forDates = Array.from(new Set(useDates)).sort();
+    cookingEvents.push({
+      id: c.id, date: c.date, eventType: 'meal_prep', title: c.title,
+      sourceText: items.map((i) => DISHES[i.dishId].title).join('; '),
+      forDaysText: `на ${rangeText(forDates)}`, forDates,
+      storage: frozen ? 'Порции на ближайшие дни — в холодильник, остальное — сразу в морозилку.' : 'Разделить на порции, остудить и убрать в холодильник; съесть в течение срока хранения.',
+      dishes: items.map((i) => ({ text: `${DISHES[i.dishId].title} — ${i.qty} ${plural(i.qty, 'порция', 'порции', 'порций')}`, recipeIds: [i.dishId], comment: null })),
+      source: 'seed', patchId: null, instanceId: cfg.instanceId, blockId: null, kind: 'main', time: c.time, timeNote: c.note ?? null,
+      items, thawProducts: [], stockOnly: true,
+    });
+  }
   cookingEvents.sort((a, b) => (a.date + (a.time ?? '')).localeCompare(b.date + (b.time ?? '')));
 
   // ---- закупки
@@ -365,7 +419,8 @@ export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODa
   const totalCost = sum(['main', 'topup']);
   const tripCost = sum(['trip']);
   if (totalCost > BUDGET_RUB) issues.push({ level: 'warn', text: `Ориентировочная сумма домашних закупок ${Math.round(totalCost)} ₽ больше бюджета ${BUDGET_RUB} ₽.` });
-  return { cfg, ctx, layout, planDays, cookingEvents, shoppingEvents: shopping.events, issues, totalCost, tripCost };
+  for (const x of shopping.deficits) issues.push({ level: 'warn', text: `${x.label}: по учёту запасов не хватает ${PRODUCTS[x.productId]?.name.split(/[,«(]/)[0].trim().toLowerCase()} ≈${Math.round(x.qty)} ${PRODUCTS[x.productId]?.unit === 'pcs' ? 'шт.' : PRODUCTS[x.productId]?.unit === 'ml' ? 'мл' : 'г'} — проверьте перед готовкой, при нехватке — замена из того, что есть` });
+  return { cfg, ctx, layout, planDays, cookingEvents, shoppingEvents: shopping.events, issues, totalCost, tripCost, deficits: shopping.deficits };
 }
 
 export function mealTitle(parts: MealCardPart[]): string {
@@ -379,7 +434,7 @@ export function mealTitle(parts: MealCardPart[]): string {
 // ------------------------------------------------------------------ закупки
 
 /** date — купить не позже этого дня; use — когда продукт идёт в дело (от него считается срок хранения). */
-interface Need { productId: string; qty: number; date: ISODate; use: ISODate; label: string; cookId: string | null }
+interface Need { productId: string; qty: number; date: ISODate; use: ISODate; label: string; cookId: string | null; stockOnly?: boolean }
 
 /** До какого дня купить продукты к готовке: к готовке до работы (раньше 9:00) — накануне, не в командировке. */
 export function buyByDate(trips: Trip[], ce: { date: ISODate; time?: string | null }): ISODate {
@@ -390,7 +445,7 @@ export function buyByDate(trips: Trip[], ce: { date: ISODate; time?: string | nu
 }
 
 /** Масса покупки с учётом несъедобной части (кожура, сердцевина). */
-function gross(productId: string, net: number): number {
+export function gross(productId: string, net: number): number {
   const p = PRODUCTS[productId];
   return p.unit === 'pcs' || p.edible_ratio >= 1 ? net : net / p.edible_ratio;
 }
@@ -401,7 +456,7 @@ export function collectNeeds(planDays: PlanDay[], cookingEvents: CookingEvent[],
     const tot = new Map<string, number>();
     for (const it of ce.items ?? []) for (const [k, v] of dishProducts(it.dishId, it.qty, false)) tot.set(k, (tot.get(k) ?? 0) + v);
     const by = buyByDate(trips, ce);
-    for (const [k, v] of tot) needs.push({ productId: k, qty: gross(k, roundBatch(PRODUCTS[k], v)), date: by, use: ce.date, label: `${ce.kind === 'quick' ? 'Быстрая готовка' : 'Готовка'} ${fmtShort(ce.date)}${ce.time ? ` ${ce.time}` : ''}`, cookId: ce.id });
+    for (const [k, v] of tot) needs.push({ productId: k, qty: gross(k, roundBatch(PRODUCTS[k], v)), date: by, use: ce.date, label: `${ce.kind === 'quick' ? 'Быстрая готовка' : 'Готовка'} ${fmtShort(ce.date)}${ce.time ? ` ${ce.time}` : ''}`, cookId: ce.id, stockOnly: !!ce.stockOnly });
   }
   for (const d of planDays) {
     if (!d.mealCards) continue;
@@ -412,7 +467,7 @@ export function collectNeeds(planDays: PlanDay[], cookingEvents: CookingEvent[],
         const use = slot === 'dinner' ? d.date : addDays(d.date, -1);
         let date = use;
         for (let i = 0; i < 62 && tripOn(trips, date); i++) date = addDays(date, -1);
-        for (const [k, v] of dishProducts(part.dishId, part.qty, false)) needs.push({ productId: k, qty: gross(k, v), date, use, label: `${MEAL_LABELS[slot]} ${fmtShort(d.date)}`, cookId: null });
+        for (const [k, v] of dishProducts(part.dishId, part.qty, false)) needs.push({ productId: k, qty: gross(k, v), date, use, label: `${MEAL_LABELS[slot]} ${fmtShort(d.date)}`, cookId: null, stockOnly: !!part.stockOnly });
       }
     }
   }
@@ -432,9 +487,9 @@ function shopTime(date: ISODate, kind: 'main' | 'topup' | 'trip'): string {
   return isWeekend(date) ? '10:00' : '18:30';
 }
 
-interface ShopBuild { events: ShoppingEvent[]; thawNeeds: { cookId: string; productId: string; qty: number }[] }
+interface ShopBuild { events: ShoppingEvent[]; thawNeeds: { cookId: string; productId: string; qty: number }[]; deficits: StockDeficit[] }
 
-type Lot = { qty: number; date: ISODate; until: ISODate };
+type Lot = { qty: number; date: ISODate; until: ISODate; frozen?: boolean };
 
 /** Купленное в прошедших закупках — партии продуктов: свежее хранится по сроку, мясо и птица из холодильника — заморожены. */
 function boughtLots(bought: ShoppingEvent[]): Map<string, Lot[]> {
@@ -459,7 +514,7 @@ function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[],
   const mainBlocks = cooks.filter((c) => c.kind === 'main');
   const dayOf = (c: CookingEvent) => TEMPLATE.blocks.find((b) => b.id === c.blockId)?.day;
   const m1Cook = cooks.find((c) => dayOf(c) === 0) ?? mainBlocks[0];
-  if (!m1Cook) return { events: tripShopping(cfg, ctx), thawNeeds: [] };
+  if (!m1Cook) return { events: tripShopping(cfg, ctx), thawNeeds: [], deficits: [] };
   const m2Cook = mainBlocks.find((c) => c !== m1Cook && c.date >= addDays(cfg.startDate, SECOND_SHOP_DAY - 1)) ?? null;
   const mains = [
     { id: `shop-${cfg.instanceId}-m1`, date: buyByDate(trips, m1Cook), title: 'Основная закупка 1' },
@@ -470,6 +525,7 @@ function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[],
   const closedTopupDates = new Set((bought ?? []).filter((e) => e.kind === 'topup').map((e) => e.date));
   for (const m of mains) { const b = bought?.find((e) => e.id === m.id); if (b) m.date = b.date; }
   const thawNeeds: ShopBuild['thawNeeds'] = [];
+  const deficits: StockDeficit[] = [];
   for (const n of needs) if (n.date < mains[0].date) n.date = mains[0].date;
 
   // окно основной закупки
@@ -508,7 +564,9 @@ function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[],
   let stock: Map<string, Lot[]> | null = null;
   if (bought) {
     const t0 = today!;
-    stock = boughtLots(bought);
+    // учёт запасов: что реально есть дома; иначе — состав прошедших закупок
+    const stockMode = !!ctx.stock;
+    stock = ctx.stock ? new Map(Array.from(ctx.stock, ([k, ls]) => [k, ls.map((l) => ({ ...l }))])) : boughtLots(bought);
     const isClosed = (n: Need) => { const t = topupOf.get(n); return t ? t < t0 || closedTopupDates.has(t) : closed.has(mainOf(n.date).id); };
     const open = needs.filter((n) => !isClosed(n));
     const late: Need[] = [];
@@ -527,16 +585,21 @@ function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[],
     const ordered: Need[] = [];
     for (const key of Array.from(groups.keys()).sort()) for (const ns of groups.get(key)!.values()) ordered.push(...ns.sort((x, y) => x.date.localeCompare(y.date)));
     for (const n of ordered) {
+      if (stockMode && n.use < t0) continue; // уже прошло — учтено в остатках
       const p = PRODUCTS[n.productId];
       let q = n.qty;
       for (const lot of stock.get(n.productId) ?? []) {
         if (lot.qty <= 1e-6 || lot.date > n.use || lot.until < n.use) continue;
         const take = Math.min(lot.qty, q);
         lot.qty -= take; q -= take;
-        if (n.cookId && (freezeAt.has(n) || (p.storage === 'freezer' && THAW_CATEGORIES.includes(p.category)))) thawNeeds.push({ cookId: n.cookId, productId: n.productId, qty: take });
+        if (n.cookId && (freezeAt.has(n) || (p.storage === 'freezer' && THAW_CATEGORIES.includes(p.category)) || (lot.frozen && THAW_CATEGORIES.includes(p.category)))) thawNeeds.push({ cookId: n.cookId, productId: n.productId, qty: take });
         if (q <= 1e-6) break;
       }
-      if (n.use >= t0 && q > 1e-6) late.push({ ...n, qty: q, date: n.date < t0 ? t0 : n.date });
+      if (n.use >= t0 && q > 1e-6) {
+        // блюда «из того, что есть дома»: нехватка — дефицит, а не докупка
+        if (stockMode && n.stockOnly && !OPTIONAL_BUY.has(n.productId)) deficits.push({ productId: n.productId, qty: q, label: n.label, date: n.use });
+        else if (!(stockMode && n.stockOnly)) late.push({ ...n, qty: q, date: n.date < t0 ? t0 : n.date });
+      }
     }
     for (const n of late) {
       const from0 = addDays(n.use, -PRODUCTS[n.productId].shelf_days);
@@ -573,9 +636,9 @@ function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[],
   }
 
   // остатки: партии с датой «годен до»
-  const lots = new Map<string, { qty: number; until: ISODate }[]>();
+  const lots = new Map<string, { qty: number; until: ISODate; frozen?: boolean }[]>();
   // запас из прошедших закупок (остатки) — как остаток после основной закупки
-  if (stock) for (const [pid, ls] of stock) { const left = ls.filter((l) => l.qty > 0.5).map((l) => ({ qty: l.qty, until: l.until })); if (left.length) lots.set(pid, left); }
+  if (stock) for (const [pid, ls] of stock) { const left = ls.filter((l) => l.qty > 0.5).map((l) => ({ qty: l.qty, until: l.until, frozen: l.frozen })); if (left.length) lots.set(pid, left); }
   const events: ShoppingEvent[] = [];
   for (const e of evs) {
     const byProduct = new Map<string, Need[]>();
@@ -592,6 +655,7 @@ function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[],
           if (lot.until < n.use || lot.qty <= 1e-6) continue;
           const take = Math.min(lot.qty, q);
           lot.qty -= take; q -= take; fromStock += take;
+          if (lot.frozen && n.cookId && THAW_CATEGORIES.includes(p.category)) thawNeeds.push({ cookId: n.cookId, productId: pid, qty: take });
           if (q <= 1e-6) break;
         }
         rest += q;
@@ -656,10 +720,12 @@ function buildShopping(cfg: PlanSettings, ctx: PlanContext, planDays: PlanDay[],
   events.push(...tripShopping(cfg, ctx));
   if (topups.length) issues.push({ level: 'info', text: `Скоропортящиеся продукты (молочное, бананы, зелень, томаты и т. п.) нельзя купить на 2 недели вперёд: запланировано ${topups.length} ${plural(topups.length, 'небольшая докупка', 'небольшие докупки', 'небольших докупок')} свежего.` });
   if (today && mains[0].date < today && cfg.startDate >= today) issues.push({ level: 'warn', text: 'Первая закупка уже должна была пройти.' });
-  return { events, thawNeeds };
+  return { events, thawNeeds, deficits };
 }
 
 const THAW_CATEGORIES = ['Рыба и морепродукты', 'Мясо и птица'];
+/** Соль, специи, масло и чеснок к блюдам «из того, что есть дома» — по желанию: не дефицит и не докупка. */
+const OPTIONAL_BUY = new Set(['salt', 'paprika', 'cinnamon', 'curry', 'oliveoil', 'garlic']);
 
 /** Небольшой список на поездку: перекусы (и завтраки без гостиницы) из супермаркета на месте. */
 function tripShopping(cfg: PlanSettings, ctx: PlanContext): ShoppingEvent[] {
@@ -767,7 +833,7 @@ export function hasDayMarks(data: AppData, date: ISODate): boolean {
  * Прошедшие дни с отметками остаются историей; тренировки, вес, фото и отметки не удаляются.
  * force — заменить и прошедшие дни (миграция: даты те же, меню подробнее).
  */
-export function replanOps(data: AppData, cfg: PlanSettings, today: ISODate, opts: { force?: boolean; now?: string; ctx?: PlanContext; keepPast?: boolean; overwriteMarked?: boolean } = {}): ReplanResult {
+export function replanOps(data: AppData, cfg: PlanSettings, today: ISODate, opts: { force?: boolean; now?: string; ctx?: PlanContext; keepPast?: boolean; overwriteMarked?: boolean; from?: ISODate } = {}): ReplanResult {
   if (opts.keepPast) return replanFromToday(data, cfg, today, opts);
   const inst = buildInstance(cfg, opts.ctx ?? planContext(data, today));
   const ops: Op[] = [];
@@ -811,14 +877,18 @@ export function replanOps(data: AppData, cfg: PlanSettings, today: ISODate, opts
  * Меняются только дни и события, у которых что-то действительно поменялось. Отмеченное пользователем
  * (съеденное, приготовленное, купленное) без overwriteMarked не меняется — попадает в conflicts.
  */
-function replanFromToday(data: AppData, cfg: PlanSettings, today: ISODate, opts: { ctx?: PlanContext; overwriteMarked?: boolean }): ReplanResult {
+function replanFromToday(data: AppData, cfg: PlanSettings, today: ISODate, opts: { ctx?: PlanContext; overwriteMarked?: boolean; from?: ISODate }): ReplanResult {
+  // с какого дня обновлять дни и готовки (корректировка по факту может начинаться вчера); закупки — с сегодняшнего
+  const from = opts.from && opts.from < today ? opts.from : today;
   const mine = (e: CookingEvent | ShoppingEvent) => e.source === 'seed' && e.instanceId === cfg.instanceId;
   const marked = (key: string) => { const st = data.taskStatus[key]?.status; return !!st && st !== 'planned'; };
   const shopChecked = (id: string) => Object.values(data.shoppingChecks).some((c) => c.eventId === id && (c.bought || c.atHome || c.actualPrice != null));
   const bought = Object.values(data.shoppingEvents).filter((e) => mine(e) && e.kind !== 'trip' && (e.date < today || marked(`shop:${e.id}`)));
   const shopIds: Record<ISODate, string> = {};
   for (const e of Object.values(data.shoppingEvents)) if (mine(e) && e.kind === 'topup' && !bought.includes(e)) shopIds[e.date] = e.id;
-  const inst = buildInstance(cfg, { ...(opts.ctx ?? planContext(data, today)), bought, shopIds });
+  // учёт запасов включён — будущие потребности покрываются из того, что реально есть дома
+  const stock = data.settings.inventory ? stockContext(data) : null;
+  const inst = buildInstance(cfg, { ...(opts.ctx ?? planContext(data, today)), bought, shopIds, stock });
   const ops: Op[] = [];
   const conflicts: string[] = [];
   const changed = { days: [] as ISODate[], cooks: [] as string[], shops: [] as string[] };
@@ -827,7 +897,7 @@ function replanFromToday(data: AppData, cfg: PlanSettings, today: ISODate, opts:
   // дни
   const newDays = new Map(inst.planDays.map((d) => [d.date, d]));
   for (const d of inst.planDays) {
-    if (d.date < today) continue;
+    if (d.date < from) continue;
     const old = data.planDays[d.date];
     if (old && old.source === 'import') { importedKept++; continue; }
     if (old && same(old, d)) continue;
@@ -836,7 +906,7 @@ function replanFromToday(data: AppData, cfg: PlanSettings, today: ISODate, opts:
     changed.days.push(d.date);
   }
   for (const old of Object.values(data.planDays)) {
-    if (old.source !== 'seed' || old.date < today || newDays.has(old.date)) continue;
+    if (old.source !== 'seed' || old.date < from || newDays.has(old.date)) continue;
     if (hasDayMarks(data, old.date) && !opts.overwriteMarked) { conflicts.push(`${fmtShort(old.date)}: есть отметки приёмов пищи`); continue; }
     ops.push({ store: 'planDays', del: old.date });
     changed.days.push(old.date);
@@ -848,8 +918,9 @@ function replanFromToday(data: AppData, cfg: PlanSettings, today: ISODate, opts:
     const key = store === 'cookingEvents' ? 'cooks' : 'shops';
     for (const e of list as (CookingEvent | ShoppingEvent)[]) {
       const old = (data[store] as Record<string, CookingEvent | ShoppingEvent>)[e.id];
-      if (old ? old.date < today && e.date < today : e.date < today) continue;
-      if (old && (old.date < today || bought.includes(old as ShoppingEvent))) { conflicts.push(`${label(prefix, old)}: уже прошла или отмечена — не меняется`); continue; }
+      const lim = prefix === 'cook' ? from : today;
+      if (old ? old.date < lim && e.date < lim : e.date < lim) continue;
+      if (old && (old.date < lim || bought.includes(old as ShoppingEvent))) { conflicts.push(`${label(prefix, old)}: уже прошла или отмечена — не меняется`); continue; }
       if (old && same(old, e)) continue;
       const touched = old && (marked(`${prefix}:${old.id}`) || (prefix === 'shop' && shopChecked(old.id)));
       if (touched && !opts.overwriteMarked) { conflicts.push(`${label(prefix, old!)}: есть отметки`); continue; }
@@ -857,7 +928,7 @@ function replanFromToday(data: AppData, cfg: PlanSettings, today: ISODate, opts:
       changed[key].push(e.id);
     }
     for (const old of Object.values(data[store]) as (CookingEvent | ShoppingEvent)[]) {
-      if (old.source !== 'seed' || newIds.has(old.id) || old.date < today || bought.includes(old as ShoppingEvent)) continue;
+      if (old.source !== 'seed' || newIds.has(old.id) || old.date < (prefix === 'cook' ? from : today) || bought.includes(old as ShoppingEvent)) continue;
       const touched = marked(`${prefix}:${old.id}`) || (prefix === 'shop' && shopChecked(old.id));
       if (touched && !opts.overwriteMarked) { conflicts.push(`${label(prefix, old)}: есть отметки`); continue; }
       ops.push({ store, del: old.id });

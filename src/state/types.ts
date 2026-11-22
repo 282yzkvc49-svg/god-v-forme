@@ -44,11 +44,17 @@ export interface MealCardPart {
   cookEventId?: string | null;
   storage?: 'fridge' | 'freeze' | 'pantry' | null;
   thawOn?: ISODate | null;
+  /** Из того, что уже есть дома: чего не хватит — показать дефицит, а не докупать. */
+  stockOnly?: boolean;
 }
 
 export interface MealCard {
   title: string;
   parts: MealCardPart[];
+  /** Приём пищи отменён корректировкой (например, обед не дома). */
+  cancelled?: boolean;
+  /** Пояснение корректировки (почему блюдо заменено). */
+  note?: string | null;
 }
 
 export interface TemplateItem {
@@ -162,6 +168,8 @@ export interface CookingEvent {
   items?: CookItem[] | null;
   /** Сырые продукты из морозилки: накануне переложить в холодильник. */
   thawProducts?: { productId: string; qty: number }[] | null;
+  /** Своя готовка из того, что уже есть дома: чего не хватит — дефицит, а не докупка. */
+  stockOnly?: boolean;
 }
 
 export interface CookUse {
@@ -462,6 +470,14 @@ export interface Settings {
   tripReportUnseen?: string | null;
   /** Перенос командировки ждёт подтверждения: затрагивает уже отмеченное. */
   tripMovePending?: { tripId: string; from: ISODate; to: ISODate; createdAt: string } | null;
+  /** Учёт запасов включён: отметки «приготовлено» и «съедено» с этой даты списывают продукты. */
+  inventory?: { since: ISODate; createdAt: string } | null;
+  /** Фактически потрачено на домашние закупки цикла (если указано). */
+  budgetSpent?: { amount: number; note: string | null; at: string } | null;
+  /** Применённые корректировки по факту: id → когда. */
+  corrections?: Record<string, string> | null;
+  /** id резервной копии корректировки, отчёт о которой ещё не показан. */
+  correctionReportUnseen?: string | null;
 }
 
 export interface PlanSettings {
@@ -473,6 +489,70 @@ export interface PlanSettings {
   /** Какое меню применено (id шаблона); другое значение — доступно обновление меню с предпросмотром. */
   menuId?: string;
   setAt: string;
+  /** Ручные корректировки поверх шаблона: отдельные приёмы пищи и свои готовки. */
+  overrides?: PlanOverrides | null;
+}
+
+/** Замена приёма пищи поверх шаблона. */
+export type SlotOverride =
+  | { kind: 'cancel'; label: string }
+  | { kind: 'dish'; dishId: string; note?: string | null }
+  | { kind: 'cook'; cookId: string; dishId: string; note?: string | null };
+
+/** Своя готовка (не из партии шаблона): блюдо, порции и на какие приёмы. */
+export interface CustomCook {
+  id: string;
+  date: ISODate;
+  time: string;
+  title: string;
+  note?: string | null;
+  items: { dishId: string; uses: { date: ISODate; slot: MealSlot }[] }[];
+}
+
+export interface PlanOverrides {
+  /** Корректировка, которая их создала. */
+  sourceId: string;
+  days: Record<ISODate, Partial<Record<MealSlot, SlotOverride>>>;
+  cooks: CustomCook[];
+}
+
+/** Учёт запасов: движения по продукту. Остаток = купленное + поступления − использованное − списанное ± исправления. */
+export type StockKind = 'purchase' | 'use' | 'writeoff' | 'adjust';
+export interface StockMove {
+  id: string;
+  date: ISODate;
+  kind: StockKind;
+  /** Количество в единицах товара (г, мл, шт.); у adjust — со знаком. */
+  qty: number;
+  /** Откуда: закупка, готовка (cook:<id>), приём пищи (meal:<дата>:<приём>), фото чеков, вручную. */
+  source: string | null;
+  note: string | null;
+  /** false — расчёт/оценка, требует подтверждения. */
+  confirmed: boolean;
+  at: string;
+}
+export type StockPlace = 'fridge' | 'freezer' | 'pantry';
+export interface StockRec {
+  productId: string;
+  location: StockPlace;
+  moves: StockMove[];
+  /** Когда пользователь проверил остаток; null — расчётный, «Требует подтверждения». */
+  confirmedAt: string | null;
+  /** Срок годности с упаковки, если указан. */
+  expiresOn: ISODate | null;
+  note: string | null;
+  updatedAt: string;
+}
+
+/** Готовая еда: что стало с порцией, которую не съели по плану. */
+export interface ReadyFoodRec {
+  id: string; // `${cookId}|${dishId}|${date}|${slot}`
+  cookId: string;
+  dishId: string;
+  date: ISODate;
+  slot: MealSlot;
+  status: 'frozen' | 'writeoff' | 'eaten';
+  at: string;
 }
 
 export interface TrainingSchedule {
@@ -529,6 +609,45 @@ export interface BackupRec {
   report?: MigrationReport | null;
   /** Итог переноса командировки для отчёта. */
   tripReport?: TripMoveReport | null;
+  /** Итог корректировки по факту для отчёта. */
+  correctionReport?: CorrectionReport | null;
+}
+
+/** Строка запасов в отчёте. */
+export interface StockRow {
+  productId: string;
+  name: string;
+  unit: 'g' | 'ml' | 'pcs';
+  bought: number;
+  used: number;
+  writtenOff: number;
+  adjusted: number;
+  remaining: number;
+  location: StockPlace;
+  until: ISODate | null;
+  expired: boolean;
+  needsConfirm: boolean;
+}
+
+/** Корректировка по факту: что изменено в днях, готовках, запасах и закупках. */
+export interface CorrectionReport {
+  id: string;
+  appliedAt: string;
+  today: ISODate;
+  marks: string[];
+  dishes: { date: ISODate; slot: MealSlot; before: string; after: string }[];
+  portions: string[];
+  stock: StockRow[];
+  needConfirm: string[];
+  /** Небольшие закупки до второй основной (к 27–28.11). */
+  extra: { id: string; date: ISODate; title: string; lines: { name: string; text: string; cost: number }[]; cost: number }[];
+  main: { id: string; date: ISODate; lines: { name: string; need: string; fromStock: string; buy: string; cost: number }[]; cost: number; covered: string[] } | null;
+  later: { date: ISODate; title: string; cost: number }[];
+  budget: { total: number; spent: number; spentActual: boolean; planned: number; left: number };
+  /** Чего по учёту не хватает к блюдам «из того, что есть дома» (не докупается). */
+  deficits: string[];
+  notes: string[];
+  conflicts: string[];
 }
 
 /** Перенос командировки: что поменялось в днях, готовке, закупках и тренировках. */
@@ -590,13 +709,15 @@ export interface AppData {
   patches: Record<string, PatchRecord>;
   avProducts: Record<string, AvProductRec>;
   backups: Record<string, BackupRec>;
+  stock: Record<string, StockRec>;
+  readyFood: Record<string, ReadyFoodRec>;
 }
 
 /** Хранилища-коллекции (в памяти — Record по ключу). */
 export const RECORD_STORES = [
   'planDays', 'templateVersions', 'shoppingEvents', 'cookingEvents', 'taskStatus', 'taskMoves', 'customTasks',
   'trainingLogs', 'weights', 'measurements', 'photos', 'shoppingChecks', 'checks', 'dayNotes', 'userRecipes',
-  'mealLinks', 'exportHistory', 'patches', 'trips', 'avProducts', 'backups',
+  'mealLinks', 'exportHistory', 'patches', 'trips', 'avProducts', 'backups', 'stock', 'readyFood',
 ] as const;
 export type RecordStore = (typeof RECORD_STORES)[number];
 
@@ -618,6 +739,8 @@ export const STORE_KEYS: Record<RecordStore | 'settings' | 'meta' | 'photoBlobs'
   trips: 'id',
   avProducts: 'productId',
   backups: 'id',
+  stock: 'productId',
+  readyFood: 'id',
   dayNotes: 'date',
   userRecipes: 'id',
   mealLinks: 'id',
@@ -636,4 +759,5 @@ export type PlanStore = (typeof PLAN_STORES)[number];
 export const USER_STORES = [
   'taskStatus', 'taskMoves', 'customTasks', 'trainingLogs', 'weights', 'measurements', 'photos',
   'shoppingChecks', 'checks', 'dayNotes', 'userRecipes', 'mealLinks', 'exportHistory', 'patches', 'trips', 'avProducts',
+  'stock', 'readyFood',
 ] as const;

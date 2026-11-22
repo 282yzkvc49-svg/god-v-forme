@@ -13,7 +13,7 @@ test('шаблон меню «Азбука вкуса» v2: 24 дня меню �
   assert.equal(TEMPLATE.days.length, 24);
   for (const d of TEMPLATE.days) for (const s of MEAL_SLOTS) assert.equal(d.meals![s].parts.length, 1, `день ${d.day} ${s}`);
   assert.equal(new Set(TEMPLATE.days.map((d) => d.meals!.breakfast.parts[0].dish)).size, 24, '24 разных завтрака');
-  assert.equal(TEMPLATE.dishes.filter((d) => !d.archived).length, 61);
+  assert.equal(TEMPLATE.dishes.filter((d) => !d.archived && !d.extra).length, 61);
   assert.equal(TEMPLATE.blocks.length, 8);
   const portions = TEMPLATE.blocks.reduce((n, b) => n + b.items.reduce((m, i) => m + i.uses.length, 0), 0);
   assert.equal(portions, 48, '48 обедов и ужинов из партий');
@@ -74,7 +74,7 @@ test('калорийность: расчёт по продуктам совпа�
   assert.ok(Math.abs(avg - 2391.06) < 1, `${avg}`);
   assert.ok(Math.abs(Math.min(...ks) - 2141.5) < 1);
   assert.ok(Math.abs(Math.max(...ks) - 2596.5) < 1);
-  for (const d of TEMPLATE.dishes.filter((x) => !x.archived)) assert.ok(Math.abs(dishNutrition(d.id, 1).kcal - d.nutrition_estimate!.kcal) < 1.5, d.id);
+  for (const d of TEMPLATE.dishes.filter((x) => !x.archived && !x.extra)) assert.ok(Math.abs(dishNutrition(d.id, 1).kcal - d.nutrition_estimate!.kcal) < 1.5, d.id);
 });
 
 test('тренировки: только гири 12 и 16 кг, без весов 6, 8, 10, 14 кг', () => {

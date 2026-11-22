@@ -64,7 +64,7 @@ export function SettingsScreen() {
               <a className="btn small" href={href('/menu-update')}>Посмотреть и применить</a>
             </Note>
           ) : (
-            <p className="mt0">Меню: {TEMPLATE.title}. <a href={href('/menu-update')}>Отчёт об обновлении, резервная копия и проверки</a> · <a href={href('/av-check')}>Проверка товаров на av.ru</a>{Object.values(data.backups ?? {}).some((b) => b.tripReport) ? <> · <a href={href('/trip-update')}>Отчёт о переносе командировки</a></> : null}</p>
+            <p className="mt0">Меню: {TEMPLATE.title}. <a href={href('/menu-update')}>Отчёт об обновлении, резервная копия и проверки</a> · <a href={href('/av-check')}>Проверка товаров на av.ru</a>{Object.values(data.backups ?? {}).some((b) => b.tripReport) ? <> · <a href={href('/trip-update')}>Отчёт о переносе командировки</a></> : null}{data.settings.inventory ? <> · <a href={href('/correction')}>Корректировка по факту</a> · <a href={href('/shopping', { tab: 'stock' })}>Мои запасы</a></> : null}</p>
           )}
           {s.plan ? (
             <p className="mt0">Сейчас: первый цикл с {fmtFull(s.plan.startDate)} по {fmtFull(planEnd(s.plan))}.</p>

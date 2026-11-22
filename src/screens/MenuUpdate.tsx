@@ -55,7 +55,7 @@ export function MenuUpdateScreen() {
   const removedShops = Object.values(data.shoppingEvents).filter((e) => e.source === 'seed' && e.date >= today && !newIds.has(e.id)).length;
   const conflicts = res.mealMarks > 0 || res.eventMarks.length > 0;
   const failed = checks.filter((c) => !c.ok);
-  const recipes = TEMPLATE.dishes.filter((d) => !d.archived);
+  const recipes = TEMPLATE.dishes.filter((d) => !d.archived && !d.extra);
   const cnt = (c: string) => recipes.filter((d) => d.category === c).length;
   const seedTotal = src ? src.orders.reduce((s, o) => s + o.subtotal, 0) : 0;
   const homeShops = inst.shoppingEvents.filter((e) => e.kind !== 'trip');

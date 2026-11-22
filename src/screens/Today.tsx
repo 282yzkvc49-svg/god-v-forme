@@ -17,7 +17,8 @@ import { PLAN_LENGTH, menuUpdatePending, planEnd } from '../domain/plan';
 import { TEMPLATE } from '../domain/catalog';
 import { fmtFull, fmtShort } from '../lib/dates';
 import { MEAL_LABELS } from '../state/types';
-import { PiCalendarBlank, PiForkKnife, PiPlus, PiShareNetwork, PiShieldCheck, PiX } from '../ui/icons';
+import { PiCalendarBlank, PiForkKnife, PiPlus, PiShareNetwork, PiShieldCheck, PiShoppingCart, PiX } from '../ui/icons';
+import { correctionPending } from '../domain/correction';
 
 function pickNow(data: ReturnType<typeof useApp>, tasks: DayTask[], date: ISODate, isToday: boolean): DayTask | null {
   const open = tasks.filter((t) => !t.optional && !t.postponed && (statusOf(data, t) === 'planned' || statusOf(data, t) === 'in_progress'));
@@ -87,7 +88,7 @@ export function Today() {
       {pendingMenu && (
         <div className="banner">
           <PiForkKnife />
-          <span className="grow">Новое меню {TEMPLATE.title}: старт {fmtFull(TEMPLATE.base_start)}, {TEMPLATE.dishes.filter((d) => !d.archived).length} рецептов с товарами av.ru, готовки и закупки. Посмотрите, что изменится, — меню применится только после подтверждения. Тренировки, вес и фото не меняются.</span>
+          <span className="grow">Новое меню {TEMPLATE.title}: старт {fmtFull(TEMPLATE.base_start)}, {TEMPLATE.dishes.filter((d) => !d.archived && !d.extra).length} рецептов с товарами av.ru, готовки и закупки. Посмотрите, что изменится, — меню применится только после подтверждения. Тренировки, вес и фото не меняются.</span>
           <a className="btn small primary" href={href('/menu-update')}>Посмотреть</a>
         </div>
       )}
@@ -96,6 +97,13 @@ export function Today() {
           <PiCalendarBlank />
           <span className="grow">Командировка перенесена на {fmtShort(data.settings.tripMovePending.from)}–{fmtShort(data.settings.tripMovePending.to)}: перенос затрагивает уже отмеченное — посмотрите изменения и подтвердите.</span>
           <a className="btn small primary" href={href('/trip-update')}>Посмотреть</a>
+        </div>
+      )}
+      {correctionPending(data, today) && (
+        <div className="banner">
+          <PiShoppingCart />
+          <span className="grow">Корректировка по фактическим покупкам: проверьте запасы и посмотрите изменения меню, порций, готовок и закупок с 21.11 — применится только после подтверждения.</span>
+          <a className="btn small primary" href={href('/correction')}>Проверить</a>
         </div>
       )}
       {!pendingMenu && cfg && !cfg.confirmed && (

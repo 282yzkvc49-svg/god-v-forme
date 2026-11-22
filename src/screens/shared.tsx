@@ -23,6 +23,7 @@ import { TripMealCard } from './Trips';
 import { DISHES, cookedWeight, dishAmount } from '../domain/catalog';
 import { planEnd } from '../domain/plan';
 import { TEMPLATE_NAMES } from '../domain/templates';
+import { inventoryOn } from '../domain/stock';
 
 export function KindIcon({ t }: { t: Pick<DayTask, 'kind' | 'templateId'> }) {
   switch (t.kind) {
@@ -119,6 +120,8 @@ function TaskRow({ t, compact, onMenu, onOpenMeal, onOpenWeigh, onOpenBox }: {
       toast(`${t.title}: отмечено`, { label: 'Отменить', run: () => A.resetTraining(t.id) });
       return;
     }
+    // учёт запасов: готовку отмечают после проверки продуктов на её странице
+    if (t.kind === 'cooking' && raw !== 'done' && t.eventId && inventoryOn(data, t.originDate)) { go(`/cook/${t.eventId}`); return; }
     if (raw === 'done') A.setTaskStatus(t, 'planned');
     else {
       A.setTaskStatus(t, 'done');

@@ -38,7 +38,7 @@ export function checkInstance(inst: PlanInstance): CheckResult[] {
       if (day.tripId) { trip++; if (!day.meals) d.push(`${fmtShort(day.date)}: нет командировочного меню`); continue; }
       if (day.relax || !day.templateDay) continue;
       home++;
-      for (const s of MEAL_SLOTS) if (!day.mealCards?.[s]?.parts.length) d.push(`${fmtShort(day.date)}: нет «${MEAL_LABELS[s]}»`);
+      for (const s of MEAL_SLOTS) if (!day.mealCards?.[s]?.parts.length && !day.mealCards?.[s]?.cancelled) d.push(`${fmtShort(day.date)}: нет «${MEAL_LABELS[s]}»`);
     }
     const relax = inst.layout.relaxDates.map(fmtShort).join(', ') || 'нет в этом цикле';
     res.push({ id: 1, title: '30 дней: домашнее меню, командировки и релакс-день', ok: !d.length, details: d.length ? d : [`Домашних дней ${home} × 4 приёма = ${home * 4}; дней командировки ${trip}; релакс-день: ${relax}`] });
@@ -228,6 +228,7 @@ export function checkSeedPlan(inst: PlanInstance): CheckResult[] {
     for (const day of cycle) {
       if (!day.mealCards || day.tripId) continue;
       for (const sl of ['lunch', 'dinner'] as MealSlot[]) {
+        if (day.mealCards[sl].cancelled) continue; // приём отменён корректировкой по факту
         ld++;
         const dish = day.mealCards[sl].parts[0]?.dishId;
         const got = cookOf.get(`${day.date}|${sl}`);

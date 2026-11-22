@@ -445,6 +445,81 @@ await step('12–13. Ноябрь 2026: старт 16.11, командировк
   await ctx3.close();
 });
 
+async function injectState(p, file) {
+  const fixture = JSON.parse(await fs.readFile(path.join(root, file), 'utf8'));
+  await p.evaluate((fx) => new Promise((res, rej) => {
+    const rq = indexedDB.open('god-v-forme');
+    rq.onerror = () => rej(rq.error);
+    rq.onsuccess = () => {
+      const db = rq.result;
+      const names = Array.from(db.objectStoreNames);
+      const tx = db.transaction(names, 'readwrite');
+      for (const n of names) tx.objectStore(n).clear();
+      for (const [k, v] of Object.entries(fx)) {
+        if (!names.includes(k)) continue;
+        for (const r of (k === 'settings' || k === 'meta' ? [v] : Object.values(v))) tx.objectStore(k).put(r);
+      }
+      tx.oncomplete = () => { db.close(); res(true); };
+      tx.onerror = () => rej(tx.error);
+    };
+  }), fixture);
+}
+
+await step('14. 22.11: корректировка по фактическим покупкам → запасы → предпросмотр → копия и применение; «Мои запасы», «Приготовлено»', async () => {
+  const ctx4 = await browser.newContext({ viewport: { width: 1024, height: 1366 }, hasTouch: true, locale: 'ru-RU', timezoneId: 'Europe/Moscow' });
+  ctx4.setDefaultTimeout(12000);
+  const p4 = await newPage(ctx4);
+  active = p4;
+  await p4.goto(`${BASE}?today=2026-11-22#/today`);
+  await p4.waitForTimeout(400);
+  await injectState(p4, 'tests/fixtures/state_1.6.0_2211.json');
+  await p4.goto(`${BASE}?today=2026-11-22#/today`);
+  await p4.reload();
+  // сама открывается: сначала проверка запасов, затем предпросмотр; без подтверждения ничего не меняется
+  await p4.getByRole('heading', { name: 'Корректировка по фактическим покупкам' }).waitFor();
+  await p4.getByRole('heading', { name: /1\. Проверьте запасы/ }).waitFor();
+  await p4.getByRole('heading', { name: 'Какие блюда изменены' }).waitFor();
+  await p4.getByText(/Индейка с булгуром и овощами/).first().waitFor();
+  await p4.getByText(/небольшая закупка к 27–28\.11/).waitFor();
+  assert(await p4.getByText(/Масло оливковое/).count() > 0, 'масло пока в закупке');
+  await p4.getByLabel('Масло оливковое Extra Virgin: есть дома, мл').fill('300');
+  await p4.getByLabel('Масло оливковое Extra Virgin: есть дома, мл').blur();
+  await p4.waitForTimeout(500);
+  assert(!(await p4.locator('.card', { hasText: 'Что докупить' }).innerText()).includes('Масло оливковое'), 'масло есть дома — не покупать');
+  await p4.screenshot({ path: path.join(shots, '14-correction-preview-ipad.png'), fullPage: true });
+  assert(await p4.getByRole('button', { name: 'Создать резервную копию и применить' }).isDisabled(), 'без подтверждения кнопка неактивна');
+  await p4.getByLabel('Проверил запасы и изменения').check();
+  await p4.getByRole('button', { name: 'Создать резервную копию и применить' }).click();
+  await p4.getByRole('heading', { name: 'Корректировка по факту применена' }).waitFor();
+  await p4.getByText(/Резервная копия перед изменениями/).waitFor();
+  await p4.screenshot({ path: path.join(shots, '14-correction-report-ipad.png'), fullPage: true });
+  // день 22.11: обед отменён, ужин — новое блюдо
+  await go(p4, '/day/2026-11-22');
+  await p4.getByText('Обед отменён (по факту)').first().waitFor();
+  await p4.getByText('Индейка с булгуром и овощами').first().waitFor();
+  // «Мои запасы»
+  await go(p4, '/shopping?tab=stock');
+  await p4.getByRole('heading', { name: 'Морозилка' }).waitFor();
+  const turkeyRow = p4.getByRole('row', { name: /^Филе грудки индейки/ });
+  assert((await turkeyRow.innerText()).includes('714'), 'индейка: 894 − 180 = 714 г');
+  assert(await p4.getByText('требует подтверждения').count() > 0, 'расчётные остатки помечены');
+  await p4.screenshot({ path: path.join(shots, '14-stock-ipad.png'), fullPage: true });
+  // готовка 22.11: проверить продукты → «Приготовлено» → индейка списана
+  await go(p4, '/cook/cook-p20261116-x2211');
+  await p4.getByRole('heading', { name: 'Перед готовкой — проверьте продукты' }).waitFor();
+  await p4.getByLabel('Проверил продукты').check();
+  await p4.getByRole('button', { name: 'Приготовлено' }).click();
+  await p4.waitForTimeout(400);
+  await go(p4, '/shopping?tab=stock');
+  assert((await p4.getByRole('row', { name: /^Филе грудки индейки/ }).innerText()).includes('174'), 'после готовки индейки 174 г');
+  await p4.getByRole('heading', { name: 'Готовая еда' }).waitFor();
+  assert(await p4.getByText(/Индейка с булгуром и овощами/).count() >= 2, 'порции в готовой еде');
+  // календарь: готовка 21.11 отменена
+  await go(p4, '/calendar?d=2026-11-21&m=2026-11-21');
+  assert(await p4.locator('.i-cook.cancelled').count() > 0, 'отменённая готовка видна в календаре');
+  await ctx4.close();
+});
+
 await step('Нет ошибок в консоли и внешних запросов', async () => {
   const real = errors.filter((e) => !/Failed to load resource.*(ERR_INTERNET_DISCONNECTED|net::ERR_FAILED)/.test(e));
   assert(real.length === 0, `ошибки: ${real.slice(0, 5).join(' | ')}`);

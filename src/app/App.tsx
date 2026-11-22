@@ -19,6 +19,9 @@ import { SettingsScreen, MoreScreen } from '../screens/Settings';
 import { TripsScreen } from '../screens/Trips';
 import { MenuUpdateScreen } from '../screens/MenuUpdate';
 import { TripUpdateScreen } from '../screens/TripUpdate';
+import { CorrectionScreen } from '../screens/Correction';
+import { correctionPending } from '../domain/correction';
+import { today as todayFn } from '../lib/clock';
 import { AvCheckScreen } from '../screens/AvCheck';
 import { Onboarding } from '../screens/Onboarding';
 import { onUpdateReady, applyUpdate } from './sw';
@@ -29,7 +32,7 @@ const NAV: NavItem[] = [
   { path: '/calendar', label: 'Календарь', icon: <PiCalendarBlank />, match: ['calendar', 'day'] },
   { path: '/training', label: 'Тренировки', icon: <KettlebellIcon />, match: ['training', 'workout', 'exercise'] },
   { path: '/nutrition', label: 'Питание', icon: <PiForkKnife />, match: ['nutrition', 'recipes', 'recipe', 'recipe-needed'] },
-  { path: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart />, match: ['shopping', 'shop', 'cook', 'av-check'] },
+  { path: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart />, match: ['shopping', 'shop', 'cook', 'av-check', 'correction'] },
   { path: '/progress', label: 'Прогресс', icon: <PiChartLineUp />, match: ['progress'] },
   { path: '/analysis', label: 'Анализ с ChatGPT', icon: <PiChatsCircle />, match: ['analysis'] },
   { path: '/settings', label: 'Настройки', icon: <PiGear />, match: ['settings', 'trips', 'menu-update', 'trip-update'] },
@@ -71,9 +74,11 @@ export function App() {
     const menu = !!(data.settings.menuReportUnseen || menuUpdatePending(data));
     // перенос командировки применён при запуске или ждёт подтверждения — один раз показать
     const trip = !!(data.settings.tripReportUnseen || data.settings.tripMovePending);
-    if (!menu && !trip) return;
+    // корректировка по фактическим покупкам ждёт проверки запасов и подтверждения
+    const fact = !!(data.settings.correctionReportUnseen || correctionPending(data, todayFn()));
+    if (!menu && !trip && !fact) return;
     menuPromptShown = true;
-    if (!route.path[0] || route.path[0] === 'today') go(menu ? '/menu-update' : '/trip-update');
+    if (!route.path[0] || route.path[0] === 'today') go(menu ? '/menu-update' : trip ? '/trip-update' : '/correction');
   }, [data.ready]);
 
   if (!data.ready) return <div className="boot">Загрузка…</div>;
@@ -103,6 +108,7 @@ export function App() {
     case 'trips': screen = <TripsScreen />; break;
     case 'menu-update': screen = <MenuUpdateScreen />; break;
     case 'trip-update': screen = <TripUpdateScreen />; break;
+    case 'correction': screen = <CorrectionScreen />; break;
     case 'av-check': screen = <AvCheckScreen />; break;
     case 'more': screen = <MoreScreen />; break;
     default: screen = <Today />;

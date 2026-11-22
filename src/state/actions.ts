@@ -2,11 +2,14 @@
 import { commit, forgetPhotoURL, getData, putPhotoBlob } from './store';
 import type { Op } from './idb';
 import type {
-  AvProductRec, ProductSub,
+  AvProductRec, ProductSub, CookingEvent, StockMove, StockRec,
   CustomTask, Difficulty, ExerciseLog, ExportRecord, Feeling, MealMapEntry, PhotoMeta, PhotoPose, PlanSettings, Recipe, Settings,
   TaskStatus, TemplateId, TrainingLog,
 } from './types';
 import { replanOps } from '../domain/plan';
+import { applyOps as applyToData } from './model';
+import { cookStockOps, emptyStock, mealStockOps, readyFoodOps, stockRemaining, type ReadyPortion } from '../domain/stock';
+import { buildCorrection, type CorrectionInput } from '../domain/correction';
 import { productCheckOps, resetChecksOps } from '../domain/avCheck';
 import { menuUpdateOps, rollbackMenuOps } from './model';
 import { applyTripMoveOps, planTripMove } from '../domain/tripMove';
@@ -20,8 +23,91 @@ import type { ISODate } from '../lib/dates';
 // ------------------------------------------------------------------ задачи
 
 export function setTaskStatus(t: DayTask, status: TaskStatus) {
-  if (status === 'planned') return commit([{ store: 'taskStatus', del: t.id }]);
-  return commit([{ store: 'taskStatus', put: { taskId: t.id, date: t.originDate, kind: t.kind, status, updatedAt: nowStamp() } }]);
+  const data = getData();
+  const now = nowStamp();
+  const ops: Op[] = status === 'planned'
+    ? [{ store: 'taskStatus', del: t.id }]
+    : [{ store: 'taskStatus', put: { taskId: t.id, date: t.originDate, kind: t.kind, status, updatedAt: now } }];
+  // учёт запасов: «Съедено» и «Приготовлено» списывают продукты по факту, снятая отметка — возвращает
+  if (t.kind === 'meal' && t.slot) ops.push(...mealStockOps(data, t.originDate, t.slot, status, now));
+  if (t.kind === 'cooking' && t.eventId && data.cookingEvents[t.eventId]) ops.push(...cookStockOps(data, data.cookingEvents[t.eventId], status === 'done', now).ops);
+  return commit(ops);
+}
+
+// ------------------------------------------------------------------ запасы
+
+/** Готовка по факту: «Приготовлено» (с заменами из проверки продуктов) или «Отменена» — продукты остаются. */
+export function markCooked(e: CookingEvent, replace: Record<string, string>) {
+  const data = getData();
+  const now = nowStamp();
+  const r = cookStockOps(data, e, true, now, replace);
+  return commit([{ store: 'taskStatus', put: { taskId: `cook:${e.id}`, date: e.date, kind: 'cooking', status: 'done', updatedAt: now } }, ...r.ops]).then(() => r.deficits);
+}
+
+export function cancelCook(e: CookingEvent) {
+  const data = getData();
+  const now = nowStamp();
+  return commit([{ store: 'taskStatus', put: { taskId: `cook:${e.id}`, date: e.date, kind: 'cooking', status: 'skipped', updatedAt: now } }, ...cookStockOps(data, e, false, now).ops]);
+}
+
+let mvSeq = 0;
+const mv = (now: string, kind: StockMove['kind'], qty: number, note: string): StockMove => ({ id: `mv-${now.replace(/[^0-9]/g, '').slice(0, 14)}-u${(++mvSeq).toString(36)}`, date: todayFn(), kind, qty, source: 'manual', note, confirmed: true, at: now });
+
+/** Пересчитать будущие закупки по запасам (прошедшее и отмеченное не меняется). */
+export function recalcFromStock(extra: Op[] = []) {
+  const data0 = getData();
+  const cfg = data0.settings.plan;
+  if (!cfg || !data0.settings.inventory) return commit(extra).then(() => [] as string[]);
+  const data = extra.length ? applyToData(data0, extra) : data0;
+  const rp = replanOps(data, cfg, todayFn(), { keepPast: true, now: nowStamp() });
+  return commit([...extra, ...rp.ops]).then(() => rp.conflicts ?? []);
+}
+
+/** Исправить остаток вручную (подтверждён). */
+export function setStockRemaining(productId: string, qty: number) {
+  const data = getData();
+  const now = nowStamp();
+  const rec = data.stock[productId] ?? emptyStock(productId, now);
+  const have = stockRemaining(data, productId);
+  const delta = Math.round((qty - have) * 10) / 10;
+  const put: StockRec = { ...rec, confirmedAt: now, updatedAt: now, moves: Math.abs(delta) > 0.05 ? [...rec.moves, mv(now, 'adjust', delta, 'Остаток исправлен вручную')] : rec.moves };
+  return recalcFromStock([{ store: 'stock', put }]);
+}
+
+export function confirmStock(productId: string) {
+  const rec = getData().stock[productId];
+  if (!rec) return Promise.resolve([] as string[]);
+  return commit([{ store: 'stock', put: { ...rec, confirmedAt: nowStamp(), updatedAt: nowStamp() } }]).then(() => [] as string[]);
+}
+
+export function updateStock(productId: string, patch: Partial<Pick<StockRec, 'expiresOn' | 'location' | 'note'>>) {
+  const rec = getData().stock[productId] ?? emptyStock(productId, nowStamp());
+  return recalcFromStock([{ store: 'stock', put: { ...rec, ...patch, updatedAt: nowStamp() } }]);
+}
+
+/** Списать (испорчено): весь остаток или часть. */
+export function writeOffStock(productId: string, qty: number, note = 'Испорчено — списано') {
+  const data = getData();
+  const rec = data.stock[productId];
+  if (!rec || !(qty > 0)) return Promise.resolve([] as string[]);
+  const now = nowStamp();
+  return recalcFromStock([{ store: 'stock', put: { ...rec, updatedAt: now, moves: [...rec.moves, mv(now, 'writeoff', Math.round(qty * 10) / 10, note)] } }]);
+}
+
+export function readyFoodAction(p: ReadyPortion, status: 'frozen' | 'writeoff' | 'eaten') {
+  return commit(readyFoodOps(p, status, nowStamp()));
+}
+
+/** Корректировка по фактическим покупкам: резервная копия, затем изменения (после предпросмотра). */
+export function applyCorrection(input: CorrectionInput) {
+  const res = buildCorrection(getData(), todayFn(), nowStamp(), input, __APP_VERSION__);
+  return commit(res.ops).then(() => res.report);
+}
+
+export function markCorrectionReportSeen() {
+  const s = getData().settings;
+  if (!s.correctionReportUnseen) return Promise.resolve();
+  return commit([{ store: 'settings', put: { ...s, correctionReportUnseen: null } }]);
 }
 
 export function moveTask(t: DayTask, toDate: ISODate) {

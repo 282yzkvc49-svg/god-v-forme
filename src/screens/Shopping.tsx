@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react';
 import { useApp } from '../state/store';
 import * as A from '../state/actions';
 import { useToday } from '../lib/clock';
-import { href } from '../app/router';
+import { go, href, useRoute } from '../app/router';
+import { StockView } from './Stock';
+import { CookStockCheck } from './CookCheck';
+import { inventoryOn } from '../domain/stock';
+import { correctionApplied, correctionPending } from '../domain/correction';
 import { fmtDayMonth, fmtLong, fmtShort, weekdayShort, type ISODate } from '../lib/dates';
 import { fmtNum, fmtRub, parseNum } from '../lib/util';
 import { PROFILE, SHOPPING_META, STORAGE_GUIDE } from '../lib/seed';
@@ -11,7 +15,7 @@ import { recipeById } from '../domain/meals';
 import { DISHES, PRODUCTS, TEMPLATE, cookedWeight, dishAmount, fmtAmount, ingredientLines } from '../domain/catalog';
 import { BUDGET_RUB, buyText, needText, planEnd, portionsLeft } from '../domain/plan';
 import { MEAL_LABELS, type CookingEvent, type ShopLine, type ShoppingEvent } from '../state/types';
-import { CheckButton, Disclosure, Empty, Note, PageHead, toast } from '../ui/kit';
+import { CheckButton, Disclosure, Empty, Note, PageHead, Seg, toast } from '../ui/kit';
 import { copyText, saveFile, shareText } from '../lib/files';
 import { buildShoppingExport, shoppingExportFileName } from '../domain/shopExport';
 import { PiBookOpen, PiCheck, PiCookingPot, PiCopy, PiDownloadSimple, PiPrinter, PiShareNetwork, PiShoppingCart, PiSnowflake, PiPackage, PiListChecks, PiHouse } from '../ui/icons';
@@ -52,6 +56,8 @@ function mainDishes(e: CookingEvent): string {
 export function ShoppingHub() {
   const data = useApp();
   const today = useToday();
+  const route = useRoute();
+  const tab = route.query.get('tab') === 'stock' ? 'stock' : 'shop';
   const cfg = data.settings.plan;
   const shops = useMemo(() => Object.values(data.shoppingEvents).sort((a, b) => (a.date < b.date ? -1 : 1)), [data.shoppingEvents]);
   const cooks = useMemo(() => Object.values(data.cookingEvents).filter((e) => e.eventType === 'meal_prep').sort((a, b) => (a.date + (a.time ?? '') < b.date + (b.time ?? '') ? -1 : 1)), [data.cookingEvents]);
@@ -72,7 +78,14 @@ export function ShoppingHub() {
   };
   return (
     <div className="page">
-      <PageHead title="Закупки и готовка" sub={`${PROFILE.shopping_text} ${PROFILE.cooking_days_text}`} />
+      <PageHead title="Закупки и готовка" sub={`${PROFILE.shopping_text} ${PROFILE.cooking_days_text}`} right={
+        <Seg value={tab} onChange={(v) => go('/shopping', v === 'stock' ? { tab: 'stock' } : {}, true)} label="Раздел" options={[{ value: 'shop', label: 'Закупки' }, { value: 'stock', label: 'Мои запасы' }]} />
+      } />
+      {correctionPending(data, today) && (
+        <Note kind="warn"><p className="mt0">Корректировка по фактическим покупкам ещё не применена: проверьте запасы и посмотрите пересчитанные закупки.</p><a className="btn small primary" href={href('/correction')}>Проверить и применить</a></Note>
+      )}
+      {tab === 'stock' ? <StockView /> : <>
+      {correctionApplied(data) && <p className="small mt0">Закупки пересчитаны по фактическим остаткам. <a href={href('/correction')}>Отчёт о корректировке</a></p>}
       {cfg && (
         <div className="card flat" style={{ marginBottom: 12 }}>
           <div className="card-head"><h3 className="mt0">Товары av.ru: проверка по вашему адресу</h3><a className="btn small primary" href={href('/av-check')}>Проверить на av.ru</a></div>
@@ -121,6 +134,7 @@ export function ShoppingHub() {
                     <span className="num" style={{ width: 84, fontWeight: 650 }}>{weekdayShort(d)}, {fmtShort(d)}<span className="muted small" style={{ display: 'block', fontWeight: 400 }}>{e.time}</span></span>
                     <span className="grow small">{e.kind === 'quick' ? 'Быстрая: ' : ''}{mainDishes(e)}<span className="muted" style={{ display: 'block' }}>{e.forDaysText}{d !== e.date ? `, перенесено с ${fmtShort(e.date)}` : ''}</span></span>
                     {st === 'done' && <span className="chip amber"><PiCheck /> готово</span>}
+                    {st === 'skipped' && <span className="chip muted">отменена</span>}
                   </a>
                 );
               })}
@@ -128,6 +142,7 @@ export function ShoppingHub() {
           </div>
         </div>
       </div>
+      </>}
     </div>
   );
 }
@@ -354,10 +369,13 @@ export function CookPage({ id }: { id: string }) {
   return (
     <div className="page">
       <PageHead title={`${e.title}, ${fmtDayMonth(d)}`} sub={`${weekdayShort(d)}${e.time ? `, ${e.time}` : ''}. Блюда ${e.forDaysText}${d !== e.date ? `. Перенесено с ${fmtDayMonth(e.date)}` : ''}`} backTo="/shopping" right={
-        task && (st === 'done'
-          ? <button className="btn small" onClick={() => A.setTaskStatus(task, 'planned')}>Снять отметку</button>
+        task && (st === 'done' || st === 'skipped'
+          ? <button className="btn small" onClick={() => A.setTaskStatus(task, 'planned')}>{st === 'skipped' ? 'Вернуть готовку' : 'Снять отметку'}</button>
+          : inventoryOn(data, e.date) ? null
           : <button className="btn small primary" onClick={() => { A.setTaskStatus(task, 'done'); toast('Готовка отмечена'); }}><PiCheck /> Готовка выполнена</button>)
       } />
+      {st === 'skipped' && <Note kind="plain">Готовка отменена — продукты остались в запасах.</Note>}
+      {task && st === 'planned' && inventoryOn(data, e.date) && <CookStockCheck e={e} />}
       {e.timeNote && <Note kind="info">{e.timeNote}</Note>}
       {!!e.thawProducts?.length && (
         <Note kind="plain"><p><b>Накануне вечером</b> переложить из морозилки в холодильник:</p><p>{e.thawProducts.map((t) => `${PRODUCTS[t.productId].name} — ${fmtAmount(t.qty, PRODUCTS[t.productId].unit)}`).join('; ')}.</p></Note>
