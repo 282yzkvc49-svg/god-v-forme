@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useKeyboardOpen } from '../app/viewport';
 import { useApp, getData } from '../state/store';
 import * as A from '../state/actions';
 import { useToday, today as todayFn } from '../lib/clock';
@@ -257,40 +258,6 @@ function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
 }
 
 /**
- * Экранная клавиатура открыта (вводят повторы) или страница увеличена жестом: на iPad/iPhone элемент с
- * position: fixed в это время оказывается посреди экрана и закрывает поля — панель прячется, таймер идёт дальше.
- */
-function useDockVisible(): boolean {
-  const [ok, setOk] = useState(true);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-    const typing = () => {
-      const el = document.activeElement as HTMLElement | null;
-      return !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !/^(checkbox|radio|button|range)$/.test((el as HTMLInputElement).type)) || el.isContentEditable);
-    };
-    const check = () => {
-      const keyboard = !!vv && window.innerHeight - vv.height > 140;
-      const zoomed = !!vv && vv.scale > 1.05;
-      setOk(!(zoomed || keyboard || (coarse && typing())));
-    };
-    const later = () => setTimeout(check, 50);
-    check();
-    vv?.addEventListener('resize', check);
-    vv?.addEventListener('scroll', check);
-    document.addEventListener('focusin', later);
-    document.addEventListener('focusout', later);
-    return () => {
-      vv?.removeEventListener('resize', check);
-      vv?.removeEventListener('scroll', check);
-      document.removeEventListener('focusin', later);
-      document.removeEventListener('focusout', later);
-    };
-  }, []);
-  return ok;
-}
-
-/**
  * Таймер отдыха — компактная панель у нижнего края экрана тренировки. Отдельный слой (portal в body): никакие
  * transform/filter у контейнеров страницы не сдвигают её в середину. Высота панели — в --dock-h: на неё
  * увеличен нижний отступ списка, чтобы последние поля (повторы, вес гири, сложность) не оказывались под ней.
@@ -299,7 +266,8 @@ function RestTimerDock({ restRange }: { restRange: [number, number] }) {
   const t = useTimer();
   const data = useApp();
   const collapsed = useTimerCollapsed();
-  const visible = useDockVisible();
+  // прячется только пока открыта экранная клавиатура (поле в фокусе и видимая область уменьшилась)
+  const visible = !useKeyboardOpen();
   const ref = useRef<HTMLDivElement>(null);
   const presets = Array.from(new Set([restRange[0], Math.round((restRange[0] + restRange[1]) / 2 / 5) * 5, restRange[1]]));
   const rem = remainingMs(t);

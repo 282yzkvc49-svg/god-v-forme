@@ -148,16 +148,27 @@ for (const [name, opts] of Object.entries(VIEWPORTS)) {
     await dock.getByRole('button', { name: 'Сбросить таймер' }).click();
   });
 
-  await step('при вводе повторов панель не закрывает поля', async () => {
+  await step('при вводе повторов: экранная клавиатура — панель прячется, аппаратная — остаётся; потом снова видна', async () => {
     const input = p.getByRole('textbox', { name: /Подход 1: фактически/ }).first();
     await input.scrollIntoViewIfNeeded();
+    // аппаратная клавиатура (или поле осталось в фокусе): видимая область не уменьшилась — таймер на месте
     await input.click();
     await p.waitForTimeout(200);
+    assert(await dock.isVisible(), 'поле в фокусе без экранной клавиатуры — таймер виден');
+    // экранная клавиатура: видимая область уменьшилась
+    await p.setViewportSize({ width: opts.viewport.width, height: Math.round(vh * 0.55) });
+    await p.waitForTimeout(250);
+    if (process.env.DEBUG) console.log(name, await p.evaluate(() => ({ a: document.activeElement?.outerHTML.slice(0, 80), vv: visualViewport.height, ih: innerHeight, kb: document.documentElement.hasAttribute('data-kb') })));
     assert(!(await dock.isVisible()), 'панель спрятана, пока открыта клавиатура');
     await input.fill('8');
-    await p.locator('.page-head h1').click();
-    await p.waitForTimeout(200);
-    assert(await dock.isVisible(), 'после ввода панель вернулась');
+    // клавиатуру закрыли кнопкой «скрыть» — поле само теряет фокус, панель возвращается
+    await p.setViewportSize(opts.viewport);
+    await p.waitForTimeout(400);
+    assert(await dock.isVisible(), 'после закрытия клавиатуры панель вернулась');
+    assert(await p.evaluate(() => document.activeElement === document.body || document.activeElement?.tagName !== 'INPUT'), 'поле потеряло фокус');
+    const b = await box();
+    const tabbar = await p.locator('.tabbar').isVisible() ? (await p.locator('.tabbar').boundingBox()).height : 0;
+    assert(Math.abs(b.y + b.height - (vh - tabbar)) < 24, 'снова у нижнего края');
   });
 
   await step('на других страницах панели нет', async () => {

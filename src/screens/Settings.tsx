@@ -15,6 +15,7 @@ import { monthKey, tripList } from '../domain/trips';
 import { addDays } from '../lib/dates';
 import { MEAL_LABELS, MEAL_SLOTS } from '../state/types';
 import { isStandalone } from '../lib/files';
+import { repairViewport, viewportInfo, type ViewportInfo } from '../app/viewport';
 import { NumberStepper, Note, PageHead, Seg, Switch, toast } from '../ui/kit';
 import {
   PiBookOpen, PiChartLineUp, PiChatsCircle, PiGear, PiShoppingCart, PiTrash, PiCaretRight, PiShareNetwork,
@@ -242,6 +243,10 @@ export function SettingsScreen() {
           {s.installHintDismissed && <button className="btn small" onClick={() => A.updateSettings({ installHintDismissed: false })}>Снова показывать подсказку на главной</button>}
         </Group>
 
+        <Group id="screen" title="Проверка экрана">
+          <ScreenCheck />
+        </Group>
+
         <Group title="О приложении">
           <table className="table"><tbody>
             <tr><td>Версия</td><td className="n">{__APP_VERSION__} ({__BUILD_ID__})</td></tr>
@@ -255,6 +260,38 @@ export function SettingsScreen() {
         </Group>
       </div>
     </div>
+  );
+}
+
+/** Размеры экрана и видимой области — чтобы прислать снимок, если что-то съехало или обрезалось. */
+function ScreenCheck() {
+  const [info, setInfo] = useState<ViewportInfo>(() => viewportInfo());
+  useEffect(() => {
+    const upd = () => setInfo(viewportInfo());
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', upd);
+    vv?.addEventListener('scroll', upd);
+    window.addEventListener('resize', upd);
+    const t = setInterval(upd, 1500);
+    return () => { vv?.removeEventListener('resize', upd); vv?.removeEventListener('scroll', upd); window.removeEventListener('resize', upd); clearInterval(t); };
+  }, []);
+  const shifted = info.vvTop != null && Math.abs(info.vvTop) >= 1 && (info.vvScale ?? 1) < 1.02;
+  const short = info.vvH != null && Math.abs(info.dvh - info.vvH) > 60 && !info.keyboard;
+  return (
+    <>
+      <p className="mt0 small">Если на iPad что-то съехало, обрезалось или пропало — сделайте снимок этого блока сразу после этого и пришлите его.</p>
+      <table className="table small"><tbody>
+        <tr><td>Окно (innerWidth × innerHeight)</td><td className="n">{info.innerW} × {info.innerH}</td></tr>
+        <tr><td>Видимая область</td><td className="n">{info.vvW ?? '—'} × {info.vvH ?? '—'}, сдвиг {info.vvTop ?? '—'}, масштаб {info.vvScale ?? '—'}</td></tr>
+        <tr><td>100dvh / 100vh</td><td className="n">{info.dvh} / {info.vh}</td></tr>
+        <tr><td>Экран</td><td className="n">{info.screenW} × {info.screenH}</td></tr>
+        <tr><td>Режим</td><td className="n">{info.standalone ? 'с экрана «Домой»' : 'вкладка браузера'}, {info.coarse ? 'касание' : 'мышь/трекпад'}{info.keyboard ? ', клавиатура открыта' : ''}</td></tr>
+        <tr><td>Прокрутка</td><td className="n">{info.scrollY}</td></tr>
+      </tbody></table>
+      {(shifted || short)
+        ? <Note kind="warn"><p className="mt0">Видимая область сдвинута относительно страницы{short ? ' (высота экрана посчитана неверно)' : ''} — из-за этого панели могут съезжать или обрезаться.</p><button className="btn small" onClick={() => { repairViewport(true); setTimeout(() => setInfo(viewportInfo()), 300); }}>Выровнять экран</button></Note>
+        : <p className="hint" style={{ marginBottom: 0 }}>Видимая область в порядке.</p>}
+    </>
   );
 }
 

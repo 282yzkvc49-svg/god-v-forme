@@ -1,6 +1,6 @@
 {
   "name": "god-v-forme",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "private": true,
   "description": "Мой год в форме — личный PWA-трекер питания, тренировок и прогресса для iPad и iPhone",
   "type": "module",
