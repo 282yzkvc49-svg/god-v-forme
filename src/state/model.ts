@@ -9,11 +9,12 @@ import type { ISODate } from '../lib/dates';
 import { BASE_START, PLAN_LENGTH, buildInstance, makePlanSettings, menuUpdatePending, replanOps } from '../domain/plan';
 import { addDays, fmtShort } from '../lib/dates';
 import { planV8Ops } from '../domain/tripMove';
+import { planV9Ops } from '../domain/correction';
 import type { BackupRec, CookingEvent, MealCard, MealSlot, MigrationReport, PlanDay, ShoppingEvent, Trip } from './types';
 import { MEAL_LABELS, MEAL_SLOTS } from './types';
 import { DISHES, PRODUCTS, TEMPLATE } from '../domain/catalog';
 
-export const DATA_VERSION = 8;
+export const DATA_VERSION = 9;
 
 export function emptyData(): AppData {
   const d: any = { ready: false, settings: defaultSettings(), meta: null };
@@ -100,6 +101,7 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   if (v < 6) step(planV6Ops(data, today, now));
   if (v < 7) step(planV7Ops(data, today, now, appVersion));
   if (v < 8) step(planV8Ops(data, today, now, appVersion));
+  if (v < 9) step(planV9Ops(data, today, now, appVersion));
   if (v < 2) {
     // v2: у позиции «Апельсины» из стартовых закупок убрано примечание (по решению пользователя)
     for (const e of Object.values(data.shoppingEvents)) {

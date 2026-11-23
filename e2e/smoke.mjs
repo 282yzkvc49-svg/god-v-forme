@@ -465,7 +465,7 @@ async function injectState(p, file) {
   }), fixture);
 }
 
-await step('14. 22.11: корректировка → запасы → предпросмотр меню 22–24.11 → копия и применение; «Мои запасы», «Приготовлено»', async () => {
+await step('14. 22.11: меню 22–24.11 применяется при запуске (миграция v9) → отчёт; «Мои запасы», «Приготовлено»', async () => {
   const ctx4 = await browser.newContext({ viewport: { width: 1024, height: 1366 }, hasTouch: true, locale: 'ru-RU', timezoneId: 'Europe/Moscow' });
   ctx4.setDefaultTimeout(12000);
   const p4 = await newPage(ctx4);
@@ -475,30 +475,22 @@ await step('14. 22.11: корректировка → запасы → пред�
   await injectState(p4, 'tests/fixtures/state_1.6.0_2211.json');
   await p4.goto(`${BASE}?today=2026-11-22#/today`);
   await p4.reload();
-  // сама открывается: сначала проверка запасов, затем предпросмотр; без подтверждения ничего не меняется
-  await p4.getByRole('heading', { name: 'Корректировка по фактическим покупкам' }).waitFor();
-  await p4.getByRole('heading', { name: /1\. Проверьте запасы/ }).waitFor();
+  // база с версией данных 8: меню 22–24.11 применяется при запуске (миграция v9, с резервной копией) и открывается отчёт
+  await p4.getByRole('heading', { name: 'Меню 22–24.11 и запасы обновлены' }).waitFor();
+  await p4.getByText(/Применено автоматически при обновлении приложения/).waitFor();
+  await p4.getByText(/Резервная копия перед изменениями/).waitFor();
+  assert(await p4.getByRole('button', { name: 'Создать резервную копию и применить' }).count() === 0, 'подтверждать не нужно');
   await p4.getByRole('heading', { name: 'Какие блюда изменены' }).waitFor();
   const preview = p4.getByTestId('menu-preview');
   await preview.getByRole('heading', { name: 'Меню на 22, 23 и 24 ноября' }).waitFor();
   assert(await preview.locator('tr').count() === 12, '12 приёмов пищи 22–24.11');
-  for (const t of ['Нут с булгуром и овощами', 'Индейка с гречкой и морковью', 'Курица с рисом и брокколи', 'Пропущен', 'Овсяный стакан с грушей и миндалём']) await preview.getByText(t, { exact: true }).first().waitFor();
+  for (const t of ['Нут с булгуром и овощами', 'Индейка с гречкой и морковью', 'Курица с рисом и брокколи', 'Пропущен', 'Овсяный стакан с грушей и миндалём', 'Творог с киви и хлебцами', 'Тосты с авокадо, яйцами и томатами']) await preview.getByText(t, { exact: true }).first().waitFor();
+  assert(await preview.getByText(/^замена$/).count() === 0, 'завтраки и перекусы — существующие');
   assert(await p4.getByText('Индейка с булгуром и овощами').count() === 0, 'прежнего блюда нет');
   const check = p4.getByTestId('stock-check');
   assert(await check.locator('tbody tr').count() === 10, '10 продуктов к новым блюдам');
   await check.getByText(/На 22–24\.11 закупка не нужна/).waitFor();
   await p4.getByText(/небольшая закупка к 27–28\.11/).waitFor();
-  assert(await p4.getByText(/Масло оливковое/).count() > 0, 'масло пока в закупке');
-  await p4.getByLabel('Масло оливковое Extra Virgin: есть дома, мл').fill('300');
-  await p4.getByLabel('Масло оливковое Extra Virgin: есть дома, мл').blur();
-  await p4.waitForTimeout(500);
-  assert(!(await p4.locator('.card', { hasText: 'Что докупить' }).innerText()).includes('Масло оливковое'), 'масло есть дома — не покупать');
-  await p4.screenshot({ path: path.join(shots, '14-correction-preview-ipad.png'), fullPage: true });
-  assert(await p4.getByRole('button', { name: 'Создать резервную копию и применить' }).isDisabled(), 'без подтверждения кнопка неактивна');
-  await p4.getByLabel('Проверил меню 22–24.11 и запасы').check();
-  await p4.getByRole('button', { name: 'Создать резервную копию и применить' }).click();
-  await p4.getByRole('heading', { name: 'Меню 22–24.11 и запасы обновлены' }).waitFor();
-  await p4.getByText(/Резервная копия перед изменениями/).waitFor();
   await p4.screenshot({ path: path.join(shots, '14-correction-report-ipad.png'), fullPage: true });
   // день 22.11: обед пропущен, ужин — нут с булгуром; 23.11 — индейка с гречкой и курица с рисом
   await go(p4, '/day/2026-11-22');

@@ -102,6 +102,32 @@ export function remainingMs(s: TimerState = state): number {
   return s.duration;
 }
 
+export function getTimerState(): TimerState { return state; }
+
+/** Время для панели: «01:15». */
+export function fmtMMSS(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Выбор длительности на панели: идёт отсчёт — начать заново с новой длительностью (явное действие), иначе — только задать. */
+export function choosePreset(ms: number) {
+  if (state.status === 'running') startTimer(ms, 'rest', 'Отдых');
+  else setDuration(ms);
+}
+
+// панель таймера свёрнута — помнится между упражнениями и открытиями тренировки
+let collapsed = (() => { try { return localStorage.getItem('gvf-timer-collapsed') === '1'; } catch { return false; } })();
+const collapseSubs = new Set<() => void>();
+export function setTimerCollapsed(v: boolean) {
+  collapsed = v;
+  try { localStorage.setItem('gvf-timer-collapsed', v ? '1' : '0'); } catch { /* без памяти */ }
+  collapseSubs.forEach((s) => s());
+}
+export function useTimerCollapsed(): boolean {
+  return useSyncExternalStore((cb) => { collapseSubs.add(cb); return () => collapseSubs.delete(cb); }, () => collapsed, () => collapsed);
+}
+
 export function useTimer(): TimerState {
   return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => state, () => state);
 }

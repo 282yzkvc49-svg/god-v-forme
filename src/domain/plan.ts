@@ -307,7 +307,7 @@ export function buildInstance(cfg: PlanSettings, ctxOrToday: PlanContext | ISODa
         overridden.add(`${date}|${slot}`);
         if (o.kind === 'cancel') { cards[slot] = { title: o.label, parts: [], cancelled: true, note: o.label }; continue; }
         const parts: MealCardPart[] = [{ dishId: o.dishId, qty: 1, fresh: o.kind === 'dish', cookEventId: o.kind === 'cook' ? o.cookId : null, storage: null, thawOn: null, stockOnly: true }];
-        cards[slot] = { title: mealTitle(parts), parts, note: o.note ?? null };
+        cards[slot] = { title: mealTitle(parts), parts, note: o.note ?? null, ...(o.kind === 'dish' && o.check ? { check: o.check } : {}) };
         continue;
       }
       const parts: MealCardPart[] = tday.meals![slot].parts.map((p) => ({ dishId: p.dish, qty: p.qty, fresh: p.fresh, cookEventId: null, storage: null, thawOn: null }));

@@ -1,8 +1,10 @@
-// Обновление установленного PWA со старым офлайн-кэшем: на «iPad» стоит версия 1.7.0 (кэш gvf-1.7.0-…,
-// первая редакция корректировки применена, есть вес и отметки) → на сервере новая сборка → при следующем
-// открытии приложение работает на новой версии, старый кэш удалён, данные на месте, меню 22–24.11 ждёт
-// подтверждения и после него показывается в днях — в том числе без интернета.
-// Запуск: npm run test:pwa   (собирает текущую версию; 1.7.0 собирается из git один раз в .cache/)
+// Обновление установленного PWA со старым офлайн-кэшем — как на iPad пользователя 23.11: стоит версия 1.8.1
+// (кэш gvf-1.8.1-…), корректировку меню 22–24.11 не подтверждали, поэтому в календаре 23.11 — тефтели и говядина
+// с булгуром; завтрак 23.11 уже отмечен «съеден», есть вес. На сервере новая сборка → при следующем открытии
+// приложение работает на новой версии, старый кэш удалён, меню 22–24.11 применено миграцией данных при запуске
+// (с резервной копией), отметки и вес на месте, всё видно и без интернета.
+// Вторая проверка (OLD=1.7.0): устройство с первой редакцией корректировки (индейка с булгуром).
+// Запуск: npm run test:pwa   (собирает текущую версию; старая собирается из git один раз в .cache/)
 import { chromium } from 'playwright';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -12,8 +14,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OLD_REF = process.env.OLD_REF || '047550b';
-const OLD_VERSION = '1.7.0';
+const CASES = {
+  '1.8.1': { ref: 'd163d14', fixture: 'state_1.6.0_2211.json', before: { lunch: 'Тефтели индейки, гречка, овощи', dinner: 'Говядина с булгуром и шампиньонами' } },
+  '1.7.0': { ref: '047550b', fixture: 'state_1.7.0_r1_2211.json', before: { lunch: 'Индейка с булгуром и овощами', dinner: 'Куриное филе с рисом и брокколи' } },
+};
+const OLD_VERSION = process.env.OLD || '1.8.1';
+const CASE = CASES[OLD_VERSION];
 const oldDist = path.join(root, '.cache', `dist-${OLD_VERSION}`);
 const newDist = path.join(root, 'dist');
 const shots = path.join(root, 'e2e/screens');
@@ -23,7 +29,7 @@ const NEW_VERSION = JSON.parse(await fs.readFile(path.join(root, 'package.json')
 if (!existsSync(path.join(oldDist, 'sw.js'))) {
   const wt = path.join(root, '.cache', `wt-${OLD_VERSION}`);
   await fs.rm(wt, { recursive: true, force: true });
-  execSync(`git worktree prune && git worktree add --detach "${wt}" ${OLD_REF}`, { cwd: root, stdio: 'inherit' });
+  execSync(`git worktree prune && git worktree add --detach "${wt}" ${CASE.ref}`, { cwd: root, stdio: 'inherit' });
   await fs.symlink(path.join(root, 'node_modules'), path.join(wt, 'node_modules'));
   execSync('node scripts/build.mjs', { cwd: wt, stdio: 'inherit' });
   await fs.rm(oldDist, { recursive: true, force: true });
@@ -75,13 +81,20 @@ async function step(name, fn) {
 }
 
 let before = {};
-await step(`Установлена ${OLD_VERSION}: офлайн-кэш, данные устройства с первой редакцией корректировки`, async () => {
-  await page.goto(`${BASE}?today=2026-11-22#/today`);
+const dayTitles = async (date) => {
+  await go(`/day/${date}`);
+  await page.locator('.task.k-meal').first().waitFor();
+  return page.locator('.task.k-meal .task-sub').allInnerTexts();
+};
+await step(`Установлена ${OLD_VERSION}: офлайн-кэш; меню 23.11 — прежнее, завтрак 23.11 отмечен`, async () => {
+  await page.goto(`${BASE}?today=2026-11-23#/today`);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
-  const fixture = JSON.parse(await fs.readFile(path.join(root, 'tests/fixtures/state_1.7.0_r1_2211.json'), 'utf8'));
+  const fixture = JSON.parse(await fs.readFile(path.join(root, 'tests/fixtures', CASE.fixture), 'utf8'));
   fixture.weights = { w1: { id: 'w1', date: '2026-11-22', kg: 81.4, note: null, createdAt: '2026-11-22T05:30:00.000Z' } };
+  fixture.taskStatus['meal:2026-11-23:breakfast'] = { taskId: 'meal:2026-11-23:breakfast', date: '2026-11-23', kind: 'meal', status: 'done', updatedAt: '2026-11-23T06:40:00.000Z' };
+  if (OLD_VERSION === '1.8.1') fixture.settings.correctionReportUnseen = null;
   await page.evaluate((fx) => new Promise((res, rej) => {
     const rq = indexedDB.open('god-v-forme');
     rq.onerror = () => rej(rq.error);
@@ -99,24 +112,40 @@ await step(`Установлена ${OLD_VERSION}: офлайн-кэш, данн
   assert((await version()).startsWith(OLD_VERSION), 'старая версия');
   const keys = await caches();
   assert(keys.length === 1 && keys[0].startsWith(`gvf-${OLD_VERSION}-`), `кэш старой версии: ${keys}`);
-  await go('/day/2026-11-22');
-  await page.getByText('Индейка с булгуром и овощами').first().waitFor();
+  // как на скриншоте пользователя: календарь 23.11 со старыми блюдами
+  const t = await dayTitles('2026-11-23');
+  assert(t.includes(CASE.before.lunch) && t.includes(CASE.before.dinner), `до обновления: ${t.join(' | ')}`);
+  await page.screenshot({ path: path.join(shots, `15-pwa-before-${OLD_VERSION}-day23.png`), fullPage: true });
   before = { taskStatus: await idbCount('taskStatus'), weights: await idbCount('weights'), backups: await idbCount('backups'), stock: await idbCount('stock') };
 });
 
-await step(`Выложена ${NEW_VERSION}: открытие приложения — новая версия и предпросмотр меню 22–24.11`, async () => {
+await step(`Выложена ${NEW_VERSION}: при открытии меню 22–24.11 применяется само — отчёт об изменениях`, async () => {
   serveDir = newDist;
-  // как повторное открытие приложения с экрана «Домой» — на следующее утро
+  // как повторное открытие приложения с экрана «Домой»
   await page.goto(`${BASE}?today=2026-11-23&open=2#/today`);
-  await page.getByRole('heading', { name: 'Новое меню на 22–24 ноября' }).waitFor();
-  await page.getByText(/Готовка 22\.11 \(нут с булгуром и индейка с гречкой\) уже в прошлом/).waitFor();
+  await page.getByRole('heading', { name: 'Меню 22–24.11 и запасы обновлены' }).waitFor();
+  await page.getByText(/Применено автоматически при обновлении приложения/).waitFor();
   const preview = page.getByTestId('menu-preview');
   for (const t of ['Нут с булгуром и овощами', 'Индейка с гречкой и морковью', 'Курица с рисом и брокколи']) await preview.getByText(t).first().waitFor();
-  assert(await preview.getByText('Индейка с булгуром и овощами').count() === 0, 'в предпросмотре нет прежнего блюда');
-  await page.screenshot({ path: path.join(shots, '15-pwa-update-preview-ipad.png'), fullPage: true });
+  assert(await idbCount('backups') === before.backups + 1, 'резервная копия перед миграцией');
+  assert(await idbCount('weights') === before.weights, 'вес на месте');
+  await page.screenshot({ path: path.join(shots, `15-pwa-update-${OLD_VERSION}-report.png`), fullPage: true });
 });
 
-await step('Новый service worker включается, старый кэш удаляется', async () => {
+await step('Календарь 23 и 24.11 в существующей базе: новые блюда, отметка завтрака сохранена', async () => {
+  const t23 = await dayTitles('2026-11-23');
+  assert(JSON.stringify(t23) === JSON.stringify(['Овсяный стакан с грушей и миндалём', 'Индейка с гречкой и морковью', 'Творог с киви и хлебцами', 'Курица с рисом и брокколи']), `23.11: ${t23.join(' | ')}`);
+  assert(await page.locator('.task.k-meal.is-done', { hasText: 'Завтрак' }).count() === 1, 'завтрак 23.11 остаётся выполненным');
+  assert(await page.locator('.task.k-meal.is-done').count() === 1, 'новые блюда не отмечены сами');
+  await page.screenshot({ path: path.join(shots, `15-pwa-after-${OLD_VERSION}-day23.png`), fullPage: true });
+  const t24 = await dayTitles('2026-11-24');
+  assert(t24[1] === 'Индейка с гречкой и морковью' && t24[3] === 'Курица с рисом и брокколи', `24.11: ${t24.join(' | ')}`);
+  for (const old of ['Тефтели индейки', 'Говядина с булгуром', 'Индейка с булгуром']) assert(!t23.concat(t24).some((x) => x.includes(old)), `нет «${old}»`);
+  const t22 = await dayTitles('2026-11-22');
+  assert(t22[1] === 'Пропущен' && t22[3] === 'Нут с булгуром и овощами', `22.11: ${t22.join(' | ')}`);
+});
+
+await step('Новый service worker включается, старый кэш удаляется, данные на месте', async () => {
   // при следующем открытии ожидающая версия включается сама (данные в IndexedDB не трогаются);
   // смена service worker перезагружает страницу — поэтому опрос с повторами
   let keys = [];
@@ -132,36 +161,27 @@ await step('Новый service worker включается, старый кэш 
   await page.locator('.page').first().waitFor();
   assert(keys.length === 1 && keys[0].startsWith(`gvf-${NEW_VERSION}-`), `остался только новый кэш: ${keys}`);
   assert((await version()).startsWith(NEW_VERSION), 'новая версия');
-  assert(await idbCount('weights') === before.weights && await idbCount('taskStatus') === before.taskStatus, 'вес и отметки на месте');
-});
-
-await step('Подтверждение: резервная копия, меню перезаписано, запасы не пересозданы', async () => {
-  await go('/correction');
-  await page.getByLabel('Проверил меню 22–24.11 и запасы').check();
-  await page.getByRole('button', { name: 'Создать резервную копию и применить' }).click();
-  await page.getByRole('heading', { name: 'Меню 22–24.11 и запасы обновлены' }).waitFor();
-  assert(await idbCount('backups') === before.backups + 1, 'резервная копия создана');
-  assert(await idbCount('stock') === before.stock, 'запасы не пересозданы');
-  assert(await idbCount('weights') === before.weights && await idbCount('taskStatus') === before.taskStatus, 'вес и отметки на месте');
-  await page.getByRole('link', { name: 'Открыть готовку 22.11' }).waitFor();
-  await go('/day/2026-11-22');
-  await page.getByText('Нут с булгуром и овощами').first().waitFor();
-  await go('/day/2026-11-23');
-  await page.getByText('Индейка с гречкой и морковью').first().waitFor();
-  await page.getByText('Курица с рисом и брокколи').first().waitFor();
-  assert(await page.getByText('Индейка с булгуром и овощами').count() === 0, 'прежнего блюда нет');
+  assert(await idbCount('weights') === before.weights, 'вес на месте');
+  assert(await idbCount('taskStatus') >= before.taskStatus, 'отметки не пропали');
+  // повторный запуск ничего не меняет
+  const b = await idbCount('backups');
+  await page.reload();
+  await page.locator('.page').first().waitFor();
+  assert(await idbCount('backups') === b, 'миграция однократная');
+  const t23 = await dayTitles('2026-11-23');
+  assert(t23[1] === 'Индейка с гречкой и морковью', 'после перезапуска меню то же');
 });
 
 await step('Без интернета — новая версия и новое меню из кэша', async () => {
   await ctx.setOffline(true);
   await page.reload();
   await page.locator('.page').first().waitFor();
-  await go('/day/2026-11-24');
-  await page.getByText('Индейка с гречкой и морковью').first().waitFor();
+  const t24 = await dayTitles('2026-11-24');
+  assert(t24[1] === 'Индейка с гречкой и морковью', 'офлайн — новое меню');
   assert((await version()).startsWith(NEW_VERSION), 'офлайн — новая версия');
   await go('/cook/cook-p20261116-x2211b');
   await page.getByText(/обед 23\.11 в 12:00/).first().waitFor();
-  await page.screenshot({ path: path.join(shots, '15-pwa-offline-cook-ipad.png'), fullPage: true });
+  await page.screenshot({ path: path.join(shots, `15-pwa-offline-cook-${OLD_VERSION}.png`), fullPage: true });
   await ctx.setOffline(false);
 });
 

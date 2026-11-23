@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp, getData } from '../state/store';
 import * as A from '../state/actions';
 import { useToday, today as todayFn } from '../lib/clock';
@@ -12,15 +13,11 @@ import { DIFFICULTY_LABELS, FEELING_LABELS } from '../state/types';
 import { NumberStepper, Note, PageHead, Seg, Sheet, toast } from '../ui/kit';
 import { ExerciseTechnique } from './Training';
 import { TaskMenu } from './shared';
-import { PiCaretDown, PiCaretUp, PiCheckBold, PiPause, PiPlay, PiStop, PiTimer, PiShieldCheck } from '../ui/icons';
+import { PiArrowCounterClockwise, PiCaretDown, PiCaretUp, PiCheckBold, PiPause, PiPlay, PiTimer, PiShieldCheck } from '../ui/icons';
 import {
-  pauseTimer, remainingMs, resumeTimer, setDuration, setSound, startTimer, stopTimer, unlockAudio, useTimer,
+  choosePreset, fmtMMSS, getTimerState, pauseTimer, remainingMs, resumeTimer, setSound, setTimerCollapsed, startTimer, stopTimer, unlockAudio, useTimer, useTimerCollapsed,
 } from './restTimer';
 
-function fmtClock(ms: number): string {
-  const s = Math.ceil(ms / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
 
 export function WorkoutScreen({ taskId }: { taskId: string }) {
   const data = useApp();
@@ -66,7 +63,9 @@ export function WorkoutScreen({ taskId }: { taskId: string }) {
       const remainingSets = getData().trainingLogs[l.id].exercises.reduce((s, e) => s + e.sets.filter((x) => !x).length, 0);
       const it = tpl.items[idx];
       const isCardio = EXERCISES[it.exerciseId]?.kind === 'cardio';
-      if (data.settings.restAutoStart && remainingSets > 0 && !isCardio && tpl.type === 'strength') {
+      // идущий или поставленный на паузу отсчёт не сбрасывается сам — заново только по «Старт» или выбору 60/75/90
+      const tm = getTimerState();
+      if (data.settings.restAutoStart && remainingSets > 0 && !isCardio && tpl.type === 'strength' && tm.status !== 'running' && tm.status !== 'paused') {
         startTimer(data.settings.restDefaultSec * 1000, 'rest', 'Отдых');
       }
     }
@@ -167,10 +166,13 @@ function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
         {hint && <p className="hint mt0" style={{ margin: 0 }}>{hint}</p>}
         {(it.condition || it.alternative) && (
           <div className="note plain small" style={{ margin: 0 }}>
-            {it.condition && <div>{it.condition}.</div>}
-            {it.alternative && (variant
-              ? <button className="btn small" style={{ marginTop: 6 }} onClick={() => setVariant(null)}>Вернуть: {exerciseName(it.exerciseId)}{planKg ? `, ${planKg} кг` : ''}</button>
-              : <><div>{it.alternative.note}</div><button className="btn small" style={{ marginTop: 6 }} onClick={() => setVariant(it.alternative!.exerciseId)}>Заменить на «{exerciseName(it.alternative.exerciseId)}»</button></>)}
+            {/* один столбец: условие, пояснение и кнопка замены — друг под другом, а не в ряд */}
+            <div className="grow">
+              {it.condition && <div>{it.condition}.</div>}
+              {it.alternative && (variant
+                ? <button className="btn small" style={{ marginTop: 6 }} onClick={() => setVariant(null)}>Вернуть: {exerciseName(it.exerciseId)}{planKg ? `, ${planKg} кг` : ''}</button>
+                : <><div>{it.alternative.note}</div><button className="btn small" style={{ marginTop: 6 }} onClick={() => setVariant(it.alternative!.exerciseId)}>Заменить на «{exerciseName(it.alternative.exerciseId)}»</button></>)}
+            </div>
           </div>
         )}
         <div className="sets" role="group" aria-label={`Подходы: ${exerciseName(it.exerciseId)}`}>
@@ -254,39 +256,99 @@ function ExerciseBlock({ it, idx, log, open, onToggleOpen, onSet, ensure }: {
   );
 }
 
+/**
+ * Экранная клавиатура открыта (вводят повторы) или страница увеличена жестом: на iPad/iPhone элемент с
+ * position: fixed в это время оказывается посреди экрана и закрывает поля — панель прячется, таймер идёт дальше.
+ */
+function useDockVisible(): boolean {
+  const [ok, setOk] = useState(true);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    const typing = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !/^(checkbox|radio|button|range)$/.test((el as HTMLInputElement).type)) || el.isContentEditable);
+    };
+    const check = () => {
+      const keyboard = !!vv && window.innerHeight - vv.height > 140;
+      const zoomed = !!vv && vv.scale > 1.05;
+      setOk(!(zoomed || keyboard || (coarse && typing())));
+    };
+    const later = () => setTimeout(check, 50);
+    check();
+    vv?.addEventListener('resize', check);
+    vv?.addEventListener('scroll', check);
+    document.addEventListener('focusin', later);
+    document.addEventListener('focusout', later);
+    return () => {
+      vv?.removeEventListener('resize', check);
+      vv?.removeEventListener('scroll', check);
+      document.removeEventListener('focusin', later);
+      document.removeEventListener('focusout', later);
+    };
+  }, []);
+  return ok;
+}
+
+/**
+ * Таймер отдыха — компактная панель у нижнего края экрана тренировки. Отдельный слой (portal в body): никакие
+ * transform/filter у контейнеров страницы не сдвигают её в середину. Высота панели — в --dock-h: на неё
+ * увеличен нижний отступ списка, чтобы последние поля (повторы, вес гири, сложность) не оказывались под ней.
+ */
 function RestTimerDock({ restRange }: { restRange: [number, number] }) {
   const t = useTimer();
   const data = useApp();
+  const collapsed = useTimerCollapsed();
+  const visible = useDockVisible();
+  const ref = useRef<HTMLDivElement>(null);
   const presets = Array.from(new Set([restRange[0], Math.round((restRange[0] + restRange[1]) / 2 / 5) * 5, restRange[1]]));
   const rem = remainingMs(t);
   const frac = t.duration ? 1 - rem / t.duration : 0;
   const durSec = Math.round(t.duration / 1000);
-  return (
-    <div className="timer-dock no-print">
-      <div className={`timer${t.status === 'finished' ? ' done' : ''}`} role="timer" aria-live="off">
-        <div style={{ minWidth: 92 }}>
-          <div className="t-time">{t.status === 'finished' ? '0:00' : fmtClock(rem)}</div>
-          <div className="t-label">{t.status === 'finished' ? (t.mode === 'hold' ? 'Удержание готово' : 'Отдых окончен') : t.status === 'idle' ? 'Таймер отдыха' : t.label}</div>
-          {(t.status === 'running' || t.status === 'paused') && <div className="timer-progress"><i style={{ width: `${frac * 100}%` }} /></div>}
+  const active = t.status === 'running' || t.status === 'paused';
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const root = document.documentElement;
+    if (!el) return;
+    // спрятанная панель (клавиатура) не уменьшает отступ — страница не прыгает
+    const upd = () => { if (el.offsetHeight) root.style.setProperty('--dock-h', `${el.offsetHeight}px`); };
+    upd();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(upd) : null;
+    ro?.observe(el);
+    return () => { ro?.disconnect(); root.style.removeProperty('--dock-h'); };
+  }, [collapsed, visible]);
+  const time = t.status === 'finished' ? '00:00' : fmtMMSS(rem);
+  const label = t.status === 'finished' ? (t.mode === 'hold' ? 'Удержание готово' : 'Отдых окончен') : t.status === 'idle' ? 'Таймер отдыха' : t.status === 'paused' ? `${t.label} — пауза` : t.label;
+  const start = () => startTimer(t.status === 'finished' || t.status === 'idle' ? (t.duration || data.settings.restDefaultSec * 1000) : t.duration, 'rest', 'Отдых');
+  const pick = (p: number) => { choosePreset(p * 1000); if (p !== data.settings.restDefaultSec) A.updateSettings({ restDefaultSec: p }); };
+  const dock = (
+    <div ref={ref} className={`timer-dock no-print${collapsed ? ' collapsed' : ''}`} hidden={!visible} data-testid="rest-timer">
+      {collapsed ? (
+        <button type="button" className={`timer-pill${t.status === 'finished' ? ' done' : ''}`} onClick={() => setTimerCollapsed(false)} aria-label={`Таймер отдыха ${time}: развернуть`}>
+          <PiTimer /> <span className="t-time">{time}</span>{t.status === 'running' ? null : <span className="t-state">{t.status === 'paused' ? 'пауза' : ''}</span>} <PiCaretUp />
+        </button>
+      ) : (
+        <div className={`timer${t.status === 'finished' ? ' done' : ''}`} role="timer" aria-live="off" aria-label="Таймер отдыха">
+          <div className="t-main">
+            <div className="t-time">{time}</div>
+            <div className="t-label">{label}</div>
+          </div>
+          <div className="presets" role="group" aria-label="Длительность отдыха, секунд">
+            {presets.map((p) => <button key={p} type="button" aria-pressed={durSec === p} onClick={() => pick(p)}>{p}</button>)}
+          </div>
+          <div className="t-actions">
+            {t.status === 'running' && <button type="button" className="btn" onClick={pauseTimer}><PiPause /> Пауза</button>}
+            {t.status === 'paused' && <button type="button" className="btn primary" onClick={resumeTimer}><PiPlay /> Продолжить</button>}
+            {(t.status === 'idle' || t.status === 'finished') && <button type="button" className="btn primary" onClick={start}><PiPlay /> Старт</button>}
+            <button type="button" className="btn icon" onClick={stopTimer} disabled={t.status === 'idle'} aria-label="Сбросить таймер" title="Сбросить"><PiArrowCounterClockwise /></button>
+          </div>
+          <button type="button" className="t-collapse" onClick={() => setTimerCollapsed(true)} aria-label="Свернуть таймер" title="Свернуть"><PiCaretDown /></button>
+          {active && <div className="timer-progress" aria-hidden="true"><i style={{ width: `${frac * 100}%` }} /></div>}
         </div>
-        <div className="grow">
-          {t.status === 'idle' || t.status === 'finished' ? (
-            <div className="presets" role="group" aria-label="Длительность отдыха">
-              {presets.map((p) => (
-                <button key={p} aria-pressed={durSec === p} onClick={() => { setDuration(p * 1000); if (p !== data.settings.restDefaultSec) A.updateSettings({ restDefaultSec: p }); }}>{p}</button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        {(t.status === 'idle' || t.status === 'finished') && (
-          <button className="btn primary" onClick={() => startTimer(t.duration || data.settings.restDefaultSec * 1000, 'rest', 'Отдых')}><PiPlay /> Начать</button>
-        )}
-        {t.status === 'running' && <button className="btn" onClick={pauseTimer}><PiPause /> Пауза</button>}
-        {t.status === 'paused' && <button className="btn primary" onClick={resumeTimer}><PiPlay /> Дальше</button>}
-        {(t.status === 'running' || t.status === 'paused') && <button className="btn" onClick={stopTimer}><PiStop /> Завершить</button>}
-      </div>
+      )}
     </div>
   );
+  return createPortal(dock, document.body);
 }
 
 function FinishSheet({ open, onClose, task, tpl }: { open: boolean; onClose: () => void; task: DayTask; tpl: WorkoutTemplate }) {

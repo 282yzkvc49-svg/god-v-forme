@@ -55,6 +55,8 @@ export interface MealCard {
   cancelled?: boolean;
   /** Пояснение корректировки (почему блюдо заменено). */
   note?: string | null;
+  /** Блюдо из меню, но по учёту каких-то продуктов нет — проверить дома. */
+  check?: string | null;
 }
 
 export interface TemplateItem {
@@ -496,7 +498,7 @@ export interface PlanSettings {
 /** Замена приёма пищи поверх шаблона. */
 export type SlotOverride =
   | { kind: 'cancel'; label: string }
-  | { kind: 'dish'; dishId: string; note?: string | null }
+  | { kind: 'dish'; dishId: string; note?: string | null; check?: string | null }
   | { kind: 'cook'; cookId: string; dishId: string; note?: string | null };
 
 /** Своя готовка (не из партии шаблона): блюдо, порции и на какие приёмы. */
@@ -652,6 +654,8 @@ export interface CorrectionReport {
   rev?: number;
   /** Обновление уже применённой первой редакции (запасы не пересоздаются). */
   revision?: boolean;
+  /** Применено миграцией данных при запуске новой версии (без экрана подтверждения). */
+  auto?: boolean;
   /** Меню 22–24.11 целиком — для предпросмотра. */
   menu?: CorrectionMenuRow[];
   /** Проверка минимальных остатков к новым блюдам. */

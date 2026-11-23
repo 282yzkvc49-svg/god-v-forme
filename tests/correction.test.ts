@@ -7,7 +7,7 @@ import { scheduledTraining, thawList } from '../src/domain/tasks';
 import { SEED_RECIPES } from '../src/lib/seed';
 import { CORR_ID, CORR_REV, buildCorrection, correctionApplied, correctionPending, emptyInput, firstRevisionApplied, menuMissing, revisionBlocked } from '../src/domain/correction';
 import { cookStockOps, mealStockOps, readyFood, readyFoodOps, stockLots, stockRemaining, stockSummary } from '../src/domain/stock';
-import type { AppData } from '../src/state/types';
+import { MEAL_SLOTS, type AppData } from '../src/state/types';
 
 const TODAY = '2026-11-22';
 const AT = '2026-11-22T17:45:00.000Z';
@@ -79,13 +79,17 @@ test('меню 22–24.11: нут с булгуром, индейка с гре�
   for (const t of ['куриное филе 360 г', 'рис басмати 140 г', 'брокколи замороженная 320 г', 'ужин 23.11, ужин 24.11', '180 °C', '74 °C', 'контейнер с индейкой на обед 24.11']) assert.ok(c23.timeNote!.includes(t), t);
   assert.deepEqual(c23.thawProducts, [{ productId: 'chicken', qty: 360 }]);
   assert.ok(thawList(after, '2026-11-22').some((x) => /цыплёнка/.test(x) && /360 г/.test(x)), 'вечером 22.11 — переложить курицу');
-  // завтраки и перекусы 23–24.11: блюдо меню, если продукты есть; иначе — замена из запасов и чего нет
+  // завтраки и перекусы 23–24.11 — существующие из меню; чего нет по учёту — предупреждение, без замены
   const pk = (date: string, slot: string) => c.picks.find((p) => p.date === date && p.slot === slot)!;
+  for (const date of ['2026-11-23', '2026-11-24']) for (const s of ['breakfast', 'snack']) {
+    assert.equal(card(after, date, s).title, card(before, date, s).title, `${date} ${s} — из существующего меню`);
+    assert.equal(pk(date, s).dishId, pk(date, s).original);
+  }
   assert.deepEqual([pk('2026-11-23', 'breakfast').dishId, pk('2026-11-23', 'breakfast').missing], ['B05', []]);
-  assert.equal(card(after, '2026-11-23', 'breakfast').title, card(before, '2026-11-23', 'breakfast').title);
+  assert.equal(card(after, '2026-11-23', 'breakfast').check, undefined);
   assert.deepEqual(pk('2026-11-24', 'breakfast').missing, ['bread', 'avocado', 'egg', 'tomato']);
-  assert.ok(c.picks.every((p) => p.feasible));
-  for (const p of c.picks.filter((x) => x.dishId !== x.original)) assert.match(card(after, p.date, p.slot).note, /по учёту нет/);
+  assert.match(card(after, '2026-11-24', 'breakfast').check, /по учёту нет — хлеб цельнозерновой, авокадо, яйца, помидоры/);
+  assert.equal(card(after, '2026-11-24', 'breakfast').note, null, 'не «изменено»');
   // предпросмотр меню и проверка остатков
   assert.equal(r.menu!.length, 12);
   assert.deepEqual(r.menu!.filter((m) => m.source === 'new').map((m) => `${m.date.slice(8)} ${m.slot}`), ['22 dinner', '23 lunch', '23 dinner', '24 lunch', '24 dinner']);
@@ -121,7 +125,7 @@ test('меню 22–24.11: нут с булгуром, индейка с гре�
   assert.equal(correctionPending(after, TODAY), false);
   assert.ok(correctionApplied(after) && after.settings.corrections?.[CORR_ID]);
   assert.equal(after.backups[after.settings.correctionReportUnseen!].correctionReport!.id, CORR_REV);
-  assert.equal(dataMigrationOps(after, TODAY, AT).length, 0);
+  assert.deepEqual(dataMigrationOps(after, TODAY, AT).map((o) => o.store), ['meta'], 'миграция v9 больше ничего не делает');
   assert.equal(replanOps(after, after.settings.plan!, TODAY, { keepPast: true }).ops.length, 0, 'пересчёт без изменений ничего не меняет');
 });
 
@@ -181,9 +185,9 @@ test('проверка запасов: чего нет — предупрежд�
   const d = device();
   // для завтраков 23–24.11 спрашиваем то, чего нет по учёту
   assert.deepEqual(menuMissing(d, AT, TODAY).map((m) => m.pid), ['curd', 'bread', 'avocado', 'egg', 'tomato', 'cherry', 'banana']);
-  // хлеб есть, творог годен до 25.11 — перекус 23.11 остаётся по меню
+  // хлеб есть, творог годен до 25.11 — у перекуса 23.11 нет предупреждения
   const kept = buildCorrection(d, TODAY, AT, { ...emptyInput(), remaining: { bread: 400 }, expiry: { curd: '2026-11-25' } });
-  assert.equal(kept.picks.find((p) => p.date === '2026-11-23' && p.slot === 'snack')!.dishId, 'S05');
+  assert.deepEqual(kept.picks.find((p) => p.date === '2026-11-23' && p.slot === 'snack')!.missing, []);
   // перец испортился: ужин 22.11 остаётся, перец — заменить морковью
   const pepper = buildCorrection(d, TODAY, AT, { ...emptyInput(), spoiled: ['pepper'] }).report;
   const pc = pepper.checks!.find((x) => x.productId === 'pepper')!;
@@ -243,7 +247,7 @@ test('устройство с первой редакцией: обновлен�
   assert.match((c.ops[0] as any).put.reason, /вторая редакция/);
   assert.equal(correctionPending(after, TODAY), false);
   assert.equal(replanOps(after, after.settings.plan!, TODAY, { keepPast: true }).ops.length, 0);
-  assert.equal(dataMigrationOps(after, TODAY, AT).length, 0);
+  assert.deepEqual(dataMigrationOps(after, TODAY, AT).map((o) => o.store), ['meta']);
 });
 
 test('устройство с первой редакцией: индейка с булгуром уже приготовлена — меню не заменяется', () => {
@@ -252,4 +256,43 @@ test('устройство с первой редакцией: индейка с
   assert.equal(correctionPending(d, TODAY), false);
   const ate = applyOps(deviceR1(), [mark('meal:2026-11-22:dinner', TODAY, 'done')]);
   assert.match(revisionBlocked(ate)!, /уже отмечена «Съедено»/);
+});
+
+test('миграция v9 при запуске 23.11: меню 22–24.11 применяется к уже существующей базе, отметки сохраняются', () => {
+  // база с устройства: версия данных 8, меню шаблона на 23.11 (тефтели, говядина с булгуром), завтрак 23.11 съеден
+  const d0 = applyOps(device(), [mark('meal:2026-11-23:breakfast', '2026-11-23', 'done')]);
+  assert.equal(d0.meta!.dataVersion, 8);
+  assert.equal(card(d0, '2026-11-23', 'lunch').title, 'Тефтели индейки, гречка, овощи');
+  assert.equal(card(d0, '2026-11-23', 'dinner').title, 'Говядина с булгуром и шампиньонами');
+  const ops = dataMigrationOps(d0, '2026-11-23', '2026-11-23T08:10:00.000Z', '1.9.0');
+  assert.equal(ops[0].store, 'backups', 'сначала резервная копия');
+  const d = applyOps(d0, ops);
+  assert.equal(d.meta!.dataVersion, 9);
+  // календарь 23–24.11
+  const titles = (date: string) => MEAL_SLOTS.map((s) => card(d, date, s).title);
+  assert.deepEqual(titles('2026-11-22'), ['Сырники с клубникой и йогуртом', 'Пропущен', 'Йогурт с грушей и овсяными хлопьями', 'Нут с булгуром и овощами']);
+  assert.deepEqual(titles('2026-11-23'), ['Овсяный стакан с грушей и миндалём', 'Индейка с гречкой и морковью', 'Творог с киви и хлебцами', 'Курица с рисом и брокколи']);
+  assert.deepEqual(titles('2026-11-24'), ['Тосты с авокадо, яйцами и томатами', 'Индейка с гречкой и морковью', 'Йогурт с вишней, бананом и грецким орехом', 'Курица с рисом и брокколи']);
+  for (const date of ['2026-11-23', '2026-11-24']) assert.ok(!J(d.planDays[date]).match(/Тефтели|Говядина с булгуром/), `${date}: старых блюд нет`);
+  // порции по графику готовки: 22.11 — нут 1 + индейка 2, 23.11 — курица 2, 24.11 — без готовки
+  assert.deepEqual(card(d, '2026-11-24', 'lunch').parts.map((p: any) => p.cookEventId), [C22]);
+  assert.deepEqual(card(d, '2026-11-24', 'dinner').parts.map((p: any) => p.cookEventId), [C23]);
+  assert.deepEqual([C22, C23].map((id) => d.cookingEvents[id].items!.map((i) => `${i.dishId}×${i.qty}`).join('+')), ['X03×1+X04×2', 'X02×2']);
+  // отметки пользователя в приоритете; новые блюда сами не отмечаются
+  assert.equal(d.taskStatus['meal:2026-11-23:breakfast'].status, 'done');
+  assert.equal(J(d.taskStatus['meal:2026-11-22:breakfast']), J(d0.taskStatus['meal:2026-11-22:breakfast']));
+  for (const x of ['meal:2026-11-22:dinner', 'meal:2026-11-23:lunch', 'meal:2026-11-23:dinner', `cook:${C22}`, `cook:${C23}`]) assert.equal(d.taskStatus[x], undefined, x);
+  for (const s of ['weights', 'photos', 'trainingLogs', 'trips', 'measurements', 'templateVersions'] as const) assert.equal(J(d[s]), J(d0[s]), s);
+  // отчёт об изменениях откроется при запуске; повторный запуск ничего не меняет
+  const rep = d.backups[d.settings.correctionReportUnseen!].correctionReport!;
+  assert.deepEqual([rep.id, rep.auto], [CORR_REV, true]);
+  assert.ok(rep.dishes.some((x) => x.date === '2026-11-23' && x.slot === 'lunch' && x.before === 'Тефтели индейки, гречка, овощи' && x.after === 'Индейка с гречкой и морковью'));
+  assert.equal(dataMigrationOps(d, '2026-11-23', '2026-11-23T09:00:00.000Z').length, 0);
+  assert.equal(dataMigrationOps(d, '2026-11-24', '2026-11-24T09:00:00.000Z').length, 0);
+  // устройство с первой редакцией — тоже обновляется при запуске
+  const r1 = applyOps(deviceR1(), dataMigrationOps(deviceR1(), '2026-11-23', '2026-11-23T08:10:00.000Z'));
+  assert.equal(card(r1, '2026-11-23', 'lunch').title, 'Индейка с гречкой и морковью');
+  assert.equal(r1.cookingEvents[R1], undefined);
+  // после 24.11 меню прошедших дней не переписывается
+  assert.equal(dataMigrationOps(device(), '2026-11-25', AT).filter((o) => o.store !== 'meta' && o.store !== 'settings').length, 0);
 });

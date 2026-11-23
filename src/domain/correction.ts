@@ -224,23 +224,6 @@ function dishItems(dishId: string, qty = 1): Map<string, number> {
   return out;
 }
 
-/** Чем раньше заканчивается срок продуктов блюда, тем выше оценка; повтор блюда — штраф. */
-function score(sim: Map<string, SimLot[]>, dishId: string, date: ISODate, used: Set<string>): number {
-  let s = 0;
-  for (const [pid, q] of dishItems(dishId)) {
-    if (OPTIONAL.has(pid)) continue;
-    const lots = (sim.get(pid) ?? []).filter((l) => l.until >= date && l.qty > 0.5);
-    if (!lots.length) continue;
-    const days = Math.max(1, diffDays(lots.map((l) => l.until).sort()[0], date) + 1);
-    s += Math.min(q, 200) / 50 / days;
-  }
-  if (used.has(dishId)) s -= 10;
-  return s;
-}
-
-const BREAKFASTS = () => Object.values(DISHES).filter((d) => d.category === 'breakfast' && !d.archived && !d.extra).map((d) => d.id);
-const SNACKS = () => Object.values(DISHES).filter((d) => d.category === 'snack' && !d.archived && !d.extra).map((d) => d.id);
-
 export interface Pick {
   date: ISODate;
   slot: MealSlot;
@@ -299,9 +282,9 @@ export function menuOriginals(data: AppData): Record<ISODate, Partial<Record<Mea
 }
 
 /**
- * Завтраки и перекусы 23–24.11: блюдо меню остаётся, если его продукты есть в запасах и годны к дате.
- * Если чего-то нет — замена из того, что есть (сначала то, у чего раньше заканчивается срок), и список,
- * чего не хватило. Уже отмеченные приёмы не меняются.
+ * Завтраки и перекусы 23–24.11 остаются из существующего меню. Если по учёту каких-то продуктов нет или
+ * срок по оценке прошёл — список для предупреждения «проверьте дома» (без замены и без закупки).
+ * Уже отмеченные приёмы не меняются.
  */
 export function pickFromStock(data: AppData, stock: Record<string, StockRec>, originals = menuOriginals(data)): Pick[] {
   const sim = simStock(stock);
@@ -315,28 +298,16 @@ export function pickFromStock(data: AppData, stock: Record<string, StockRec>, or
     const c = cards('2026-11-22')?.[s];
     if (c && !marked('2026-11-22', s)) for (const p of c.parts) if (p.fresh) take(sim, dishItems(p.dishId, p.qty), '2026-11-22');
   }
-  const used = new Set<string>();
-  for (const date of ['2026-11-21', '2026-11-22']) for (const s of ['breakfast', 'snack'] as MealSlot[]) { const id = cards(date)?.[s]?.parts[0]?.dishId; if (id) used.add(id); }
   const out: Pick[] = [];
   for (const date of ['2026-11-23', '2026-11-24']) {
     for (const slot of ['breakfast', 'snack'] as MealSlot[]) {
       const cur = cards(date)?.[slot]?.parts[0]?.dishId ?? '';
-      if (marked(date, slot)) { used.add(cur); out.push({ date, slot, original: cur, dishId: cur, feasible: true, missing: [], marked: true }); continue; }
+      if (marked(date, slot)) { out.push({ date, slot, original: cur, dishId: cur, feasible: true, missing: [], marked: true }); continue; }
       const original = originals[date]?.[slot]?.parts[0]?.dishId ?? cur;
+      // блюдо меню остаётся всегда (решение пользователя 23.11); чего нет по учёту — только предупреждение
       const missing = lacking(sim, dishItems(original), date);
-      if (!missing.length) {
-        take(sim, dishItems(original), date);
-        used.add(original);
-        out.push({ date, slot, original, dishId: original, feasible: true, missing, marked: false });
-        continue;
-      }
-      const pool = slot === 'breakfast' ? BREAKFASTS() : SNACKS();
-      const best = pool.filter((id) => id !== original && !lacking(sim, dishItems(id), date).length)
-        .sort((a, b) => score(sim, b, date, used) - score(sim, a, date, used))[0];
-      const dishId = best ?? original;
-      if (best) take(sim, dishItems(best), date);
-      used.add(dishId);
-      out.push({ date, slot, original, dishId, feasible: !!best, missing, marked: false });
+      take(sim, dishItems(original), date);
+      out.push({ date, slot, original, dishId: original, feasible: !missing.length, missing, marked: false });
     }
   }
   return out;
@@ -447,7 +418,7 @@ function stockChecks(stock: Record<string, StockRec>, cooks: PlanOverrides['cook
   });
 }
 
-export function buildCorrection(data: AppData, today: ISODate, now: string, input: CorrectionInput, appVersion = 'test'): Correction {
+export function buildCorrection(data: AppData, today: ISODate, now: string, input: CorrectionInput, appVersion = 'test', auto = false): Correction {
   const cfg0 = data.settings.plan as PlanSettings;
   const { cookId } = planParts(data);
   const revision = firstRevisionApplied(data);
@@ -488,7 +459,7 @@ export function buildCorrection(data: AppData, today: ISODate, now: string, inpu
     if (p.marked) continue;
     days[p.date] = { ...days[p.date], [p.slot]: p.dishId === p.original
       // блюдо меню остаётся, но 22–24.11 всё — из запасов: без автоматической закупки
-      ? { kind: 'dish', dishId: p.dishId } satisfies SlotOverride
+      ? { kind: 'dish', dishId: p.dishId, ...(p.missing.length ? { check: `по учёту нет — ${missText(p)}` } : {}) } satisfies SlotOverride
       : { kind: 'dish', dishId: p.dishId, note: `Из того, что есть дома: для «${DISHES[p.original]?.short ?? p.original}» по учёту нет — ${missText(p)}` } satisfies SlotOverride };
   }
   for (const s of ['breakfast', 'snack'] as MealSlot[]) {
@@ -571,7 +542,7 @@ export function buildCorrection(data: AppData, today: ISODate, now: string, inpu
       else if (st === 'done' || st === 'skipped') row = { source: 'marked', note: st === 'done' ? 'уже отмечен «Съеден» — не меняется' : 'отмечен «Пропущен» — не меняется' };
       else if (nm && card?.parts.some((p) => p.dishId === nm.dishId)) row = { source: 'new', note: `${nm.of === 1 ? '1 порция' : `порция ${nm.portion} из ${nm.of}`}, готовка ${nm.cook === 'c22' ? '22.11' : '23.11'}` };
       else if (pk && pk.dishId !== pk.original) row = { source: 'swap', note: `вместо «${DISHES[pk.original]?.short ?? pk.original}»: по учёту нет — ${missText(pk)}` };
-      else if (pk && !pk.feasible) row = { source: 'kept', note: `из текущего меню; по учёту нет — ${missText(pk)}, замены из запасов тоже нет: проверьте дома` };
+      else if (pk && !pk.feasible) row = { source: 'kept', note: `из текущего меню; по учёту нет — ${missText(pk)}: проверьте дома` };
       else row = { source: 'kept', note: pk ? 'из текущего меню — продукты есть' : 'из текущего меню' };
       menu.push({ date, slot: s, title, ...row });
     }
@@ -641,7 +612,7 @@ export function buildCorrection(data: AppData, today: ISODate, now: string, inpu
   }
   const deficits = Array.from(defMap.values()).map((x) => `${cap(plainName(x.pid))}: не хватает ≈${qtyText(x.pid, x.qty)} (${Array.from(x.labels).join(', ')}) — проверьте перед готовкой; при нехватке «Проверить продукты» предложит замену`);
   const report: CorrectionReport = {
-    id: CORR_REV, rev: 2, revision, appliedAt: now, today, marks, dishes, portions, stock: stockRows, needConfirm, extra, main, later, deficits,
+    id: CORR_REV, rev: 2, revision, auto, appliedAt: now, today, marks, dishes, portions, stock: stockRows, needConfirm, extra, main, later, deficits,
     budget: { total: BUDGET_RUB, spent, spentActual: input.spent != null || !!data.settings.budgetSpent, planned, left: BUDGET_RUB - spent - planned },
     notes, conflicts: [...conflicts, ...(rp.conflicts ?? [])], menu, checks,
     noPurchaseUntil: !buyFor22 && !short22.length ? CORR_LAST_DAY : null,
@@ -660,4 +631,15 @@ export function buildCorrection(data: AppData, today: ISODate, now: string, inpu
 /** Короткая подпись количества продукта. */
 export function qtyText(pid: string, q: number): string {
   return PRODUCTS[pid] ? fmtAmount(Math.round(q), PRODUCTS[pid].unit) : String(Math.round(q));
+}
+
+/**
+ * Миграция данных v9 (версия 1.9.0): меню 22–24.11 применяется к уже установленному приложению при запуске —
+ * без отдельного экрана подтверждения (меню согласовано пользователем 23.11). Резервная копия — первой операцией;
+ * отметки пользователя не меняются и важнее шаблона; если индейка с булгуром первой редакции уже приготовлена
+ * или съедена — ничего не делается (экран корректировки объясняет почему). Повторно не выполняется.
+ */
+export function planV9Ops(data: AppData, today: ISODate, now: string, appVersion = 'migration'): Op[] {
+  if (!correctionPending(data, today)) return [];
+  return buildCorrection(data, today, now, emptyInput(), appVersion, true).ops;
 }

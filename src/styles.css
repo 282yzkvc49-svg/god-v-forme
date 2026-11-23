@@ -146,7 +146,7 @@ a { color: var(--accent); }
 
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 4px calc(6px + var(--safe-r)) calc(4px + var(--safe-b)) calc(6px + var(--safe-l));
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   -webkit-backdrop-filter: saturate(160%) blur(18px);
@@ -157,7 +157,8 @@ a { color: var(--accent); }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   min-height: 50px; text-decoration: none; color: var(--ink-3); font-size: 11px; font-weight: 500; border-radius: 12px;
 }
-.tabbar a svg { width: 25px; height: 25px; }
+.tabbar a svg { width: 25px; height: 25px; flex: none; }
+.tabbar a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabbar a[aria-current='page'] { color: var(--accent); }
 
 @media (min-width: 768px) {
@@ -190,10 +191,13 @@ a { color: var(--accent); }
 .back { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); background: none; border: 0; padding: 8px 0; min-height: 44px; font-weight: 500; }
 .back svg { width: 20px; height: 20px; }
 
-.cols { display: grid; gap: 16px; }
-@media (min-width: 980px) {
-  .cols { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); align-items: start; }
-  .cols.even { grid-template-columns: 1fr 1fr; }
+/* Две колонки — только когда рядом с боковой панелью (236 px) остаётся ≥ 880 px: iPad в альбомной ориентации
+   (1180+), компьютер. Уже — правая колонка уходит под основное содержимое (iPad 10,2" и 9,7" в альбомной,
+   любой iPad в портретной, iPhone). */
+.cols { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1180px) {
+  .cols { grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); align-items: start; }
+  .cols.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .sticky-col { position: sticky; top: 20px; }
 }
 .stack { display: grid; gap: 16px; align-content: start; }
@@ -214,6 +218,7 @@ a { color: var(--accent); }
 .card {
   background: var(--surface); border-radius: var(--r-l); padding: 18px; box-shadow: var(--shadow);
   border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  min-width: 0; overflow-wrap: break-word;
 }
 .card.flat { box-shadow: none; background: var(--surface-2); border-color: transparent; }
 .card.tight { padding: 12px; }
@@ -247,6 +252,8 @@ a { color: var(--accent); }
   background: var(--surface); color: var(--ink); font-weight: 600; font-size: 16px; text-decoration: none;
   transition: transform 0.08s ease, background 0.15s ease;
   user-select: none; -webkit-user-select: none;
+  /* длинная подпись («Заменить на «Отжимания от устойчивого возвышения»») переносится, а не выходит за карточку */
+  max-width: 100%; text-align: center; overflow-wrap: break-word;
 }
 .btn:active { transform: scale(0.98); }
 .btn svg { width: 20px; height: 20px; flex: none; }
@@ -273,7 +280,7 @@ a { color: var(--accent); }
 .field > span, .field-label { font-size: 14px; color: var(--ink-2); font-weight: 500; }
 .input, select.input, textarea.input {
   width: 100%; min-height: 46px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line);
-  background: var(--surface); font-size: 16px; color: var(--ink);
+  background: var(--surface); font-size: 16px; color: var(--ink); min-width: 0; max-width: 100%;
 }
 textarea.input { min-height: 90px; resize: vertical; line-height: 1.4; }
 .input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
@@ -291,9 +298,12 @@ textarea.input { min-height: 90px; resize: vertical; line-height: 1.4; }
 .seg.full button { flex: 1; }
 
 .chip {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 999px;
-  background: var(--surface-3); color: var(--ink-2); font-size: 14px; font-weight: 500; border: 0; text-decoration: none; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 3px 12px; border-radius: 16px;
+  background: var(--surface-3); color: var(--ink-2); font-size: 14px; font-weight: 500; border: 0; text-decoration: none;
+  /* длинный текст (название упражнения, дата закупки) переносится внутри чипа, а не выходит за карточку */
+  max-width: 100%; min-width: 0; line-height: 1.25; text-align: left; overflow-wrap: anywhere;
 }
+.chip svg { flex: none; }
 .chip svg { width: 16px; height: 16px; }
 button.chip, a.chip { min-height: 36px; }
 .chip.accent { background: var(--accent-soft); color: var(--accent); }
@@ -325,7 +335,7 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 .task {
   --c: var(--accent); --c-soft: var(--accent-soft);
   display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 10px; border-radius: var(--r-m);
-  background: var(--surface); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); min-height: 68px;
+  background: var(--surface); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); min-height: 68px; min-width: 0;
 }
 .task.k-training { --c: var(--iron); --c-soft: var(--iron-soft); }
 .task.k-cooking { --c: var(--amber); --c-soft: var(--amber-soft); }
@@ -437,7 +447,8 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 .ex-num.done { background: var(--iron); color: var(--surface); }
 .ex-name { font-weight: 650; font-size: 17px; }
 .ex-presc { color: var(--ink-2); font-size: 14.5px; }
-.ex-body { padding: 0 14px 16px; display: grid; gap: 14px; }
+.ex-body { padding: 0 14px 16px; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.ex-body > * { min-width: 0; }
 .sets { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .set-btn {
   min-width: 64px; min-height: 52px; border-radius: 14px; border: 2px solid var(--iron-soft); background: var(--surface);
@@ -476,43 +487,72 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 @media (min-width: 700px) { .tech-cols { grid-template-columns: 1fr 1fr; } }
 .tech-cols h4 { margin: 0 0 6px; font-size: 15px; }
 
+/* Таймер отдыха: отдельный слой в body, всегда у нижнего края экрана тренировки (на iPhone — над нижней
+   панелью вкладок с учётом безопасной области, на iPad и компьютере — у нижнего края справа от боковой панели). */
 .timer-dock {
-  position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + var(--safe-b)); z-index: 35; padding: 8px calc(12px + var(--safe-r)) 8px calc(12px + var(--safe-l));
+  position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + var(--safe-b)); z-index: 35;
+  padding: 6px calc(10px + var(--safe-r)) 6px calc(10px + var(--safe-l)); pointer-events: none;
 }
-@media (min-width: 768px) { .timer-dock { left: var(--sidebar-w); bottom: calc(var(--safe-b)); padding: 12px 32px; } }
+.timer-dock[hidden] { display: none; }
+.timer-dock > * { pointer-events: auto; }
+@media (min-width: 768px) {
+  .timer-dock { left: var(--sidebar-w); bottom: 0; padding: 10px calc(32px + var(--safe-r)) calc(10px + var(--safe-b)) 32px; }
+}
 .timer {
-  max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px;
-  background: var(--ink); color: var(--surface); border-radius: 20px; box-shadow: var(--shadow-pop);
+  position: relative; max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px;
+  background: var(--ink); color: var(--surface); border-radius: 18px; box-shadow: var(--shadow-pop); overflow: hidden;
 }
-.timer .t-time { font-family: var(--font-round); font-variant-numeric: tabular-nums; font-size: 30px; font-weight: 700; min-width: 86px; }
-.timer .t-label { font-size: 13px; opacity: 0.75; }
-.timer .btn { min-height: 44px; background: color-mix(in srgb, var(--surface) 14%, transparent); color: var(--surface); border-color: transparent; padding: 0 14px; }
-.timer .btn.primary { background: var(--accent); color: var(--accent-ink); }
-.timer .presets { display: flex; gap: 4px; }
-.timer .presets button { min-height: 36px; min-width: 44px; border-radius: 10px; border: 0; background: color-mix(in srgb, var(--surface) 12%, transparent); color: var(--surface); font-weight: 600; font-size: 14px; }
+.timer .t-main { display: grid; min-width: 0; }
+.timer .t-time { font-family: var(--font-round); font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 700; line-height: 1.05; }
+.timer .t-label { font-size: 12.5px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timer .presets { display: flex; gap: 4px; flex: none; }
+.timer .presets button { min-height: 40px; min-width: 44px; border-radius: 10px; border: 0; background: color-mix(in srgb, var(--surface) 12%, transparent); color: var(--surface); font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; }
 .timer .presets button[aria-pressed='true'] { background: var(--surface); color: var(--ink); }
+.timer .t-actions { display: flex; gap: 6px; margin-left: auto; flex: none; }
+.timer .btn { min-height: 44px; background: color-mix(in srgb, var(--surface) 14%, transparent); color: var(--surface); border-color: transparent; padding: 0 14px; white-space: nowrap; }
+.timer .btn.primary { background: var(--accent); color: var(--accent-ink); }
+.timer .btn.icon { width: 44px; padding: 0; justify-content: center; }
+.timer .btn:disabled { opacity: 0.35; }
+.timer .t-collapse { flex: none; width: 36px; min-height: 44px; border: 0; border-radius: 10px; background: none; color: inherit; opacity: 0.8; display: grid; place-items: center; }
+.timer .t-collapse svg { width: 20px; height: 20px; }
 .timer.done { background: var(--accent); color: var(--accent-ink); }
-@media (max-width: 520px) {
-  .timer { gap: 8px; padding: 8px 8px 8px 12px; flex-wrap: wrap; }
-  .timer .t-time { font-size: 26px; min-width: 64px; }
-  .timer .t-label { font-size: 12px; }
-  .timer .presets button { min-width: 38px; }
-  .timer .btn { padding: 0 10px; }
-}
-.timer-progress { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--surface) 20%, transparent); overflow: hidden; margin-top: 4px; }
+.timer.done .btn.primary { background: var(--accent-ink); color: var(--accent); }
+.timer-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: color-mix(in srgb, var(--surface) 18%, transparent); }
 .timer-progress i { display: block; height: 100%; background: var(--surface); }
-.workout-pad { height: 96px; }
+/* узкий экран (iPhone): две строки — время и 60/75/90, ниже справа кнопки и «свернуть» */
+@media (max-width: 560px) {
+  .timer { flex-wrap: wrap; gap: 6px 8px; padding: 8px 8px 10px 14px; }
+  .timer .t-main { flex: 1 1 auto; }
+  .timer .t-time { font-size: 26px; }
+  .timer .presets button { min-width: 40px; }
+  .timer .btn { padding: 0 12px; }
+}
+/* свёрнутая панель — маленькая кнопка с оставшимся временем справа внизу */
+.timer-dock.collapsed { left: auto; }
+.timer-pill {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 22px;
+  background: var(--ink); color: var(--surface); box-shadow: var(--shadow-pop); font-weight: 600;
+}
+.timer-pill .t-time { font-family: var(--font-round); font-variant-numeric: tabular-nums; font-size: 17px; }
+.timer-pill .t-state { font-size: 12.5px; opacity: 0.75; }
+.timer-pill svg { width: 18px; height: 18px; }
+.timer-pill.done { background: var(--accent); color: var(--accent-ink); }
+/* нижний отступ тренировки = высота панели: последние поля и кнопки не уходят под неё */
+.workout-pad { height: calc(var(--dock-h, 96px) + 16px); }
+html:has(.timer-dock) { scroll-padding-bottom: calc(var(--dock-h, 96px) + 16px); }
 
 /* ------------------------------------------------------------------ питание и рецепты */
 
 .meal-card { --c: var(--accent); display: grid; gap: 10px; }
-.meal-head { display: flex; align-items: center; gap: 10px; }
+.meal-head { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; }
 .meal-head .time { font-family: var(--font-round); color: var(--accent); font-weight: 650; }
 .meal-dish { font-size: 17px; font-weight: 600; line-height: 1.35; }
 .meal-parts { display: flex; flex-wrap: wrap; gap: 6px; }
 .recipe-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 14px; }
 .ing-list { list-style: none; margin: 0; padding: 0; display: grid; }
-.ing-list li { display: flex; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+.ing-list li { display: flex; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px dashed var(--line); min-width: 0; }
+.ing-list li > .grow { min-width: 0; }
+.ing-list li > .num { flex: none; }
 .ing-list li:last-child { border-bottom: 0; }
 .ing-list .orig { color: var(--ink-3); font-size: 13px; }
 .ing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; transform: translateY(-2px); }
@@ -540,7 +580,7 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 
 .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (min-width: 900px) { .kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
-.kpi { background: var(--surface); border-radius: var(--r-l); padding: 14px; box-shadow: var(--shadow); min-height: 96px; display: grid; align-content: space-between; gap: 6px; border: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.kpi { background: var(--surface); border-radius: var(--r-l); padding: 14px; box-shadow: var(--shadow); min-height: 96px; display: grid; align-content: space-between; gap: 6px; border: 1px solid color-mix(in srgb, var(--line) 60%, transparent); min-width: 0; overflow-wrap: anywhere; }
 .kpi .k-label { color: var(--ink-3); font-size: 13.5px; font-weight: 600; }
 .kpi .k-value { font-family: var(--font-round); font-weight: 700; font-size: 26px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .kpi .k-value.sm { font-size: 18px; }
@@ -578,6 +618,8 @@ a.li, button.li { color: inherit; text-decoration: none; background: none; borde
 .table th { text-align: left; color: var(--ink-3); font-weight: 600; font-size: 13px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .table td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .table tr:last-child td { border-bottom: 0; }
+/* таблица без горизонтальной прокрутки — длинные слова переносятся внутри ячейки, а не раздвигают карточку */
+.table:not(.table-wrap .table) td { overflow-wrap: anywhere; }
 .table .n { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-round); }
 .table-wrap { overflow-x: auto; }
 
