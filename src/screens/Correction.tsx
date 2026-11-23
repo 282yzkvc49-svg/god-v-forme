@@ -8,7 +8,7 @@ import { href } from '../app/router';
 import { fmtLong, fmtShort, localDate, weekdayShort, type ISODate } from '../lib/dates';
 import { fmtRub, nowStamp, parseNum } from '../lib/util';
 import { PRODUCTS, fmtAmount } from '../domain/catalog';
-import { ASK_AT_HOME, CONFIRMED_PURCHASES, NOT_BOUGHT, baseStock, buildCorrection, correctionApplied, emptyInput, firstRevisionApplied, menuMissing, revisionBlocked, type CorrectionInput } from '../domain/correction';
+import { ASK_AT_HOME, CONFIRMED_PURCHASES, COOK_22, NOT_BOUGHT, baseStock, buildCorrection, correctionApplied, emptyInput, firstRevisionApplied, menuMissing, revisionBlocked, type CorrectionInput } from '../domain/correction';
 import { stockSummary, untilLabel } from '../domain/stock';
 import { MEAL_LABELS, type CorrectionMenuRow, type CorrectionReport } from '../state/types';
 import { Disclosure, Note, PageHead, toast } from '../ui/kit';
@@ -236,6 +236,22 @@ function StockInputs({ data, input, setInput }: { data: ReturnType<typeof useApp
   );
 }
 
+/** Применили на следующий день: готовка 22.11 в прошлом и ещё не отмечена — подсказать, где отметить. */
+function PastCookNote() {
+  const data = useApp();
+  const today = useToday();
+  const id = `cook-${data.settings.plan?.instanceId}-${COOK_22}`;
+  const e = data.cookingEvents[id];
+  const st = data.taskStatus[`cook:${id}`]?.status;
+  if (!e || e.date >= today || (st && st !== 'planned')) return null;
+  return (
+    <Note kind="info" icon={<PiCookingPot />}>
+      <p className="mt0">Готовка {fmtShort(e.date)} (нут с булгуром и индейка с гречкой) ещё не отмечена. Если готовили — отметьте «Приготовлено»: продукты спишутся, порции появятся в «Готовой еде».</p>
+      <a className="btn small primary" href={href(`/cook/${id}`)}>Открыть готовку {fmtShort(e.date)}</a>
+    </Note>
+  );
+}
+
 export function CorrectionScreen() {
   const data = useApp();
   const today = useToday();
@@ -260,6 +276,7 @@ export function CorrectionScreen() {
           <p className="mt0">Резервная копия перед изменениями — {fmtLong(localDate(new Date(last.createdAt)))}, {new Date(last.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}. Вес, фото, тренировки, отметки питания и прошедшие закупки не менялись.</p>
           <p style={{ marginBottom: 0 }}>Дальше: «Приготовлено» у готовки и «Съедено» у приёма пищи списывают продукты из запасов. <a href={href('/shopping', { tab: 'stock' })}>Мои запасы</a></p>
         </Note>
+        {applied && <PastCookNote />}
         <MenuPreview r={r} />
         <StockCheck r={r} />
         <ReportBody r={r} />
@@ -282,6 +299,7 @@ export function CorrectionScreen() {
       </Note>
       <StockInputs data={data} input={input} setInput={setInput} />
       <h2 className="section-title">2. Предварительный просмотр</h2>
+      {today > '2026-11-22' && <Note kind="info" icon={<PiCookingPot />}><p className="mt0" style={{ marginBottom: 0 }}>Готовка 22.11 (нут с булгуром и индейка с гречкой) уже в прошлом. Если вы готовили вчера — после применения откройте её и нажмите «Приготовлено»: продукты спишутся, порции появятся в «Готовой еде». Ужин 22.11 отметьте в дне сами.</p></Note>}
       <MenuPreview r={r} />
       <StockCheck r={r} />
       <ReportBody r={r} preview />

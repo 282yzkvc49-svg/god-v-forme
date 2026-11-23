@@ -214,6 +214,8 @@ test('если применяют на день позже, готовка 22.11
   assert.ok(after.cookingEvents[C22]);
   assert.equal(card(after, '2026-11-22', 'dinner').parts[0].cookEventId, C22);
   assert.equal(card(after, '2026-11-23', 'lunch').parts[0].cookEventId, C22);
+  assert.equal(after.taskStatus['cook:' + C22], undefined, 'готовка 22.11 не отмечается сама');
+  assert.match(after.cookingEvents[C23].timeNote!, /не переложили в холодильник с вечера 22\.11/);
 });
 
 test('устройство с первой редакцией: обновление меню без пересоздания запасов и отметок', () => {

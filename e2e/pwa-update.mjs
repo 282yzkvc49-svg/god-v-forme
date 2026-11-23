@@ -106,9 +106,10 @@ await step(`Установлена ${OLD_VERSION}: офлайн-кэш, данн
 
 await step(`Выложена ${NEW_VERSION}: открытие приложения — новая версия и предпросмотр меню 22–24.11`, async () => {
   serveDir = newDist;
-  // как повторное открытие приложения с экрана «Домой»
-  await page.goto(`${BASE}?today=2026-11-22&open=2#/today`);
+  // как повторное открытие приложения с экрана «Домой» — на следующее утро
+  await page.goto(`${BASE}?today=2026-11-23&open=2#/today`);
   await page.getByRole('heading', { name: 'Новое меню на 22–24 ноября' }).waitFor();
+  await page.getByText(/Готовка 22\.11 \(нут с булгуром и индейка с гречкой\) уже в прошлом/).waitFor();
   const preview = page.getByTestId('menu-preview');
   for (const t of ['Нут с булгуром и овощами', 'Индейка с гречкой и морковью', 'Курица с рисом и брокколи']) await preview.getByText(t).first().waitFor();
   assert(await preview.getByText('Индейка с булгуром и овощами').count() === 0, 'в предпросмотре нет прежнего блюда');
@@ -142,6 +143,7 @@ await step('Подтверждение: резервная копия, меню 
   assert(await idbCount('backups') === before.backups + 1, 'резервная копия создана');
   assert(await idbCount('stock') === before.stock, 'запасы не пересозданы');
   assert(await idbCount('weights') === before.weights && await idbCount('taskStatus') === before.taskStatus, 'вес и отметки на месте');
+  await page.getByRole('link', { name: 'Открыть готовку 22.11' }).waitFor();
   await go('/day/2026-11-22');
   await page.getByText('Нут с булгуром и овощами').first().waitFor();
   await go('/day/2026-11-23');
