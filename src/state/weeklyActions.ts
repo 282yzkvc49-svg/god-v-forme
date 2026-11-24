@@ -3,7 +3,8 @@
 import { commit, getData } from './store';
 import type { Op } from './idb';
 import type { AppData, MealSlot, ShoppingCheck, StockRec } from './types';
-import { applyOps as applyToData } from './model';
+import { applyOps as applyToData, dataToStores } from './model';
+import { enableV2Ops, rollbackV2Ops } from '../domain/v2migration';
 import { today as todayFn } from '../lib/clock';
 import { nowStamp } from '../lib/util';
 import type { ISODate } from '../lib/dates';
@@ -224,4 +225,17 @@ export function setRecipePref(id: string, patch: Partial<Omit<RecipePref, 'at'>>
   const prefs = prefsOf(data);
   const next = { ...prefs, [id]: { ...prefs[id], ...patch, at: nowStamp() } };
   return commit([{ store: 'settings', put: { ...data.settings, recipePrefs: next } }]);
+}
+
+// ------------------------------------------------------------------ откат версии 2.0 (данные) и повторное включение
+
+/** Вернуться к меню версии 1.9: копия перед возвратом, история и записи пользователя не меняются. */
+export function rollbackWeekly() {
+  const data = getData();
+  return commit(rollbackV2Ops(data, todayFn(), nowStamp(), __APP_VERSION__, { toStores: (d) => dataToStores(d), apply: applyToData }));
+}
+/** Включить недельный цикл снова (недели — как были при выключении). */
+export function enableWeekly() {
+  const data = getData();
+  return commit(enableV2Ops(data, todayFn(), nowStamp(), __APP_VERSION__, { toStores: (d) => dataToStores(d), apply: applyToData }));
 }

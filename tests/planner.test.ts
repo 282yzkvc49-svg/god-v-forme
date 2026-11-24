@@ -192,3 +192,45 @@ test('проблемы недели: «утвердить как есть» — 
   const opts = cheaperMains(d, w, w.cook[0].r, '2026-11-24');
   for (const o of opts) assert.ok(o.costDelta < 0);
 });
+
+test('откат 2.0 (данные): меню 1.9 с сегодняшнего дня, история и записи не меняются; включение обратно — недели как были', async () => {
+  const { rollbackV2Ops, enableV2Ops } = await import('../src/domain/v2migration');
+  const { dataToStores } = await import('../src/state/model');
+  const h = { toStores: (x: AppData) => dataToStores(x), apply: applyOps };
+  let d = migrated();
+  // 25.11 обед съеден, 26.11 вес — записи пользователя после перехода
+  d = applyOps(d, [{ store: 'taskStatus', put: { taskId: 'meal:2026-11-25:lunch', date: '2026-11-25', kind: 'meal', status: 'done', updatedAt: AT } }]);
+  const ws = weeklyOf(d)!;
+  const off = applyOps(d, rollbackV2Ops(d, '2026-11-26', '2026-11-26T08:00:00.000Z', '2.0.0', h));
+  assert.equal(weeklyOf(off), null, 'недельный цикл выключен');
+  assert.ok(off.settings.weeklyOff?.backupId && off.backups[off.settings.weeklyOff.backupId], 'копия перед возвратом');
+  for (const date of Object.keys(d.planDays).filter((x) => x <= '2026-11-25')) assert.equal(J(off.planDays[date]), J(d.planDays[date]), `история ${date}`);
+  for (const s of ['taskStatus', 'weights', 'photos', 'trainingLogs', 'stock', 'trips'] as const) assert.equal(J(off[s]), J(d[s]), s);
+  const cfg = off.settings.plan!;
+  const future = Object.values(off.planDays).filter((x) => x.date >= '2026-11-26' && x.date <= '2026-12-14' && !x.tripId);
+  assert.ok(future.length > 5 && future.every((x) => x.instanceId === cfg.instanceId), 'будущие дни — по шаблону 1.9');
+  assert.ok(!Object.values(off.cookingEvents).some((e) => e.instanceId === 'weekly' && e.date >= '2026-11-26'), 'готовок недель впереди нет');
+  // включить обратно
+  const on = applyOps(off, enableV2Ops(off, '2026-11-26', '2026-11-26T09:00:00.000Z', '2.0.0', h));
+  assert.ok(weeklyOf(on));
+  assert.equal(J(Object.keys(weeklyOf(on)!.weeks).sort()), J(Object.keys(ws.weeks).sort()), 'недели — как были');
+  assert.equal(on.planDays['2026-11-27'].instanceId, 'weekly');
+  assert.equal(on.settings.weeklyOff, null);
+});
+
+test('после временного возврата к 1.9.1 (версия данных 9) повторное обновление до 2.0 не повторяет переход 24.11', async () => {
+  const { rollbackV2Ops } = await import('../src/domain/v2migration');
+  const { dataToStores } = await import('../src/state/model');
+  const h = { toStores: (x: AppData) => dataToStores(x), apply: applyOps };
+  const d = migrated();
+  for (const base of [d, applyOps(d, rollbackV2Ops(d, '2026-11-26', '2026-11-26T08:00:00.000Z', '2.0.0', h))]) {
+    // версия 1.9.1 при запуске записывает версию данных 9
+    const v9 = applyOps(base, [{ store: 'meta', put: { ...base.meta!, dataVersion: 9 } }]);
+    const ops = dataMigrationOps(v9, '2026-11-27', '2026-11-27T08:00:00.000Z', '2.0.0');
+    const after = applyOps(v9, ops);
+    assert.equal(J(after.stock), J(base.stock), 'запасы не сбрасываются');
+    assert.equal(J(after.trips), J(base.trips), 'командировки не меняются');
+    assert.equal(Object.keys(after.backups).length, Object.keys(base.backups).length, 'новой копии перехода нет');
+    assert.equal(J(weeklyOf(after)), J(weeklyOf(base)), 'недели как были');
+  }
+});

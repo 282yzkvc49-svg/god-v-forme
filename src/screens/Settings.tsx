@@ -3,7 +3,7 @@ import { useApp, useStorageStatus, wipeEverything } from '../state/store';
 import * as A from '../state/actions';
 import { useToday, isTodayOverridden } from '../lib/clock';
 import { href, useRoute } from '../app/router';
-import { fmtDayMonth, fmtFull, isISODate, isTime, WEEKDAYS_FULL } from '../lib/dates';
+import { fmtDayMonth, fmtFull, fmtShort, isISODate, isTime, WEEKDAYS_FULL } from '../lib/dates';
 import { fmtBytes } from '../lib/util';
 import { SEED_ID } from '../lib/seed';
 import { today as todayFn } from '../lib/clock';
@@ -43,6 +43,38 @@ function WeeklySettingsGroup() {
         </span>
       </label>
       <p className="hint">Пока место не указано, приложение ничего не предполагает и только показывает, сколько пакетов нужно. Генерация меню: планировщик приложения по проверенным рецептам библиотеки (без ИИ); новые недели можно составлять в чате с Claude. Генерация через API заложена на будущее и не подключена — ключи не нужны.</p>
+      <RollbackV2 />
+    </Group>
+  );
+}
+
+/** Откат версии 2.0 на уровне данных: вернуться к меню версии 1.9 (и обратно). */
+function RollbackV2() {
+  const [ask, setAsk] = useState(false);
+  return (
+    <div className="field" style={{ marginTop: 12 }}>
+      <span className="field-label">Вернуться к меню версии 1.9</span>
+      {!ask ? <button className="btn small ghost" onClick={() => setAsk(true)}>Выключить недельный цикл…</button> : (
+        <Note kind="warn">
+          Будущие дни без отметок вернутся к меню на 30 дней (версия 1.9). Прошедшие дни, отметки, тренировки, вес, фото, запасы и командировки не меняются; перед возвратом сохраняется резервная копия, а недели 2.0 — чтобы включить их обратно.
+          <span className="btn-row" style={{ marginTop: 8 }}>
+            <button className="btn small" onClick={() => W.rollbackWeekly().then(() => { setAsk(false); toast('Недельный цикл выключен — меню версии 1.9'); })}>Выключить</button>
+            <button className="btn small ghost" onClick={() => setAsk(false)}>Отмена</button>
+          </span>
+        </Note>
+      )}
+    </div>
+  );
+}
+
+function WeeklyOffGroup() {
+  const data = useApp();
+  const off = data.settings.weeklyOff;
+  if (!off) return null;
+  return (
+    <Group id="weekly" title="Недельный цикл (версия 2.0) выключен">
+      <p className="mt0">Выключен {fmtShort(off.at.slice(0, 10))}: меню — по шаблону версии 1.9. Резервная копия перед выключением сохранена.</p>
+      <button className="btn small" onClick={() => W.enableWeekly().then(() => toast('Недельный цикл включён: недели и закупки пересчитаны с сегодняшнего дня'))}>Включить снова</button>
     </Group>
   );
 }
@@ -85,6 +117,7 @@ export function SettingsScreen() {
       <PageHead title="Настройки" />
       <div className="stack">
         {weeklyOf(data) && <WeeklySettingsGroup />}
+        {!weeklyOf(data) && data.settings.weeklyOff && <WeeklyOffGroup />}
         {!weeklyOf(data) && <Group id="plan" title="Программа питания">
           {menuUpdatePending(data) ? (
             <Note kind="warn">

@@ -485,6 +485,8 @@ export interface Settings {
   correctionReportUnseen?: string | null;
   /** Версия 2.0: недельный цикл (закупка и готовка раз в неделю, меню из библиотеки рецептов). */
   weekly?: WeeklySettings | null;
+  /** Недельный цикл выключен (возврат к меню версии 1.9): когда, копия перед возвратом, сохранённые недели для включения обратно. */
+  weeklyOff?: { at: string; backupId: string; weekly: WeeklySettings } | null;
   /** Библиотека рецептов: избранное, оценки, «больше не предлагать». */
   recipePrefs?: Record<string, RecipePref> | null;
 }

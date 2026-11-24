@@ -10,6 +10,7 @@ import { addDays, type ISODate } from '../lib/dates';
 import { PRODUCTS } from './catalog';
 import { emptyStock, stockRemaining } from './stock';
 import { tripList } from './trips';
+import { replanOps } from './plan';
 import { planCycles, setRemainingOps, weeklyOf, type WeekPlan, type WeeklySettings } from './weekly';
 import { draftWeek, weeklyReplanAll } from './weekPlanner';
 
@@ -74,7 +75,9 @@ function writeOffAll(data: AppData, pid: string, now: string, today: ISODate, no
 export interface V10Helpers { toStores: (d: AppData) => Record<string, unknown[]>; apply: (d: AppData, ops: Op[]) => AppData }
 
 export function planV10Ops(data0: AppData, today: ISODate, now: string, appVersion: string, h: V10Helpers): Op[] {
-  if (weeklyOf(data0) || !data0.settings.plan) return [];
+  // переход уже был (недели есть, цикл выключен пользователем или есть копия перехода) — не повторять:
+  // например, после временного возврата к версии 1.9.1 и повторного обновления
+  if (weeklyOf(data0) || data0.settings.weeklyOff || Object.keys(data0.backups ?? {}).some((id) => id.startsWith(V2_BACKUP_PREFIX)) || !data0.settings.plan) return [];
   const ops: Op[] = [];
   let data = data0;
   const step = (more: Op[]) => { ops.push(...more); data = h.apply(data, more); };
@@ -128,4 +131,44 @@ export function planV10Ops(data0: AppData, today: ISODate, now: string, appVersi
   // записи приложения с сегодняшнего дня (прошедшее и отмеченное не меняется)
   step(weeklyReplanAll(data, today, { now }).ops);
   return ops;
+}
+
+// ------------------------------------------------------------------ откат и повторное включение
+
+/**
+ * Откат версии 2.0 на уровне данных: вернуться к меню версии 1.9 (шаблон на 30 дней). Сначала — резервная копия
+ * всего состояния; недели 2.0 сохраняются в настройках, чтобы их можно было включить обратно. Прошедшие дни,
+ * отметки, тренировки, вес, фото, запасы и командировки не меняются; будущие дни без отметок — по шаблону 1.9.
+ * После этого и установленная версия 1.9.1 откроет данные без ошибок.
+ */
+export function rollbackV2Ops(data: AppData, today: ISODate, now: string, appVersion: string, h: V10Helpers): Op[] {
+  const ws = weeklyOf(data);
+  const cfg = data.settings.plan;
+  if (!ws || !cfg) return [];
+  const backupId = `${V2_BACKUP_PREFIX}off-${now}`;
+  const backup: BackupRec = {
+    id: backupId, createdAt: now, reason: 'Перед возвратом к меню версии 1.9 (недельный цикл выключен)', appVersion,
+    fromMenu: 'weekly', toMenu: cfg.menuId ?? null, stores: h.toStores(data) as Record<string, any[]>,
+  };
+  const ops: Op[] = [{ store: 'backups', put: backup }];
+  const settings = { ...data.settings, weekly: null, weeklyOff: { at: now, backupId, weekly: ws } } as AppData['settings'];
+  ops.push({ store: 'settings', put: settings });
+  const mid = h.apply(data, ops);
+  // без weekly пересчёт идёт по шаблону 1.9 с сегодняшнего дня: прошедшее и отмеченное — история
+  const rp = replanOps(mid, cfg, today, { keepPast: true });
+  return [...ops, ...rp.ops];
+}
+
+/** Включить недельный цикл снова: недели — как были при выключении; дни и закупки пересчитываются с сегодняшнего дня. */
+export function enableV2Ops(data: AppData, today: ISODate, now: string, appVersion: string, h: V10Helpers): Op[] {
+  const off = data.settings.weeklyOff;
+  if (!off || weeklyOf(data)) return [];
+  const backupId = `${V2_BACKUP_PREFIX}on-${now}`;
+  const backup: BackupRec = {
+    id: backupId, createdAt: now, reason: 'Перед повторным включением недельного цикла (версия 2.0)', appVersion,
+    fromMenu: data.settings.plan?.menuId ?? null, toMenu: 'weekly', stores: h.toStores(data) as Record<string, any[]>,
+  };
+  const ops: Op[] = [{ store: 'backups', put: backup }, { store: 'settings', put: { ...data.settings, weekly: { ...off.weekly, reportUnseen: false }, weeklyOff: null } }];
+  const mid = h.apply(data, ops);
+  return [...ops, ...weeklyReplanAll(mid, today, { now }).ops];
 }
