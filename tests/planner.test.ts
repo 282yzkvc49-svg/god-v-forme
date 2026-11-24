@@ -234,3 +234,19 @@ test('после временного возврата к 1.9.1 (версия д
     assert.equal(J(weeklyOf(after)), J(weeklyOf(base)), 'недели как были');
   }
 });
+
+test('резервная копия (файл) с данными 2.0: недели, оценки рецептов, запасы и закупки восстанавливаются полностью', async () => {
+  const { buildBackupZip, readBackup, restoreOps } = await import('../src/domain/zipfiles');
+  const { STORE_KEYS } = await import('../src/state/types');
+  const { emptyData } = await import('../src/state/model');
+  let d = migrated();
+  d = applyOps(d, [{ store: 'settings', put: { ...d.settings, recipePrefs: { m008: { fav: true, rating: 5, at: AT } } } }]);
+  const { bytes } = await buildBackupZip(d, [], '2.0.0', AT);
+  const parsed = await readBackup(bytes);
+  const restored = applyOps(emptyData(), restoreOps(parsed, 'replace', emptyData(), (s, r) => r[(STORE_KEYS as any)[s]]));
+  assert.equal(J(weeklyOf(restored)), J(weeklyOf(d)), 'недели');
+  assert.equal(J(restored.settings.recipePrefs), J(d.settings.recipePrefs), 'избранное и оценки');
+  for (const s of ['planDays', 'cookingEvents', 'shoppingEvents', 'stock', 'trips', 'taskStatus'] as const) assert.equal(J(restored[s]), J(d[s]), s);
+  // после восстановления переход не повторяется
+  assert.equal(dataMigrationOps(restored, '2026-11-26', '2026-11-26T08:00:00.000Z', '2.0.0').length, 0);
+});
