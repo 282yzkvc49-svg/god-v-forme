@@ -4,6 +4,7 @@
 import tpl from '../data/plan_template.json';
 import type { AvProductRec, MealSlot, ProductSub } from '../state/types';
 import { EXTRA_DISHES } from './extraDishes';
+import libIngredients from '../data/library/ingredients.json';
 
 export interface Nutr { kcal: number; p: number; f: number; c: number }
 
@@ -38,6 +39,10 @@ export interface Product {
   checked_date?: string | null;
   /** Название исходного товара, если этот заменён по подтверждению пользователя. */
   substituteFor?: string | null;
+  /** Ингредиент библиотеки рецептов: наличие и цена на av.ru не подтверждены. */
+  av?: 'unverified';
+  /** Источник справочной пищевой ценности. */
+  ref?: string;
 }
 
 export interface DishIngr { product: string; qty: number; note: string | null }
@@ -116,12 +121,21 @@ export const TEMPLATE: PlanTemplate = tpl as any;
 // блюда корректировок по факту — к рецептам комплекта (помечены extra)
 for (const d of EXTRA_DISHES) if (!TEMPLATE.dishes.some((x) => x.id === d.id)) TEMPLATE.dishes.push(d);
 export const PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.products.map((p) => [p.id, p]));
+/** Ингредиенты библиотеки рецептов, которых нет в каталоге меню (не av.ru-карточки: цена и наличие не подтверждены). */
+export const LIB_PRODUCTS: Record<string, Product> = {};
+for (const raw of libIngredients as unknown as Partial<Product>[]) {
+  const x = raw as Product;
+  if (PRODUCTS[x.id]) continue;
+  const p: Product = { ...x, price: x.price ?? 0, note: x.note ?? null, pantry: x.pantry ?? x.storage === 'pantry', piece_label: x.piece_label ?? null };
+  LIB_PRODUCTS[p.id] = p;
+  PRODUCTS[p.id] = p;
+}
 export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.map((d) => [d.id, d]));
 
 // ------------------------------------------------------------------ замены недоступных товаров
 
 /** Товары комплекта без замен — исходные данные для сброса. */
-export const BASE_PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.products.map((p) => [p.id, { ...p }]));
+export const BASE_PRODUCTS: Record<string, Product> = Object.fromEntries([...TEMPLATE.products, ...Object.values(LIB_PRODUCTS)].map((p) => [p.id, { ...p }]));
 const QTY_FACTOR: Record<string, number> = {};
 const SUBBED = new Set<string>();
 const PROTEIN_CATS = ['Мясо и птица', 'Рыба и морепродукты', 'Яйца', 'Молочные продукты'];

@@ -1,0 +1,186 @@
+{
+ "checkedAt": "2026-11-24T12:00:00+03:00",
+ "counts": {
+  "breakfast": {
+   "total": 5,
+   "ok": 5
+  },
+  "snack": {
+   "total": 3,
+   "ok": 3
+  },
+  "main": {
+   "total": 7,
+   "ok": 7
+  }
+ },
+ "recipes": [
+  {
+   "id": "b001",
+   "hash": "a3a60186",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 605,
+   "p": 36.2,
+   "f": 24.2,
+   "c": 62.9
+  },
+  {
+   "id": "b002",
+   "hash": "4da1b508",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 605,
+   "p": 47.6,
+   "f": 26.8,
+   "c": 44.5
+  },
+  {
+   "id": "b003",
+   "hash": "c7d3c5a0",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 607,
+   "p": 33.1,
+   "f": 21.4,
+   "c": 69.5
+  },
+  {
+   "id": "b004",
+   "hash": "74926a3c",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 659,
+   "p": 42.4,
+   "f": 21,
+   "c": 74.2
+  },
+  {
+   "id": "b005",
+   "hash": "8dded1b2",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 590,
+   "p": 53,
+   "f": 16.9,
+   "c": 61.2
+  },
+  {
+   "id": "s001",
+   "hash": "bf102fe6",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 330,
+   "p": 26.8,
+   "f": 14.1,
+   "c": 27.9
+  },
+  {
+   "id": "s002",
+   "hash": "9e765409",
+   "ok": true,
+   "errors": [],
+   "warnings": [
+    "жиры дают 44% калорийности"
+   ],
+   "kcal": 419,
+   "p": 23.9,
+   "f": 20.3,
+   "c": 38
+  },
+  {
+   "id": "s003",
+   "hash": "59af7c1d",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 404,
+   "p": 35.5,
+   "f": 16.3,
+   "c": 33.9
+  },
+  {
+   "id": "m001",
+   "hash": "bc88645d",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 676,
+   "p": 61.8,
+   "f": 11.5,
+   "c": 80
+  },
+  {
+   "id": "m002",
+   "hash": "5cde2ada",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 655,
+   "p": 49.1,
+   "f": 16.4,
+   "c": 78
+  },
+  {
+   "id": "m003",
+   "hash": "cfb6a2e6",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 670,
+   "p": 58.8,
+   "f": 17.8,
+   "c": 77.9
+  },
+  {
+   "id": "m004",
+   "hash": "a1e09b25",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 605,
+   "p": 46.8,
+   "f": 12.4,
+   "c": 75.6
+  },
+  {
+   "id": "m005",
+   "hash": "7c31c651",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 588,
+   "p": 55.4,
+   "f": 11.6,
+   "c": 68.6
+  },
+  {
+   "id": "m006",
+   "hash": "7493ed0d",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 585,
+   "p": 49.4,
+   "f": 13.6,
+   "c": 73.3
+  },
+  {
+   "id": "m007",
+   "hash": "7d0a4ee4",
+   "ok": true,
+   "errors": [],
+   "warnings": [],
+   "kcal": 572,
+   "p": 57.1,
+   "f": 10.6,
+   "c": 60.1
+  }
+ ]
+}

@@ -1,0 +1,866 @@
+[
+ {
+  "id": "l_greek_yogurt",
+  "name": "Йогурт греческий натуральный 2%, без сахара",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 73,
+   "p": 9.9,
+   "f": 1.9,
+   "c": 3.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 400,
+   "label": "стакан ≈400 г"
+  },
+  "shelf_days": 14,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_kefir",
+  "name": "Кефир 1%",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 40,
+   "p": 3,
+   "f": 1,
+   "c": 4
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 900,
+   "label": "бутылка ≈900 г"
+  },
+  "shelf_days": 10,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_cheese_light",
+  "name": "Сыр полутвёрдый лёгкий 17%",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 265,
+   "p": 28,
+   "f": 17,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "этикетка аналога",
+  "pack": {
+   "size": 200,
+   "label": "брусок ≈200 г"
+  },
+  "shelf_days": 30,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_spinach_frozen",
+  "name": "Шпинат замороженный",
+  "category": "Овощи замороженные",
+  "unit": "g",
+  "nutr": {
+   "kcal": 29,
+   "p": 3.6,
+   "f": 0.6,
+   "c": 4.2
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 400,
+   "label": "пакет ≈400 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_peas_frozen",
+  "name": "Горошек зелёный замороженный",
+  "category": "Овощи замороженные",
+  "unit": "g",
+  "nutr": {
+   "kcal": 77,
+   "p": 5.2,
+   "f": 0.4,
+   "c": 13.6
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 400,
+   "label": "пакет ≈400 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_blueberry_frozen",
+  "name": "Черника замороженная",
+  "category": "Ягоды и фрукты замороженные",
+  "unit": "g",
+  "nutr": {
+   "kcal": 51,
+   "p": 0.4,
+   "f": 0.6,
+   "c": 12.2
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 300,
+   "label": "пакет ≈300 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_mango_frozen",
+  "name": "Манго замороженное кусочками",
+  "category": "Ягоды и фрукты замороженные",
+  "unit": "g",
+  "nutr": {
+   "kcal": 60,
+   "p": 0.8,
+   "f": 0.4,
+   "c": 15
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 300,
+   "label": "пакет ≈300 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_flax",
+  "name": "Семена льна",
+  "category": "Орехи и семена",
+  "unit": "g",
+  "nutr": {
+   "kcal": 534,
+   "p": 18.3,
+   "f": 42.2,
+   "c": 28.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 200,
+   "label": "пакет ≈200 г"
+  },
+  "shelf_days": 180,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_pumpkin_seeds",
+  "name": "Тыквенные семечки очищенные",
+  "category": "Орехи и семена",
+  "unit": "g",
+  "nutr": {
+   "kcal": 559,
+   "p": 30.2,
+   "f": 49,
+   "c": 10.7
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 150,
+   "label": "пакет ≈150 г"
+  },
+  "shelf_days": 90,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_sesame",
+  "name": "Кунжут",
+  "category": "Орехи и семена",
+  "unit": "g",
+  "nutr": {
+   "kcal": 573,
+   "p": 17.7,
+   "f": 49.7,
+   "c": 23.4
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 100,
+   "label": "пакет ≈100 г"
+  },
+  "shelf_days": 180,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_flour_wg",
+  "name": "Мука пшеничная цельнозерновая",
+  "category": "Крупы и бобовые",
+  "unit": "g",
+  "nutr": {
+   "kcal": 340,
+   "p": 13.2,
+   "f": 2.5,
+   "c": 72
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 1000,
+   "label": "пачка ≈1 кг"
+  },
+  "shelf_days": 180,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_couscous",
+  "name": "Кускус",
+  "category": "Крупы и бобовые",
+  "unit": "g",
+  "nutr": {
+   "kcal": 376,
+   "p": 12.8,
+   "f": 0.6,
+   "c": 77.4
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 500,
+   "label": "пачка ≈500 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_soba",
+  "name": "Лапша гречневая (соба)",
+  "category": "Крупы и бобовые",
+  "unit": "g",
+  "nutr": {
+   "kcal": 336,
+   "p": 14.4,
+   "f": 0.7,
+   "c": 74.6
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 300,
+   "label": "пачка ≈300 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_lavash",
+  "name": "Лаваш армянский тонкий",
+  "category": "Хлеб и выпечка",
+  "unit": "g",
+  "nutr": {
+   "kcal": 275,
+   "p": 9,
+   "f": 1.2,
+   "c": 56
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 250,
+   "label": "упаковка ≈250 г (3 листа)"
+  },
+  "shelf_days": 7,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_bread_rye",
+  "name": "Хлеб ржаной заварной, нарезка",
+  "category": "Хлеб и выпечка",
+  "unit": "g",
+  "nutr": {
+   "kcal": 259,
+   "p": 8.5,
+   "f": 3.3,
+   "c": 48
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 300,
+   "label": "нарезка ≈300 г"
+  },
+  "shelf_days": 5,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_crispbread",
+  "name": "Хлебцы ржаные цельнозерновые",
+  "category": "Хлеб и выпечка",
+  "unit": "g",
+  "nutr": {
+   "kcal": 300,
+   "p": 11,
+   "f": 2.5,
+   "c": 57
+  },
+  "nutr_src": "ref",
+  "ref": "этикетка аналога",
+  "pack": {
+   "size": 200,
+   "label": "пачка ≈200 г"
+  },
+  "shelf_days": 90,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": 10,
+  "av": "unverified"
+ },
+ {
+  "id": "l_hummus",
+  "name": "Хумус классический",
+  "category": "Консервы и готовые продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 166,
+   "p": 7.9,
+   "f": 9.6,
+   "c": 14.3
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 200,
+   "label": "контейнер ≈200 г"
+  },
+  "shelf_days": 10,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_cocoa",
+  "name": "Какао-порошок без сахара",
+  "category": "Консервы и готовые продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 228,
+   "p": 19.6,
+   "f": 13.7,
+   "c": 57.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 100,
+   "label": "пачка ≈100 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_olives",
+  "name": "Оливки зелёные без косточки",
+  "category": "Консервы и готовые продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 145,
+   "p": 1,
+   "f": 15.3,
+   "c": 3.8
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 300,
+   "label": "банка ≈300 г (≈160 г без рассола)"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_capers",
+  "name": "Каперсы",
+  "category": "Консервы и готовые продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 23,
+   "p": 2.4,
+   "f": 0.9,
+   "c": 4.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 100,
+   "label": "банка ≈100 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_tomato_paste",
+  "name": "Томатная паста",
+  "category": "Консервы и готовые продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 82,
+   "p": 4.3,
+   "f": 0.5,
+   "c": 18.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 70,
+   "label": "упаковка 70 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_soy_sauce",
+  "name": "Соевый соус натуральный, пониженная соль",
+  "category": "Масла и соусы",
+  "unit": "g",
+  "nutr": {
+   "kcal": 53,
+   "p": 8,
+   "f": 0.6,
+   "c": 4.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 150,
+   "label": "бутылка ≈150 мл"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_ginger",
+  "name": "Имбирь свежий",
+  "category": "Овощи свежие",
+  "unit": "g",
+  "nutr": {
+   "kcal": 80,
+   "p": 1.8,
+   "f": 0.8,
+   "c": 18
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 100,
+   "label": "корень ≈100 г"
+  },
+  "shelf_days": 21,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 0.85,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_cabbage",
+  "name": "Капуста белокочанная",
+  "category": "Овощи свежие",
+  "unit": "g",
+  "nutr": {
+   "kcal": 25,
+   "p": 1.3,
+   "f": 0.1,
+   "c": 5.8
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 1000,
+   "label": "кочан ≈1 кг"
+  },
+  "shelf_days": 30,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 0.9,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_greens",
+  "name": "Зелень: укроп, петрушка",
+  "category": "Зелень",
+  "unit": "g",
+  "nutr": {
+   "kcal": 40,
+   "p": 3,
+   "f": 0.8,
+   "c": 6.5
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 50,
+   "label": "пучок ≈50 г"
+  },
+  "shelf_days": 5,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_chicken_thigh",
+  "name": "Филе куриного бедра без кожи",
+  "category": "Мясо и птица",
+  "unit": "g",
+  "nutr": {
+   "kcal": 121,
+   "p": 19.7,
+   "f": 4.1,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 500,
+   "label": "лоток ≈500 г"
+  },
+  "shelf_days": 3,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_beef_lean",
+  "name": "Говядина постная (кострец, огузок)",
+  "category": "Мясо и птица",
+  "unit": "g",
+  "nutr": {
+   "kcal": 136,
+   "p": 22,
+   "f": 5,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 700,
+   "label": "кусок ≈700 г"
+  },
+  "shelf_days": 3,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_pork_tenderloin",
+  "name": "Свиная вырезка",
+  "category": "Мясо и птица",
+  "unit": "g",
+  "nutr": {
+   "kcal": 120,
+   "p": 21,
+   "f": 3.5,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 700,
+   "label": "кусок ≈700 г"
+  },
+  "shelf_days": 3,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_pink_salmon",
+  "name": "Горбуша, филе с кожей, замороженное",
+  "category": "Рыба и морепродукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 140,
+   "p": 20.5,
+   "f": 6.5,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 600,
+   "label": "упаковка ≈600 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_hake",
+  "name": "Хек, филе без кожи, замороженное",
+  "category": "Рыба и морепродукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 86,
+   "p": 16.6,
+   "f": 2.2,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 800,
+   "label": "упаковка ≈800 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_shrimp",
+  "name": "Креветки очищенные сырые, замороженные, без глазури",
+  "category": "Рыба и морепродукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 85,
+   "p": 20.1,
+   "f": 0.5,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 500,
+   "label": "упаковка ≈500 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_cumin",
+  "name": "Кумин (зира) молотый",
+  "category": "Специи",
+  "unit": "g",
+  "nutr": {
+   "kcal": 375,
+   "p": 17.8,
+   "f": 22.3,
+   "c": 44.2
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 20,
+   "label": "пакетик ≈20 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_black_pepper",
+  "name": "Перец чёрный молотый",
+  "category": "Специи",
+  "unit": "g",
+  "nutr": {
+   "kcal": 251,
+   "p": 10.4,
+   "f": 3.3,
+   "c": 64
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 20,
+   "label": "пакетик ≈20 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_oregano",
+  "name": "Орегано сушёный",
+  "category": "Специи",
+  "unit": "g",
+  "nutr": {
+   "kcal": 265,
+   "p": 9,
+   "f": 4.3,
+   "c": 68.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 10,
+   "label": "пакетик ≈10 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_chili",
+  "name": "Перец чили хлопья",
+  "category": "Специи",
+  "unit": "g",
+  "nutr": {
+   "kcal": 318,
+   "p": 12,
+   "f": 17.3,
+   "c": 56.6
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 20,
+   "label": "пакетик ≈20 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_bay_leaf",
+  "name": "Лавровый лист",
+  "category": "Специи",
+  "unit": "g",
+  "nutr": {
+   "kcal": 313,
+   "p": 7.6,
+   "f": 8.4,
+   "c": 75
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 10,
+   "label": "пакетик ≈10 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ }
+]
