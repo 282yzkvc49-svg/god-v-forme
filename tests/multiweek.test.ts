@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { applyOps, dataMigrationOps, storesToData } from '../src/state/model';
 import type { Op } from '../src/state/idb';
-import type { AppData, MealSlot } from '../src/state/types';
+import type { AppData, MealCard, MealCardPart, MealSlot } from '../src/state/types';
 import { MEAL_SLOTS } from '../src/state/types';
 import { addDays, range } from '../src/lib/dates';
 import {
@@ -139,9 +139,9 @@ test('многонедельный сценарий: 24.11 – 10.01, утвер
     if (kind === 'relax') { assert.ok(pd.relax, `${date}: релакс-день`); continue; }
     assert.ok(pd.mealCards, `${date}: меню`);
     for (const s of ['lunch', 'dinner'] as MealSlot[]) {
-      const c = pd.mealCards![s];
+      const c: MealCard | undefined = pd.mealCards![s];
       assert.ok(c && !c.cancelled && c.title !== 'Нужно выбрать блюдо', `${date} ${s}: ${c?.title}`);
-      const lib = c.parts.find((p) => p.dishId.startsWith('lib-'))?.dishId.slice(4);
+      const lib = c!.parts.find((p: MealCardPart) => p.dishId.startsWith('lib-'))?.dishId.slice(4);
       if (lib && LIB[lib]?.kind === 'main' && date > '2026-11-30') {
         const prev = mains.get(lib);
         if (prev) assert.ok((Date.parse(date) - Date.parse(prev)) / 864e5 < 8 || (Date.parse(date) - Date.parse(prev)) / 864e5 >= 28, `${lib}: ${prev} и ${date} — повтор раньше 4 недель`);
