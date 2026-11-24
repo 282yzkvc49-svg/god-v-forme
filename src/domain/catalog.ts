@@ -265,21 +265,21 @@ for (const r of LIB_RECIPES) DISHES[libDishId(r.id)] = libDish(libEff(r).r);
  * Добавки к дню — простые продукты без готовки (кроме яиц): доводят калорийность и белок дня до цели и
  * доедают остатки упаковок. Подбираются планировщиком к перекусу, обеду или завтраку.
  */
-export interface Addon { id: string; p: string; q: number; slot: MealSlot; title: string; steps?: string[] }
+export interface Addon { id: string; p: string; q: number; slot: MealSlot; title: string; group: 'dairy' | 'nuts' | 'fruit' | 'bread' | 'egg'; steps?: string[] }
 export const ADDONS: Addon[] = [
-  { id: 'add-curd', p: 'curd', q: 200, slot: 'snack', title: 'Творог 5%, 200 г' },
-  { id: 'add-greek', p: 'l_greek_yogurt', q: 200, slot: 'snack', title: 'Греческий йогурт, 200 г' },
-  { id: 'add-yogurt', p: 'yogurt', q: 250, slot: 'snack', title: 'Йогурт натуральный, 250 г' },
-  { id: 'add-kefir', p: 'l_kefir', q: 250, slot: 'snack', title: 'Кефир, 250 г' },
-  { id: 'add-almonds', p: 'almonds', q: 30, slot: 'snack', title: 'Миндаль, 30 г' },
-  { id: 'add-walnuts', p: 'walnuts', q: 25, slot: 'snack', title: 'Грецкие орехи, 25 г' },
-  { id: 'add-pumpkin', p: 'l_pumpkin_seeds', q: 25, slot: 'snack', title: 'Тыквенные семечки, 25 г' },
-  { id: 'add-banana', p: 'banana', q: 120, slot: 'snack', title: 'Банан' },
-  { id: 'add-apple', p: 'apple', q: 150, slot: 'snack', title: 'Яблоко' },
-  { id: 'add-bread', p: 'bread', q: 60, slot: 'lunch', title: 'Хлеб на закваске, 2 ломтика (60 г)' },
-  { id: 'add-rye', p: 'l_bread_rye', q: 60, slot: 'lunch', title: 'Ржаной хлеб, 2 ломтика (60 г)' },
-  { id: 'add-eggs', p: 'egg', q: 2, slot: 'breakfast', title: '2 варёных яйца', steps: ['Сварить 9–10 минут (можно накануне), остудить в холодной воде'] },
-  { id: 'add-cheese', p: 'l_cheese_light', q: 30, slot: 'breakfast', title: 'Сыр 15%, 30 г' },
+  { id: 'add-curd', p: 'curd', q: 200, slot: 'snack', group: 'dairy', title: 'Творог 5%, 200 г' },
+  { id: 'add-greek', p: 'l_greek_yogurt', q: 200, slot: 'snack', group: 'dairy', title: 'Греческий йогурт, 200 г' },
+  { id: 'add-yogurt', p: 'yogurt', q: 250, slot: 'snack', group: 'dairy', title: 'Йогурт натуральный, 250 г' },
+  { id: 'add-kefir', p: 'l_kefir', q: 250, slot: 'snack', group: 'dairy', title: 'Кефир, 250 г' },
+  { id: 'add-almonds', p: 'almonds', q: 30, slot: 'snack', group: 'nuts', title: 'Миндаль, 30 г' },
+  { id: 'add-walnuts', p: 'walnuts', q: 25, slot: 'snack', group: 'nuts', title: 'Грецкие орехи, 25 г' },
+  { id: 'add-pumpkin', p: 'l_pumpkin_seeds', q: 25, slot: 'snack', group: 'nuts', title: 'Тыквенные семечки, 25 г' },
+  { id: 'add-banana', p: 'banana', q: 120, slot: 'snack', group: 'fruit', title: 'Банан' },
+  { id: 'add-apple', p: 'apple', q: 150, slot: 'snack', group: 'fruit', title: 'Яблоко' },
+  { id: 'add-bread', p: 'bread', q: 60, slot: 'lunch', group: 'bread', title: 'Хлеб на закваске, 2 ломтика (60 г)' },
+  { id: 'add-rye', p: 'l_bread_rye', q: 60, slot: 'lunch', group: 'bread', title: 'Ржаной хлеб, 2 ломтика (60 г)' },
+  { id: 'add-eggs', p: 'egg', q: 2, slot: 'breakfast', group: 'egg', title: '2 варёных яйца', steps: ['Сварить 9–10 минут (можно накануне), остудить в холодной воде'] },
+  { id: 'add-cheese', p: 'l_cheese_light', q: 30, slot: 'breakfast', group: 'dairy', title: 'Сыр 15%, 30 г' },
 ];
 export const ADDON: Record<string, Addon> = Object.fromEntries(ADDONS.map((a) => [a.id, a]));
 for (const a of ADDONS) {

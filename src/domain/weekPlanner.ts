@@ -14,7 +14,7 @@ import type { Op } from '../state/idb';
 import type { AppData, MealSlot } from '../state/types';
 import { MEAL_SLOTS } from '../state/types';
 import { addDays, daysInMonth, diffDays, fmtShort, isWeekend, range, type ISODate } from '../lib/dates';
-import { ADDON, ADDONS, AV_SUBS, DISHES, LIB_RECIPES, PRODUCTS, TEMPLATE, avSub, buyInfo, dishNutrition, type Product } from './catalog';
+import { ADDON, ADDONS, AV_SUBS, LIB_RECIPES, PRODUCTS, TEMPLATE, avSub, buyInfo, dishNutrition, libEff, type Product } from './catalog';
 import type { LibRecipe } from './recipeCheck';
 import { libNutrition } from './recipeLib';
 import { BUDGET_RUB, KCAL_TARGET, setWeeklyHook, type ReplanResult } from './plan';
@@ -33,6 +33,8 @@ export const DAY_KCAL_MIN = KCAL_TARGET - 150;
 export const DAY_KCAL_MAX = KCAL_TARGET + 150;
 export const DAY_PROTEIN_TARGET = Number((TEMPLATE.source as { protein_target?: number }).protein_target ?? 165);
 export const DAY_PROTEIN_MIN = DAY_PROTEIN_TARGET - 15;
+/** Жиры — не больше 40% калорийности дня. */
+export const DAY_FAT_MAX_SHARE = 0.4;
 /** Обед или ужин, который ещё не составлен (соседняя неделя): средние значения основного блюда. */
 const MAIN_UNKNOWN: N = { kcal: 650, p: 50, f: 22, c: 60 };
 const SNACK_AVG: N = { kcal: 300, p: 22, f: 10, c: 30 };
@@ -83,7 +85,8 @@ export function dayNutrition(data: AppData, date: ISODate, weeks?: WeekPlan[]): 
   }
   const r = round(n);
   const complete = unknown.length === 0;
-  return { ...r, complete, unknown, ok: !complete || (r.kcal >= DAY_KCAL_MIN && r.kcal <= DAY_KCAL_MAX && r.p >= DAY_PROTEIN_MIN) };
+  const fatOk = r.kcal <= 0 || (r.f * 9) / r.kcal <= DAY_FAT_MAX_SHARE;
+  return { ...r, complete, unknown, ok: !complete || (r.kcal >= DAY_KCAL_MIN && r.kcal <= DAY_KCAL_MAX && r.p >= DAY_PROTEIN_MIN && fatOk) };
 }
 
 // ------------------------------------------------------------------ цены и прогноз запасов
@@ -379,6 +382,13 @@ function perishableUse(pool: Pool, r: LibRecipe, mult: number, date: ISODate): n
 }
 
 const FISH = ['белая рыба', 'жирная рыба', 'морепродукты', 'рыба'];
+const MEAT_FISH = ['Мясо и птица', 'Рыба и морепродукты'];
+/** Рецепт с заменой товара (нет на av.ru): лучше исходный; замена основного белка (кальмар → хек) — заметно хуже. */
+function subPenalty(r: LibRecipe): number {
+  const subs = libEff(r).subs;
+  if (!subs.length) return 0;
+  return subs.reduce((s, x) => s + (MEAT_FISH.includes(PRODUCTS[x.from]?.category ?? '') ? 2.5 : 0.6), 0);
+}
 
 // ------------------------------------------------------------------ раздача порций основных блюд
 
@@ -469,10 +479,12 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
     const perServingCost = marginalCost(pool, r, 1, cycle.cookDate) / r.servings;
     const sc = pref(r) + novelty(r) + jitter(r.id, salt) * 1.2
       - Math.abs(n.kcal - 690) / 140 + (n.p >= 45 ? 0.5 : 0)
+      - Math.max(0, (n.f * 9) / Math.max(1, n.kcal) - 0.35) * 12
       - Math.max(0, perServingCost - 230) / 90
       + perishableUse(pool, r, 1, cycle.cookDate) / 150
       + (r.servings >= 4 && r.servings <= 6 ? 0.5 : -0.5)
-      + (r.tags.includes('заморозка') ? 0.3 : 0);
+      + (r.tags.includes('заморозка') ? 0.3 : 0)
+      - subPenalty(r);
     base.set(r.id, sc);
   }
   const cand = [...mains].sort((a, b) => base.get(b.id)! - base.get(a.id)!).slice(0, 18);
@@ -481,10 +493,12 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
     const out: Opt[] = [{ r, n: r.servings, pen: 0 }];
     if (r.servings + 1 <= 6) out.push({ r, n: r.servings + 1, pen: 0.4 });
     if (r.servings - 1 >= 3) out.push({ r, n: r.servings - 1, pen: 0.4 });
+    // короткий цикл (3–4 приёма): половина партии, чтобы в обед и ужин были разные блюда
+    if (N0 <= 4 && r.servings >= 3) out.push({ r, n: 2, pen: 0.3 });
     if (r.storage.freeze && r.servings <= 3 && r.servings * 2 <= 6) out.push({ r, n: r.servings * 2, pen: 0.8 });
     return out;
   };
-  const maxExtra = cycle.beforeTrip ? 0 : 1;
+  const maxExtra = 1;
   const optCost = new Map<string, number>();
   const costOf = (o: Opt) => {
     const k = `${o.r.id}|${o.n}`;
@@ -497,6 +511,8 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
   const consider = (set: Opt[]) => {
     const sum = set.reduce((s, x) => s + x.n, 0);
     if (sum < N0 || sum > N0 + maxExtra) return;
+    // перед командировкой лишняя порция — только если её можно заморозить
+    if (cycle.beforeTrip && sum > N0 && !set.some((x) => x.r.storage.freeze)) return;
     const proteins = new Set(set.map((x) => x.r.protein));
     const fish = set.some((x) => FISH.includes(x.r.protein));
     const devices = new Set(set.flatMap((x) => x.r.equipment));
@@ -509,6 +525,7 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
       - (sum - N0) * 0.7 - Math.max(0, active - 110) / 20 - Math.abs(kcal - 690) / 120
       - Math.max(0, cost - allowance * 0.65) / 400;
     if (set.length === 1 && N0 > 4) sc -= 3;
+    if (set.length === 1 && N0 >= 3) sc -= 2;
     if (set.length === 3 && N0 <= 6) sc -= 1.5;
     ranked.push({ set, s: sc });
   };
@@ -522,9 +539,20 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
   ranked.sort((a, b) => b.s - a.s);
   let chosen: Opt[] = [];
   let assigned: Assigned | null = null;
+  let bestQ = -Infinity;
   for (const x of ranked.slice(0, 60)) {
     const as = distribute(cycle, x.set.map((o) => ({ r: o.r, n: o.n })));
-    if (as.ok) { chosen = x.set; assigned = as; break; }
+    if (!as.ok) continue;
+    // качество раздачи: одно блюдо в обед и ужин одного дня, тот же приём подряд
+    let dup = 0, rep = 0;
+    for (const s of cycle.slots) {
+      const id = as.meals.get(`${s.date}|${s.slot}`);
+      if (s.slot === 'dinner' && as.meals.get(`${s.date}|lunch`) === id) dup++;
+      if (as.meals.get(`${addDays(s.date, -1)}|${s.slot}`) === id) rep++;
+    }
+    const q = x.s - dup * 2 - rep * 0.6;
+    if (q > bestQ) { bestQ = q; chosen = x.set; assigned = as; }
+    if (q >= ranked[0].s - 0.01) break;
   }
   if (!assigned) {
     // ровно не сходится — всё, что есть, по порядку; недостающее — проблема с вариантами
@@ -578,7 +606,7 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
     pen += Math.abs(DAY_KCAL - (roomForAddon ? 120 : 0) - n.kcal) / 300;
     const pLow = roomForAddon ? DAY_PROTEIN_MIN - 20 : DAY_PROTEIN_MIN;
     if (n.p < pLow) pen += (pLow - n.p) / 5;
-    if (n.kcal > 0 && (n.f * 9) / n.kcal > 0.38) pen += ((n.f * 9) / n.kcal - 0.38) * 20;
+    if (n.kcal > 0 && (n.f * 9) / n.kcal > 0.36) pen += ((n.f * 9) / n.kcal - 0.36) * 30;
     return pen;
   };
   for (const f of [...cycle.fresh].sort((a, b) => a.date.localeCompare(b.date) || (a.slot === 'breakfast' ? -1 : 1))) {
@@ -595,7 +623,7 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
       if (r.servings >= 2 && !two) continue; // вторую порцию некуда поставить
       const lastD = used.get(r.id);
       const gap = lastD ? diffDays(f.date, lastD) : 99;
-      let s = pref(r) + jitter(r.id, `${salt}|${f.date}|${f.slot}`) * 1.5;
+      let s = pref(r) + jitter(r.id, `${salt}|${f.date}|${f.slot}`) * 1.5 - subPenalty(r);
       if (kind === 'breakfast') s += gap < 7 ? -15 : gap < 14 ? -3 : Math.min(gap, 30) / 30;
       else s += gap < 3 ? -15 : gap < 7 ? -2 : Math.min(gap, 14) / 14;
       s += r.tags.includes('дома') ? (weekend ? 1 : -5) : r.tags.includes('на работу') ? (weekend ? 0 : 1) : 0;
@@ -634,6 +662,7 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
   // добавки: дни, где завтрак и перекус — этой недели
   const freshDays = [...new Set(cycle.fresh.map((f) => f.date))].sort();
   let prevAdd: string[] = [];
+  const addCount = new Map<string, number>();
   for (const d of freshDays) {
     let n = Z();
     for (const s of MEAL_SLOTS) {
@@ -641,7 +670,8 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
       if (m) n = plus(n, mealN(m));
       else if ((s === 'lunch' || s === 'dinner') && dayKind(data, d, trips) === 'home') n = plus(n, MAIN_UNKNOWN);
     }
-    const add = pickAddons(n, pool, d, prevAdd, (slot) => !!meals[d]?.[slot]);
+    const add = pickAddons(n, pool, d, prevAdd, (slot) => !!meals[d]?.[slot], addCount);
+    for (const a of add) addCount.set(a, (addCount.get(a) ?? 0) + 1);
     for (const a of add) {
       const slot = meals[d]?.[ADDON[a].slot] ? ADDON[a].slot : 'snack';
       const m = meals[d]?.[slot];
@@ -669,9 +699,9 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
   for (const d of freshDays) {
     const dn = dayNutrition(data, d, all);
     if (!dn.complete) continue;
-    if (!dn.ok) badDays.push(`${fmtShort(d)}: ${dn.kcal} ккал, белок ${dn.p} г`);
+    if (!dn.ok) badDays.push(`${fmtShort(d)}: ${dn.kcal} ккал, Б ${dn.p} / Ж ${dn.f} г`);
   }
-  if (badDays.length) problems.push(`Дни вне цели (${DAY_KCAL_MIN}–${DAY_KCAL_MAX} ккал, белок от ${DAY_PROTEIN_MIN} г): ${badDays.join('; ')}. Замените завтрак или перекус.`);
+  if (badDays.length) problems.push(`Дни вне цели (${DAY_KCAL_MIN}–${DAY_KCAL_MAX} ккал, белок от ${DAY_PROTEIN_MIN} г, жиры до 40%): ${badDays.join('; ')}. Замените завтрак, перекус или блюдо.`);
   w.estimate = estimateWeek(data, w, today, opts.now);
   if (w.estimate.cost > w.estimate.allowance * 1.1) problems.push(`Закупка ≈${w.estimate.cost.toLocaleString('ru-RU')} ₽ — больше доли месячного бюджета на эти дни (≈${w.estimate.allowance.toLocaleString('ru-RU')} ₽). Варианты дешевле — в разделе «Меню».`);
   const frozen = cook.reduce((s, c) => s + c.uses.filter((u) => u.storage === 'freeze').length + Math.max(0, c.servings - c.uses.length), 0);
@@ -682,9 +712,10 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
 }
 
 /** Добавки к дню: до двух простых продуктов, чтобы дотянуть ккал и белок; остатки упаковок — в первую очередь. */
-function pickAddons(day: N, pool: Pool, date: ISODate, prev: string[], hasSlot: (s: MealSlot) => boolean): string[] {
+function pickAddons(day: N, pool: Pool, date: ISODate, prev: string[], hasSlot: (s: MealSlot) => boolean, count: Map<string, number> = new Map()): string[] {
   const fit = (n: N) => {
     let pen = Math.abs(DAY_KCAL - n.kcal) / 80;
+    if (n.kcal > 0 && (n.f * 9) / n.kcal > 0.36) pen += ((n.f * 9) / n.kcal - 0.36) * 25;
     if (n.kcal > DAY_KCAL_MAX) pen += (n.kcal - DAY_KCAL_MAX) / 25;
     if (n.kcal < DAY_KCAL_MIN) pen += (DAY_KCAL_MIN - n.kcal) / 40;
     pen += Math.max(0, DAY_PROTEIN_TARGET - n.p) / 6;
@@ -706,12 +737,13 @@ function pickAddons(day: N, pool: Pool, date: ISODate, prev: string[], hasSlot: 
   let best: string[] = [], bestF = f0;
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
-    const fa = fit(plus(day, addonN(a.id))) + cost(a) / 120 + (prev.includes(a.id) ? 0.3 : 0);
+    const often = (id: string) => (count.get(id) ?? 0) * 0.35;
+    const fa = fit(plus(day, addonN(a.id))) + cost(a) / 120 + (prev.includes(a.id) ? 0.3 : 0) + often(a.id);
     if (fa < bestF) { bestF = fa; best = [a.id]; }
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j];
-      if (a.p === b.p) continue;
-      const fb = fit(plus(plus(day, addonN(a.id)), addonN(b.id))) + (cost(a) + cost(b)) / 120 + (prev.includes(a.id) ? 0.3 : 0) + (prev.includes(b.id) ? 0.3 : 0) + 0.4;
+      if (a.p === b.p || a.group === b.group) continue;
+      const fb = fit(plus(plus(day, addonN(a.id)), addonN(b.id))) + (cost(a) + cost(b)) / 120 + (prev.includes(a.id) ? 0.3 : 0) + (prev.includes(b.id) ? 0.3 : 0) + 0.8 + often(a.id) + often(b.id);
       if (fb < bestF) { bestF = fb; best = [a.id, b.id]; }
     }
   }
@@ -736,9 +768,9 @@ export function weekIssues(data: AppData, w0: WeekPlan, today: ISODate): string[
   for (const d of Object.keys(w.meals).sort()) {
     if (d < today) continue;
     const dn = dayNutrition(data, d, all);
-    if (dn.complete && !dn.ok) bad.push(`${fmtShort(d)}: ${dn.kcal} ккал, белок ${dn.p} г`);
+    if (dn.complete && !dn.ok) bad.push(`${fmtShort(d)}: ${dn.kcal} ккал, Б ${dn.p} / Ж ${dn.f} г`);
   }
-  if (bad.length) out.push(`Дни вне цели (${DAY_KCAL_MIN}–${DAY_KCAL_MAX} ккал, белок от ${DAY_PROTEIN_MIN} г): ${bad.join('; ')}.`);
+  if (bad.length) out.push(`Дни вне цели (${DAY_KCAL_MIN}–${DAY_KCAL_MAX} ккал, белок от ${DAY_PROTEIN_MIN} г, жиры до 40%): ${bad.join('; ')}.`);
   const empty = Object.entries(w.meals).flatMap(([d, s]) => (['lunch', 'dinner'] as MealSlot[]).filter((x) => s[x] && !s[x]!.r && s[x]!.title === 'Нужно выбрать блюдо').map((x) => `${fmtShort(d)} ${x === 'lunch' ? 'обед' : 'ужин'}`));
   if (empty.length) out.push(`Нет блюда: ${empty.join(', ')}.`);
   return out;
