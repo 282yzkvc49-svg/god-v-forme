@@ -1534,5 +1534,101 @@
   "edible_ratio": 1,
   "piece_g": null,
   "av": "unverified"
+ },
+ {
+  "id": "l_corn_frozen",
+  "name": "Кукуруза сладкая замороженная",
+  "category": "Овощи замороженные",
+  "unit": "g",
+  "nutr": {
+   "kcal": 86,
+   "p": 3.3,
+   "f": 1.4,
+   "c": 18.7
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 400,
+   "label": "пакет 400 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_polenta",
+  "name": "Крупа кукурузная (полента)",
+  "category": "Крупы и бобовые",
+  "unit": "g",
+  "nutr": {
+   "kcal": 362,
+   "p": 8.1,
+   "f": 3.6,
+   "c": 76.9
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 500,
+   "label": "пачка 500 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_rice_noodles",
+  "name": "Лапша рисовая",
+  "category": "Крупы и бобовые",
+  "unit": "g",
+  "nutr": {
+   "kcal": 364,
+   "p": 6,
+   "f": 0.6,
+   "c": 80.2
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 250,
+   "label": "пачка 250 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_cauliflower",
+  "name": "Капуста цветная замороженная",
+  "category": "Овощи замороженные",
+  "unit": "g",
+  "nutr": {
+   "kcal": 25,
+   "p": 1.9,
+   "f": 0.3,
+   "c": 5
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 400,
+   "label": "пакет 400 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
  }
 ]
