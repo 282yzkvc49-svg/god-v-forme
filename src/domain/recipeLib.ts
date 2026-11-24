@@ -1,14 +1,11 @@
 // Библиотека рецептов, встроенная в приложение (работает офлайн): src/data/library/*.json.
 // Пищевая ценность считается по ингредиентам каталога; отметка «проверено» — только если отпечаток рецепта
 // совпадает с отчётом автоматической проверки (npm run check:library), то есть рецепт не менялся после проверки.
-import breakfasts from '../data/library/breakfasts.json';
-import snacks from '../data/library/snacks.json';
-import mains from '../data/library/mains.json';
 import report from '../data/library/check_report.json';
-import { PRODUCTS } from './catalog';
+import { LIB_RECIPES, PRODUCTS } from './catalog';
 import { recipeHash, recipeNutrition, type LibRecipe, type RecipeNutr } from './recipeCheck';
 
-export const LIBRARY: LibRecipe[] = [...(breakfasts as LibRecipe[]), ...(snacks as LibRecipe[]), ...(mains as LibRecipe[])];
+export const LIBRARY: LibRecipe[] = LIB_RECIPES;
 export const LIB_BY_ID: Record<string, LibRecipe> = Object.fromEntries(LIBRARY.map((r) => [r.id, r]));
 
 interface ReportEntry { id: string; hash: string; ok: boolean; errors: string[]; warnings: string[] }

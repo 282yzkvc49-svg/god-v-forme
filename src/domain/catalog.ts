@@ -5,6 +5,10 @@ import tpl from '../data/plan_template.json';
 import type { AvProductRec, MealSlot, ProductSub } from '../state/types';
 import { EXTRA_DISHES } from './extraDishes';
 import libIngredients from '../data/library/ingredients.json';
+import libBreakfasts from '../data/library/breakfasts.json';
+import libSnacks from '../data/library/snacks.json';
+import libMains from '../data/library/mains.json';
+import type { LibRecipe } from './recipeCheck';
 
 export interface Nutr { kcal: number; p: number; f: number; c: number }
 
@@ -74,6 +78,8 @@ export interface Dish {
   nutrition_estimate?: Nutr;
   /** Не из комплекта: добавлено корректировкой по фактическим покупкам. */
   extra?: boolean;
+  /** Рецепт библиотеки (id в библиотеке): ингредиенты — на одну порцию партии. */
+  library?: string;
 }
 
 export interface TplPart { dish: string; qty: number; fresh: boolean }
@@ -131,6 +137,25 @@ for (const raw of libIngredients as unknown as Partial<Product>[]) {
   PRODUCTS[p.id] = p;
 }
 export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.map((d) => [d.id, d]));
+
+// ------------------------------------------------------------------ библиотека рецептов как блюда меню
+
+export const LIB_RECIPES: LibRecipe[] = [...(libBreakfasts as unknown as LibRecipe[]), ...(libSnacks as unknown as LibRecipe[]), ...(libMains as unknown as LibRecipe[])];
+export const libDishId = (recipeId: string) => `lib-${recipeId}`;
+/** Рецепт библиотеки → блюдо меню (ингредиенты на одну порцию; партия — servings порций). */
+export function libDish(r: LibRecipe): Dish {
+  const st = r.storage;
+  const storageText = st.fridge_days === 0 ? 'Есть сразу' : `Холодильник до ${st.fridge_days} сут.${st.freeze ? `; морозилка до ${st.freeze_months} мес.` : '; не замораживать'}`;
+  return {
+    id: libDishId(r.id), title: r.title, short: r.title, category: r.kind, kind: r.kind === 'main' ? 'batch' : 'fresh', unit: 'portion',
+    unit_label: null, cooked_factor: null, serving_g: null,
+    ingredients: r.ingredients.map((i) => ({ product: i.p, qty: Math.round((i.q / r.servings) * 1000) / 1000, note: i.note ?? null })),
+    spices: [], steps: r.steps.map((x) => ({ text: x.eq ? `${x.eq}${x.temp ? `, ${x.temp}` : ''}: ${x.t}` : x.t, temperature_c: x.temp ?? null, minutes: x.min && x.min !== '—' ? x.min : null })),
+    method: r.equipment.join(' + '), storage: { place: 'fridge', days: st.fridge_days, freezable: st.freeze }, note: st.note ?? null, legacy: null,
+    active_minutes: r.time.active, portable: r.tags.includes('на работу'), storage_text: storageText, extra: true, library: r.id,
+  };
+}
+for (const r of LIB_RECIPES) DISHES[libDishId(r.id)] = libDish(r);
 
 // ------------------------------------------------------------------ замены недоступных товаров
 

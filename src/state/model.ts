@@ -10,11 +10,12 @@ import { BASE_START, PLAN_LENGTH, buildInstance, makePlanSettings, menuUpdatePen
 import { addDays, fmtShort } from '../lib/dates';
 import { planV8Ops } from '../domain/tripMove';
 import { planV9Ops } from '../domain/correction';
+import { planV10Ops } from '../domain/v2migration';
 import type { BackupRec, CookingEvent, MealCard, MealSlot, MigrationReport, PlanDay, ShoppingEvent, Trip } from './types';
 import { MEAL_LABELS, MEAL_SLOTS } from './types';
 import { DISHES, PRODUCTS, TEMPLATE } from '../domain/catalog';
 
-export const DATA_VERSION = 9;
+export const DATA_VERSION = 10;
 
 export function emptyData(): AppData {
   const d: any = { ready: false, settings: defaultSettings(), meta: null };
@@ -102,6 +103,8 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   if (v < 7) step(planV7Ops(data, today, now, appVersion));
   if (v < 8) step(planV8Ops(data, today, now, appVersion));
   if (v < 9) step(planV9Ops(data, today, now, appVersion));
+  // v10 (версия 2.0): недельный цикл питания, резервная копия до изменений
+  if (v < 10 && today >= '2026-11-24') step(planV10Ops(data, today, now, appVersion, { toStores: (d) => dataToStores(d), apply: applyOps }));
   if (v < 2) {
     // v2: у позиции «Апельсины» из стартовых закупок убрано примечание (по решению пользователя)
     for (const e of Object.values(data.shoppingEvents)) {

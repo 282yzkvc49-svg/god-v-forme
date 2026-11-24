@@ -1,4 +1,5 @@
 import type { ISODate } from '../lib/dates';
+import type { RecipePref, WeeklySettings } from '../domain/weekly';
 
 export type MealSlot = 'breakfast' | 'lunch' | 'snack' | 'dinner';
 export const MEAL_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'snack', 'dinner'];
@@ -480,6 +481,10 @@ export interface Settings {
   corrections?: Record<string, string> | null;
   /** id резервной копии корректировки, отчёт о которой ещё не показан. */
   correctionReportUnseen?: string | null;
+  /** Версия 2.0: недельный цикл (закупка и готовка раз в неделю, меню из библиотеки рецептов). */
+  weekly?: WeeklySettings | null;
+  /** Библиотека рецептов: избранное, оценки, «больше не предлагать». */
+  recipePrefs?: Record<string, RecipePref> | null;
 }
 
 export interface PlanSettings {

@@ -824,6 +824,11 @@ export interface ReplanResult {
   conflicts?: string[];
 }
 
+type WeeklyHook = (data: AppData, today: ISODate, opts: { overwriteMarked?: boolean; from?: ISODate }) => ReplanResult | null;
+let weeklyHook: WeeklyHook | null = null;
+/** Недельный цикл (версия 2.0) подключает свой пересчёт плана. */
+export function setWeeklyHook(fn: WeeklyHook) { weeklyHook = fn; }
+
 export function hasDayMarks(data: AppData, date: ISODate): boolean {
   return Object.values(data.taskStatus).some((s) => s.status !== 'planned' && (s.taskId.startsWith(`meal:${date}:`) || s.taskId === `box:${date}`));
 }
@@ -834,6 +839,8 @@ export function hasDayMarks(data: AppData, date: ISODate): boolean {
  * force — заменить и прошедшие дни (миграция: даты те же, меню подробнее).
  */
 export function replanOps(data: AppData, cfg: PlanSettings, today: ISODate, opts: { force?: boolean; now?: string; ctx?: PlanContext; keepPast?: boolean; overwriteMarked?: boolean; from?: ISODate } = {}): ReplanResult {
+  // версия 2.0: с даты перехода план строится по неделям (src/domain/weekly.ts), а не по шаблону на 30 дней
+  if (weeklyHook) { const w = weeklyHook(data, today, { overwriteMarked: opts.overwriteMarked, from: opts.from }); if (w) return w; }
   if (opts.keepPast) return replanFromToday(data, cfg, today, opts);
   const inst = buildInstance(cfg, opts.ctx ?? planContext(data, today));
   const ops: Op[] = [];

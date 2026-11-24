@@ -285,8 +285,13 @@ function buildMarkdown(data: AppData, o: ReportOptions, j: any, rows: TrainingRo
   }
   L.push('');
   L.push('## Текущие шаблоны тренировок');
+  // вес гири бывает числом (12) или диапазоном ([12, 16]); без веса — ничего не пишем
+  const weightText = (w: unknown): string => {
+    if (Array.isArray(w)) { const a = w.filter((x) => typeof x === 'number'); return a.length ? `, ${a[0] === a[a.length - 1] ? a[0] : a.join('–')} кг` : ''; }
+    return typeof w === 'number' && w > 0 ? `, ${w} кг` : '';
+  };
   for (const t of j.current_plan.templates) {
-    L.push(`- **${t.name}** (\`${t.template_id}\`): ${t.items.map((it: any) => `${it.name} (\`${it.exercise_id}\`) ${it.minutes != null ? `${Array.isArray(it.minutes) ? it.minutes.join('–') : it.minutes} мин` : `${it.sets}×${it.reps ?? `${it.seconds} сек`}`}${it.per_side ? ` на ${it.per_side}` : ''}${it.weight_kg ? `, ${it.weight_kg[0] === it.weight_kg[1] ? it.weight_kg[0] : it.weight_kg.join('–')} кг` : ''}`).join('; ')}`);
+    L.push(`- **${t.name}** (\`${t.template_id}\`): ${t.items.map((it: any) => `${it.name} (\`${it.exercise_id}\`) ${it.minutes != null ? `${Array.isArray(it.minutes) ? it.minutes.join('–') : it.minutes} мин` : `${it.sets}×${it.reps ?? `${it.seconds} сек`}`}${it.per_side ? ` на ${it.per_side}` : ''}${weightText(it.weight_kg)}`).join('; ')}`);
   }
   L.push('');
   L.push('## Запрос');

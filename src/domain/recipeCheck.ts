@@ -52,7 +52,7 @@ export const PROTEINS = [
 export const TARGETS: Record<LibKind, { kcal: [number, number]; pMin: number; activeMax: number; servings: [number, number] }> = {
   breakfast: { kcal: [480, 760], pMin: 30, activeMax: 10, servings: [1, 3] },
   snack: { kcal: [220, 460], pMin: 15, activeMax: 5, servings: [1, 3] },
-  main: { kcal: [520, 800], pMin: 40, activeMax: 45, servings: [2, 6] },
+  main: { kcal: [520, 800], pMin: 40, activeMax: 45, servings: [1, 6] },
 };
 
 /** Исключённые продукты (по согласованию): мёд, дорада, сардины, скумбрия, алкоголь, кофе, энергетики, лимонады, сахар. */
@@ -231,6 +231,7 @@ export function checkRecipe(r: LibRecipe, products: Record<string, Product>): Re
     if (r.ingredients.some((i) => ['cucumber', 'avocado'].includes(i.p))) warn('свежие огурцы или авокадо не замораживаются — хранить отдельно');
   }
   if (r.kind === 'main' && !st?.freeze) warn('основное блюдо не замораживается — только для первых дней после готовки');
+  if (r.kind === 'main' && r.servings === 1) warn('одна порция — блюдо не для партии, а из запасов или на один раз');
   if ((fish || meat) && r.kind === 'main' && !/\d+ ?°C|непрозрачн|расслаива|розов|мягк/.test(r.steps.map((s) => s.t).join(' '))) warn('нет признака готовности мяса или рыбы');
 
   return { id: r.id, hash: recipeHash(r), ok: errors.length === 0, errors, warnings, nutr };
@@ -265,6 +266,12 @@ export function checkLibrary(recipes: LibRecipe[], products: Record<string, Prod
         duplicates.push({ a: recipes[i].id, b: recipes[j].id, sim: Math.round(sim * 100) / 100 });
         byId.get(recipes[j].id)!.errors.push(`почти тот же состав, что у ${recipes[i].id} (${Math.round(sim * 100)}%)`);
       } else if (sim >= 0.8) byId.get(recipes[j].id)!.warnings.push(`похож по составу на ${recipes[i].id} (${Math.round(sim * 100)}%)`);
+      else {
+        // отличается одной заменой ингредиента (например, другой фрукт) — повод посмотреть вручную
+        const a = new Set(vecs[i].keys()), b = new Set(vecs[j].keys());
+        const diff = [...a].filter((x) => !b.has(x)).length + [...b].filter((x) => !a.has(x)).length;
+        if (a.size >= 3 && b.size >= 3 && diff <= 2) byId.get(recipes[j].id)!.warnings.push(`отличается от ${recipes[i].id} одним ингредиентом`);
+      }
     }
   }
   for (const c of checks) c.ok = c.errors.length === 0;
