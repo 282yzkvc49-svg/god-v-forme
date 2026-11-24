@@ -1630,5 +1630,29 @@
   "edible_ratio": 1,
   "piece_g": null,
   "av": "unverified"
+ },
+ {
+  "id": "l_persimmon",
+  "name": "Хурма",
+  "category": "Фрукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 70,
+   "p": 0.6,
+   "f": 0.2,
+   "c": 18.6
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 500,
+   "label": "≈3 плода, по весу"
+  },
+  "shelf_days": 7,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 0.95,
+  "piece_g": 170,
+  "av": "unverified"
  }
 ]
