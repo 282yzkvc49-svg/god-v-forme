@@ -99,6 +99,7 @@ async function step(name, fn) {
 }
 
 let before = {};
+let history = {};
 await step(`Установлена ${OLD.version}: офлайн-кэш, база устройства, завтрак 24.11 отмечен, есть вес`, async () => {
   await page.goto(`${BASE}?today=2026-11-24#/today`);
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -118,6 +119,19 @@ await step(`Установлена ${OLD.version}: офлайн-кэш, база
   const meta = (await getAll('meta'))[0];
   assert(meta.dataVersion === 9, `данные 1.9.1: версия ${meta.dataVersion}`);
   before = { taskStatus: await count('taskStatus'), weights: await count('weights'), backups: await count('backups'), photos: await count('photos'), trainingLogs: await count('trainingLogs') };
+  // снимок истории до обновления: дни питания по 24.11, отметки, тренировки, вес, фото, замеры, запасы, командировки
+  const pick = (rows, f) => JSON.stringify(rows.filter(f).sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y))));
+  history = {
+    days: pick(await getAll('planDays'), (x) => x.date <= '2026-11-24'),
+    marks: pick(await getAll('taskStatus'), () => true),
+    trainingLogs: pick(await getAll('trainingLogs'), () => true),
+    weights: pick(await getAll('weights'), () => true),
+    photos: pick(await getAll('photos'), () => true),
+    measurements: pick(await getAll('measurements'), () => true),
+    stockKeys: JSON.stringify((await getAll('stock')).map((x) => x.productId).sort()),
+    pastCooks: pick(await getAll('cookingEvents'), (x) => x.date < '2026-11-24'),
+    trips: (await getAll('trips')).map((t) => `${t.from}–${t.to}`).sort().join(', '),
+  };
   await page.screenshot({ path: path.join(shots, '30-pwa-v2-before.png'), fullPage: true });
 });
 
@@ -130,7 +144,34 @@ await step(`Выложена ${NEW_VERSION}: переход на недельн�
   assert(backups.length === before.backups + 1, `копий: ${backups.length}`);
   assert(await count('weights') === before.weights && await count('photos') === before.photos, 'вес и фото на месте');
   assert(await count('taskStatus') === before.taskStatus, 'отметки на месте');
+  const pick = (rows, f) => JSON.stringify(rows.filter(f).sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y))));
+  assert(pick(await getAll('planDays'), (x) => x.date <= '2026-11-24') === history.days, 'история питания по 24.11 — без изменений');
+  assert(pick(await getAll('taskStatus'), () => true) === history.marks, 'отметки — без изменений');
+  assert(pick(await getAll('trainingLogs'), () => true) === history.trainingLogs, 'тренировки — без изменений');
+  assert(pick(await getAll('weights'), () => true) === history.weights, 'вес — без изменений');
+  assert(pick(await getAll('photos'), () => true) === history.photos, 'фото — без изменений');
+  assert(pick(await getAll('measurements'), () => true) === history.measurements, 'замеры — без изменений');
+  assert(pick(await getAll('cookingEvents'), (x) => x.date < '2026-11-24') === history.pastCooks, 'прошедшие готовки — без изменений');
+  const stockKeys = (await getAll('stock')).map((x) => x.productId);
+  assert(JSON.parse(history.stockKeys).every((k) => stockKeys.includes(k)), 'все позиции запасов на месте');
+  const trips = (await getAll('trips')).map((t) => `${t.from}–${t.to}`).sort().join(', ');
+  assert(trips === '2026-11-18–2026-11-20, 2026-12-01–2026-12-02, 2026-12-15–2026-12-22', `командировки по вашему сообщению 24.11: ${trips} (было: ${history.trips})`);
   await page.screenshot({ path: path.join(shots, '31-pwa-v2-report.png'), fullPage: true });
+  // файл копии до обновления: сохраняется и читается обратно — в нём данные до перехода (неделя 2.0 ещё не создана)
+  await page.getByRole('button', { name: 'Файл копии до обновления' }).click();
+  const dl = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Сохранить в «Файлы»' }).click();
+  const file = await dl;
+  assert(/god-v-forme_backup_do-2\.0_.*\.zip$/.test(file.suggestedFilename()), `имя файла: ${file.suggestedFilename()}`);
+  const zipPath = path.join(root, '.cache', file.suggestedFilename());
+  await file.saveAs(zipPath);
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(await fs.readFile(zipPath));
+  const bj = JSON.parse(await zip.file('backup.json').async('string'));
+  const st = bj.stores ?? bj;
+  const set = (st.settings ?? [])[0] ?? {};
+  assert(!set.weekly, 'в копии — данные до перехода (без недель 2.0)');
+  assert((st.weights ?? []).length === before.weights && (st.taskStatus ?? []).length === before.taskStatus, 'в копии — вес и отметки');
 });
 
 await step('Новый service worker, старый кэш удалён, повторный запуск ничего не меняет', async () => {

@@ -250,3 +250,29 @@ test('резервная копия (файл) с данными 2.0: недел
   // после восстановления переход не повторяется
   assert.equal(dataMigrationOps(restored, '2026-11-26', '2026-11-26T08:00:00.000Z', '2.0.0').length, 0);
 });
+
+test('прогноз бюджета учитывает все домашние приёмы: готовку, завтраки, перекусы и добавки — и совпадает с закупкой', async () => {
+  const { stepWeek, homePool } = await import('../src/domain/weekPlanner');
+  const { ADDON: AD } = await import('../src/domain/catalog');
+  const d = migrated();
+  for (const w of drafts(d).slice(0, 3)) {
+    const needs = weekNeeds(w, d);
+    const kinds = { breakfast: 0, snack: 0, add: 0, cook: 0 };
+    for (const [date, slots] of Object.entries(w.meals)) for (const [slot, m] of Object.entries(slots)) {
+      if (!m) continue;
+      for (const a of m.add ?? []) { assert.ok(needs.get(AD[a].p)?.uses.some((u) => u.includes(date.slice(8, 10))), `${w.id} ${date}: добавка ${a} в потребности`); kinds.add++; }
+      if (m.r && m.src === 'fresh') {
+        for (const i of LIB[m.r].ingredients) assert.ok(needs.has(i.p) || !!LIB[m.r] && (i.q === 0), `${w.id} ${date} ${slot}: ${i.p} из ${m.r}`);
+        kinds[slot as 'breakfast' | 'snack']++;
+      }
+      if (m.src === 'cook') kinds.cook++;
+    }
+    assert.ok(kinds.breakfast > 0 && kinds.snack > 0 && kinds.cook > 0, `${w.id}: ${J(kinds)}`);
+    // прогноз = закупка после подтверждения запасов (нужного по меню дома нет; замены — из того, что есть)
+    let z = d;
+    for (const r of weekStockRows(z, { ...w, status: 'approved' }, '2026-11-24')) z = applyOps(z, setRemainingOps(z, r.productId, 0, AT, '2026-11-24', null));
+    const st = stepWeek(z, w, homePool(z, '2026-11-24'), null);
+    const pur = computePurchase(z, { ...w, status: 'approved', stockConfirmedAt: AT });
+    assert.equal(st.cost, pur.total, `${w.id}: прогноз ${st.cost} = закупка ${pur.total}`);
+  }
+});

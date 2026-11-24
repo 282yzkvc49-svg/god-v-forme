@@ -2,7 +2,10 @@
 // Закупка появляется только после подтверждения фактических запасов. Если меню не сходится (порции, КБЖУ дня,
 // бюджет) — проблемы и варианты; «утвердить как есть» — только явным подтверждением.
 import { useMemo, useState } from 'react';
-import { useApp } from '../state/store';
+import { getAllPhotoBlobs, useApp } from '../state/store';
+import { storesToData } from '../state/model';
+import { buildBackupZip } from '../domain/zipfiles';
+import { saveFile } from '../lib/files';
 import * as W from '../state/weeklyActions';
 import { useToday } from '../lib/clock';
 import { href, useRoute } from '../app/router';
@@ -20,13 +23,37 @@ import {
 import { tripList } from '../domain/trips';
 import { ingrName } from '../domain/recipeLib';
 import { Disclosure, Empty, Note, PageHead, Seg, toast } from '../ui/kit';
-import { PiCheck, PiCookingPot, PiShoppingCart, PiSnowflake, PiArrowsClockwise, PiPackage, PiListChecks, PiX, PiWarning } from '../ui/icons';
+import { PiCheck, PiCookingPot, PiShoppingCart, PiSnowflake, PiArrowsClockwise, PiPackage, PiListChecks, PiX, PiWarning, PiDownloadSimple } from '../ui/icons';
 
 type Data = ReturnType<typeof useApp>;
 const STATUS = { draft: 'черновик', approved: 'утверждено' } as const;
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 const monthName = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 const nextMonth = (ym: string) => { const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+
+/** Файл копии данных до перехода на 2.0 (внутренняя копия перехода + фото): сохранить в «Файлы». */
+export function V2BackupButton() {
+  const data = useApp();
+  const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState<{ bytes: Uint8Array; name: string } | null>(null);
+  const id = weeklyOf(data)?.backupId ?? data.settings.weeklyOff?.weekly.backupId ?? null;
+  const b = id ? data.backups?.[id] : null;
+  if (!b) return null;
+  const prepare = async () => {
+    setBusy(true);
+    try {
+      const { bytes } = await buildBackupZip(storesToData(b.stores), await getAllPhotoBlobs(), b.appVersion, b.createdAt);
+      setFile({ bytes, name: `god-v-forme_backup_do-2.0_${b.createdAt.slice(0, 16).replace('T', '_').replace(':', '')}.zip` });
+    } catch (e: any) {
+      toast(`Ошибка: ${e?.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return file
+    ? <button className="btn small" onClick={async () => { const r = await saveFile(file.bytes, file.name, 'application/zip'); if (r !== 'cancelled') toast('Копия до обновления сохранена'); }}><PiDownloadSimple /> Сохранить в «Файлы»</button>
+    : <button className="btn small" disabled={busy} onClick={prepare}><PiDownloadSimple /> Файл копии до обновления</button>;
+}
 
 function BudgetCard({ month, today }: { month: string; today: ISODate }) {
   const data = useApp();
@@ -99,9 +126,12 @@ export function WeekHub() {
             <li>Релакс-дни: 29.11 и 27.12. Календарь теперь идёт дальше 30 дней.</li>
             <li>Следующие недели — черновики планировщика из библиотеки рецептов (300 проверенных рецептов): КБЖУ каждого дня в цели, без повторов основных блюд за 4 недели, с учётом остатков и бюджета. Утверждаете их вы, перед закупкой.</li>
             <li>Запасы: минтай ≈200 г и целая упаковка стручковой фасоли — по вашему сообщению; открытые неделю назад фасоль и томаты не используются; крупы, брокколи, вишня, йогурт, творог, масло — «уточнить».</li>
-            <li>История (прошедшие дни, отметки, тренировки, вес, фото) не менялась. Резервная копия до изменений сохранена.</li>
+            <li>История (прошедшие дни, отметки, тренировки, вес, фото) не менялась. Резервная копия до изменений сохранена — её можно сохранить файлом (кнопка ниже или «Настройки → Недельный цикл»).</li>
           </ul>
-          <button className="btn small" onClick={() => W.markWeeklyReportSeen()}><PiCheck /> Понятно</button>
+          <div className="btn-row">
+            <V2BackupButton />
+            <button className="btn small" onClick={() => W.markWeeklyReportSeen()}><PiCheck /> Понятно</button>
+          </div>
         </div>
       )}
       <div className="grid2">

@@ -21,6 +21,7 @@ import {
   PiBookOpen, PiChartLineUp, PiChatsCircle, PiGear, PiShoppingCart, PiTrash, PiCaretRight, PiShareNetwork, PiCalendarDots,
 } from '../ui/icons';
 import * as W from '../state/weeklyActions';
+import { V2BackupButton } from './Week';
 import { WEEKDAY_NAMES, weeklyOf } from '../domain/weekly';
 
 function WeeklySettingsGroup() {
@@ -43,6 +44,10 @@ function WeeklySettingsGroup() {
         </span>
       </label>
       <p className="hint">Пока место не указано, приложение ничего не предполагает и только показывает, сколько пакетов нужно. Генерация меню: планировщик приложения по проверенным рецептам библиотеки (без ИИ); новые недели можно составлять в чате с Claude. Генерация через API заложена на будущее и не подключена — ключи не нужны.</p>
+      <div className="field" style={{ marginTop: 12 }}>
+        <span className="field-label">Копия данных до перехода на 2.0</span>
+        <V2BackupButton />
+      </div>
       <RollbackV2 />
     </Group>
   );
@@ -74,7 +79,10 @@ function WeeklyOffGroup() {
   return (
     <Group id="weekly" title="Недельный цикл (версия 2.0) выключен">
       <p className="mt0">Выключен {fmtShort(off.at.slice(0, 10))}: меню — по шаблону версии 1.9. Резервная копия перед выключением сохранена.</p>
-      <button className="btn small" onClick={() => W.enableWeekly().then(() => toast('Недельный цикл включён: недели и закупки пересчитаны с сегодняшнего дня'))}>Включить снова</button>
+      <div className="btn-row">
+        <button className="btn small" onClick={() => W.enableWeekly().then(() => toast('Недельный цикл включён: недели и закупки пересчитаны с сегодняшнего дня'))}>Включить снова</button>
+        <V2BackupButton />
+      </div>
     </Group>
   );
 }

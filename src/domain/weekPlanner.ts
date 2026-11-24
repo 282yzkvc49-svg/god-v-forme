@@ -197,7 +197,8 @@ export function stepWeek(data: AppData, w: WeekPlan, pool: Pool, nextShop: ISODa
         const size = bi.packSize || p.pack?.size || 0;
         const packs = size > 0 ? Math.ceil(buyNeed / size - 1e-9) : 0;
         const q = size > 0 ? packs * size : buyNeed;
-        cost += size > 0 && bi.packPrice != null ? packs * bi.packPrice : buyNeed * unitPrice(n.productId);
+        // как в списке закупки: каждая строка округляется до рубля; без цены av.ru — не в сумме
+        cost += size > 0 && bi.status === 'listed' && bi.packPrice != null ? Math.round(packs * bi.packPrice) : 0;
         addLot(pool, n.productId, q, lotUntil(p, shop));
         buys.set(n.productId, q);
       }
