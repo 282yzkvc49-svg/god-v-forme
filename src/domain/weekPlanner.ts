@@ -188,7 +188,8 @@ export function stepWeek(data: AppData, w: WeekPlan, pool: Pool, nextShop: ISODa
     if (!p) continue;
     const a = avail(pool, n.productId, n.firstUse);
     const fromLeft = (pool.get(n.productId) ?? []).filter((l) => l.src === 'buy' && l.until >= n.firstUse).reduce((s, l) => s + l.qty, 0);
-    if (fromLeft > 0.5 && p.category !== 'Специи') used.push(`${shortName(n.productId)} ${qtyText(n.productId, Math.min(fromLeft, n.qty))}`);
+    const usedQ = Math.min(fromLeft, n.qty);
+    if (p.category !== 'Специи' && (p.unit === 'pcs' ? usedQ >= 1 : usedQ >= 50) && usedQ * unitPrice(n.productId) >= 30) used.push(`${shortName(n.productId)} ${qtyText(n.productId, usedQ)}`);
     if (!bought) {
       const buyNeed = Math.max(0, n.qty - n.stockOnly - Math.max(0, a - n.stockOnly));
       if (buyNeed > 0.01) {

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../state/store';
 import * as W from '../state/weeklyActions';
-import { href } from '../app/router';
+import { href, useRoute } from '../app/router';
 import { PRODUCTS, buyInfo, libEff } from '../domain/catalog';
 import { CUISINES, KIND_LABEL, PROTEINS, type LibKind, type LibRecipe } from '../domain/recipeCheck';
 import { LIBRARY, REPORT_DATE, ingrName, libNutrition, reportFor, verifyState } from '../domain/recipeLib';
@@ -114,7 +114,9 @@ export function LibraryScreen() {
 export function LibRecipePage({ id }: { id: string }) {
   const data = useApp();
   const r = LIBRARY.find((x) => x.id === id);
-  const [servings, setServings] = useState(r?.servings ?? 1);
+  const route = useRoute();
+  const qn = Number(route.query.get('n'));
+  const [servings, setServings] = useState(qn >= 1 && qn <= 12 ? qn : r?.servings ?? 1);
   if (!r) return <div className="page"><PageHead title="Рецепт" backTo="/library" /><div className="card"><Empty title="Рецепт не найден" /></div></div>;
   const pr = prefsOf(data)[r.id];
   const n = libNutrition(r);
@@ -152,7 +154,7 @@ export function LibRecipePage({ id }: { id: string }) {
                 const p = PRODUCTS[i.p];
                 const bi = buyInfo(i.p);
                 const sub = subs.find((x) => x.from === i.p);
-                return <li key={i.p}><span className="grow">{ingrName(i.p)} — <b>{fmtAmt(i.p, i.q * k)}</b>{i.note ? <span className="muted"> ({i.note})</span> : null}{sub ? <span className="chip warn" style={{ marginLeft: 4 }}>замена: {ingrName(sub.to)}</span> : bi.status !== 'listed' && p ? <span className="chip warn" style={{ marginLeft: 4 }}>нет на av.ru</span> : null}</span></li>;
+                return <li key={i.p}><span className="grow">{ingrName(i.p)} — <b>{fmtAmt(i.p, i.q * k)}</b>{servings > 1 ? <span className="muted"> · на порцию {fmtAmt(i.p, i.q / r.servings)}</span> : null}{i.note ? <span className="muted"> ({i.note})</span> : null}{sub ? <span className="chip warn" style={{ marginLeft: 4 }}>замена: {ingrName(sub.to)}</span> : bi.status !== 'listed' && p ? <span className="chip warn" style={{ marginLeft: 4 }}>нет на av.ru</span> : null}</span></li>;
               })}
             </ul>
           </div>

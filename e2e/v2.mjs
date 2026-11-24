@@ -103,13 +103,39 @@ for (const name of only) {
     await p.getByRole('button', { name: 'Подтвердить запасы и посчитать закупку' }).click();
     await p.getByRole('heading', { name: /Закупка 25\.11/ }).waitFor();
     const text = await p.locator('.grid2').first().innerText();
-    assert(/Минтай, филе — 1 × упаковка 300 г/.test(text), 'минтай — одна упаковка 300 г (200 г есть)');
+    // филе минтая на av.ru нет: 200 г из дома, недостающее — пикша (замена)
+    assert(!/Минтай, филе —/.test(text), 'минтай не покупается — его нет на av.ru');
+    assert(/Пикша, филе — \d+ ×/.test(text) && /вместо: Минтай/.test(text), 'вместо минтая — пикша с пояснением');
     assert(!/Фасоль стручковая/.test(text), 'стручковую фасоль не покупать — есть');
     await noOverflow(p, 'Закупка');
     await p.screenshot({ path: path.join(shots, `24-v2-buy-${name}.png`), fullPage: true });
     // «Купил» — в запасы
-    await p.locator('.li', { hasText: 'Минтай, филе' }).getByRole('button', { name: /Купил/ }).click();
-    await p.locator('.li', { hasText: 'Минтай, филе' }).getByRole('button', { name: /Куплено/ }).waitFor();
+    await p.locator('.li', { hasText: 'Пикша, филе' }).getByRole('button', { name: /Купил/ }).click();
+    await p.locator('.li', { hasText: 'Пикша, филе' }).getByRole('button', { name: /Куплено/ }).waitFor();
+  });
+
+  await step('черновик недели: КБЖУ дней в цели, проблемы и варианты, бюджет месяца; доставка и граммовки', async () => {
+    await p.evaluate(() => { location.hash = '/week'; });
+    await p.getByRole('heading', { name: /Бюджет: ноябрь 2026/ }).waitFor();
+    const budget = await p.locator('.card', { hasText: 'Бюджет: ноябрь 2026' }).innerText();
+    assert(/Прогноз по остальным неделям/.test(budget) && /Остаётся из 50/.test(budget.replace(/\s/g, ' ')), 'бюджет месяца: куплено, подтверждено, прогноз, остаток');
+    await p.locator('a.week-card').nth(1).click();
+    await p.locator('.week-menu .card').first().waitFor();
+    await p.getByRole('heading', { name: /Меню собрано|Нужен ваш выбор/ }).waitFor();
+    assert(await p.getByRole('button', { name: 'Другой вариант меню' }).isVisible(), 'вариант вместо автоутверждения');
+    const chips = await p.locator('.week-menu .chip', { hasText: /в цели|вне цели/ }).allInnerTexts();
+    assert(chips.length >= 2 && chips.every((c) => c === 'в цели'), `дни в цели: ${chips.join(', ')}`);
+    await noOverflow(p, 'Черновик недели');
+    await p.screenshot({ path: path.join(shots, `27-v2-draft-${name}.png`), fullPage: true });
+    // неделя 1: доставка вечером, граммовки на партию и на порцию
+    await p.evaluate(() => { location.hash = '/week/w20261125?tab=cook'; });
+    await p.getByRole('heading', { name: /Доставка 25\.11/ }).waitFor();
+    await p.getByText(/готовится первым/).first().waitFor();
+    await p.getByRole('heading', { name: 'Граммовки: на партию и на порцию' }).waitFor();
+    await p.getByRole('button', { name: /партия 4 порц/ }).first().click();
+    await p.getByRole('columnheader', { name: 'На порцию' }).first().waitFor();
+    await noOverflow(p, 'Готовка: доставка и граммовки');
+    await p.screenshot({ path: path.join(shots, `28-v2-cook-grams-${name}.png`), fullPage: true });
   });
 
   await step('история 22–23.11 и 24.11 не изменилась; 25.11 — по новому меню', async () => {

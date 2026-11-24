@@ -1,5 +1,6 @@
 // Версия 2.0: «Неделя» — меню недели, общая готовка, проверка запасов и закупка.
-// Закупка появляется только после подтверждения фактических запасов.
+// Закупка появляется только после подтверждения фактических запасов. Если меню не сходится (порции, КБЖУ дня,
+// бюджет) — проблемы и варианты; «утвердить как есть» — только явным подтверждением.
 import { useMemo, useState } from 'react';
 import { useApp } from '../state/store';
 import * as W from '../state/weeklyActions';
@@ -8,12 +9,14 @@ import { href, useRoute } from '../app/router';
 import { fmtLong, fmtShort, weekdayShort, type ISODate } from '../lib/dates';
 import { fmtRub, parseNum } from '../lib/util';
 import { MEAL_LABELS, MEAL_SLOTS, type MealSlot } from '../state/types';
-import { PRODUCTS, buyInfo, subCandidates } from '../domain/catalog';
-import { BUDGET_RUB } from '../domain/plan';
+import { ADDON, PRODUCTS, buyInfo, libEff, subCandidates } from '../domain/catalog';
 import {
-  LIB, WEEKDAY_NAMES, alternatives, cookEventId, cookSchedule, cookTiming, fmtQty, shopEventId, weekDates, weekDayNutrition, weekFrom,
-  weekList, weekPurchase, weekStockRows, weekTo, weeklyOf, type WeekPlan,
+  LIB, WEEKDAY_NAMES, alternatives, cookEventId, cookSchedule, cookStart, cookTiming, dinnerReadyIn, effectiveWeek, fmtQty, shopEventId,
+  suspendedMeals, weekDates, weekFrom, weekList, weekPurchase, weekStockRows, weekTo, weeklyOf, type WeekPlan,
 } from '../domain/weekly';
+import {
+  DAY_KCAL_MAX, DAY_KCAL_MIN, DAY_PROTEIN_MIN, cheaperMains, dayNutrition, estimateWeek, monthBudget, weekIssues,
+} from '../domain/weekPlanner';
 import { tripList } from '../domain/trips';
 import { ingrName } from '../domain/recipeLib';
 import { Disclosure, Empty, Note, PageHead, Seg, toast } from '../ui/kit';
@@ -21,38 +24,52 @@ import { PiCheck, PiCookingPot, PiShoppingCart, PiSnowflake, PiArrowsClockwise, 
 
 type Data = ReturnType<typeof useApp>;
 const STATUS = { draft: 'черновик', approved: 'утверждено' } as const;
+const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+const monthName = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+const nextMonth = (ym: string) => { const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; };
 
-function monthSpend(data: Data, month: string): { planned: number; actual: number } {
-  let planned = 0, actual = 0;
-  for (const w of weekList(weeklyOf(data))) {
-    if (!w.shopDate?.startsWith(month)) continue;
-    const p = weekPurchase(data, w);
-    for (const l of p.lines) {
-      const c = data.shoppingChecks[`${shopEventId(w)}:${l.productId}`];
-      planned += c?.absent ? 0 : l.cost;
-      if (c?.actualPrice != null) actual += c.actualPrice;
-    }
-  }
-  return { planned, actual };
+function BudgetCard({ month, today }: { month: string; today: ISODate }) {
+  const data = useApp();
+  const b = useMemo(() => monthBudget(data, month, today), [data, month, today]);
+  const over = b.left < 0;
+  return (
+    <div className="card tight">
+      <h3 className="mt0">Бюджет: {monthName(month)}</h3>
+      <div className="small">
+        <div className="row between"><span>Куплено</span><b className="num">{fmtRub(b.spent)}</b></div>
+        <div className="row between"><span>Подтверждённые закупки</span><b className="num">{fmtRub(b.confirmed)}</b></div>
+        <div className="row between"><span>Прогноз по остальным неделям</span><b className="num">{fmtRub(b.forecast)}</b></div>
+        <div className="row between" style={{ marginTop: 4 }}><span>Остаётся из {fmtRub(b.budget)}</span><b className="num" style={{ color: over ? 'var(--danger, #b91c1c)' : undefined }}>{fmtRub(b.left)}</b></div>
+      </div>
+      {over && <Note kind="warn">Прогноз больше бюджета на {fmtRub(-b.left)}: в черновиках недель — варианты дешевле.</Note>}
+      <p className="hint" style={{ marginBottom: 0 }}>Прогноз — упаковками, с учётом того, что останется от прошлых недель и что есть дома. Цены — ориентир av.ru; наличие по адресу видно в корзине. Командировки — вне домашнего бюджета.</p>
+    </div>
+  );
 }
 
 function WeekCard({ w, today }: { w: WeekPlan; today: ISODate }) {
   const data = useApp();
   const pur = weekPurchase(data, w);
-  const frozen = w.cook.reduce((s, c) => s + c.uses.filter((u) => u.storage === 'freeze').length, 0);
+  const eff = effectiveWeek(data, w);
+  const frozen = eff.cook.reduce((s, c) => s + c.uses.filter((u) => u.storage === 'freeze').length, 0);
   const past = weekTo(w) < today;
+  const issues = w.status === 'draft' && !past ? [...(w.problems ?? []), ...weekIssues(data, w, today)] : [];
+  const est = w.estimate?.cost;
   return (
     <a className="card tight week-card" href={href(`/week/${w.id}`)} style={{ display: 'block', opacity: past ? 0.7 : 1 }}>
       <div className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <b>{fmtShort(weekFrom(w))}–{fmtShort(weekTo(w))}</b>
-        <span className={`chip ${w.status === 'approved' ? 'ok' : 'warn'}`}>{STATUS[w.status]}</span>
+        <span className="row" style={{ gap: 4 }}>
+          {issues.length > 0 && <span className="chip warn">нужен выбор</span>}
+          <span className={`chip ${w.status === 'approved' ? 'ok' : 'warn'}`}>{STATUS[w.status]}</span>
+        </span>
       </div>
       <div className="small muted" style={{ marginTop: 4 }}>
-        {w.cookDate ? `Готовка ${weekdayShort(w.cookDate).toLowerCase()} ${fmtShort(w.cookDate)}: ` : ''}
-        {w.cook.map((c) => `${LIB[c.r]?.title ?? c.r} ×${c.servings}`).join('; ') || 'без готовки'}
+        {eff.cookDate ? `Готовка ${weekdayShort(eff.cookDate).toLowerCase()} ${fmtShort(eff.cookDate)}: ` : ''}
+        {eff.cook.map((c) => `${LIB[c.r]?.title ?? c.r} ×${c.servings}`).join('; ') || 'без готовки'}
       </div>
       <div className="small" style={{ marginTop: 4 }}>
-        {pur.ready ? <>Закупка: {fmtRub(pur.total)}{pur.unverified.length ? ` + ${pur.unverified.length} без цены` : ''}</> : w.status === 'draft' ? 'Закупка — после утверждения меню и проверки запасов' : 'Закупка — после проверки запасов'}
+        {pur.ready ? <>Закупка: {fmtRub(pur.total)}{pur.unverified.length ? ` + ${pur.unverified.length} без цены` : ''}</> : est != null ? `Закупка ≈${fmtRub(est)} (прогноз)${w.status === 'draft' ? ' — после утверждения и проверки запасов' : ' — после проверки запасов'}` : w.status === 'draft' ? 'Закупка — после утверждения меню и проверки запасов' : 'Закупка — после проверки запасов'}
         {frozen ? ` · морозилка: ${frozen} пак.` : ''}
       </div>
     </a>
@@ -69,7 +86,6 @@ export function WeekHub() {
   const current = weeks.filter((w) => weekTo(w) >= today);
   const past = weeks.filter((w) => weekTo(w) < today);
   const month = today.slice(0, 7);
-  const spend = monthSpend(data, month);
   const trips = tripList(data).filter((t) => t.to >= today);
   return (
     <div className="page">
@@ -78,10 +94,10 @@ export function WeekHub() {
         <div className="card">
           <h3 className="mt0">Что изменилось в версии 2.0</h3>
           <ul className="small" style={{ paddingLeft: 18 }}>
-            <li>Меню 25–30.11 предварительно утверждено: одна готовка 25.11 (3 блюда, 9 порций, 4 из них — в морозилку). Закупка появится после проверки запасов.</li>
+            <li>Меню 25–30.11 предварительно утверждено: одна готовка 25.11 после вечерней доставки (3 блюда, 9 порций, 4 из них — в морозилку). Закупка появится после проверки запасов.</li>
             <li>Командировка 25–26.11 убрана; добавлены 1–2.12 и 15–22.12 — в эти дни нет домашней готовки, закупки скоропортящегося и обязательных тренировок.</li>
             <li>Релакс-дни: 29.11 и 27.12. Календарь теперь идёт дальше 30 дней.</li>
-            <li>Следующие недели — черновики планировщика из библиотеки рецептов; утверждаете их вы, перед закупкой.</li>
+            <li>Следующие недели — черновики планировщика из библиотеки рецептов (300 проверенных рецептов): КБЖУ каждого дня в цели, без повторов основных блюд за 4 недели, с учётом остатков и бюджета. Утверждаете их вы, перед закупкой.</li>
             <li>Запасы: минтай ≈200 г и целая упаковка стручковой фасоли — по вашему сообщению; открытые неделю назад фасоль и томаты не используются; крупы, брокколи, вишня, йогурт, творог, масло — «уточнить».</li>
             <li>История (прошедшие дни, отметки, тренировки, вес, фото) не менялась. Резервная копия до изменений сохранена.</li>
           </ul>
@@ -102,18 +118,16 @@ export function WeekHub() {
           )}
         </div>
         <div>
-          <div className="card tight">
-            <h3 className="mt0">Бюджет: {month === '2026-11' ? 'ноябрь' : month}</h3>
-            <p className="small mt0">Запланировано на закупки недель: <b>{fmtRub(spend.planned)}</b> из {fmtRub(BUDGET_RUB)}{spend.actual ? `; фактически отмечено ${fmtRub(spend.actual)}` : ''}. Командировки — вне домашнего бюджета. Сумма считается только по подтверждённым закупкам; цены — ориентир av.ru, без проверки наличия.</p>
-          </div>
+          <BudgetCard month={month} today={today} />
+          {today.slice(8, 10) >= '15' && <BudgetCard month={nextMonth(month)} today={today} />}
           <div className="card tight">
             <h3 className="mt0">Командировки впереди</h3>
             {trips.length ? <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>{trips.map((t) => <li key={t.id}>{fmtShort(t.from)}–{fmtShort(t.to)}: {t.city}</li>)}</ul> : <p className="small muted mt0">Нет.</p>}
-            <p className="small" style={{ marginBottom: 0 }}><a href={href('/trips')}>Изменить командировки</a> — меню и закупки пересчитаются.</p>
+            <p className="small" style={{ marginBottom: 0 }}><a href={href('/trips')}>Изменить командировки</a> — меню, готовка и закупки пересчитаются; купленное учитывается через запасы.</p>
           </div>
           <div className="card tight">
             <h3 className="mt0">Как составляется меню</h3>
-            <p className="small mt0">Сейчас — планировщик приложения: подбирает 2–3 проверенных рецепта библиотеки на неделю без повторов основных блюд за 4 недели, с разными видами белка и морской рыбой, учитывает избранное, оценки и «больше не предлагать». Новые рецепты он не придумывает. Новые недели можно составлять и в чате с Claude; генерация через API заложена на будущее и не подключена.</p>
+            <p className="small mt0">Планировщик приложения подбирает 2–3 основных блюда на 4–6 порций из проверенных рецептов библиотеки (без повторов за 4 недели, разные виды белка, рыба), затем завтраки и перекусы под обеды и ужины каждого дня. Если до цели не хватает — простые добавки: творог, йогурт, орехи, хлеб, яйца, фрукты. Цель дня: {DAY_KCAL_MIN}–{DAY_KCAL_MAX} ккал, белок от {DAY_PROTEIN_MIN} г, жиры до 40%. Учитываются остатки упаковок, бюджет, избранное, оценки и «больше не предлагать». Новые рецепты он не придумывает. Если меню не сходится — неделя не утверждается сама: показываются варианты.</p>
             <a className="small" href={href('/library')}>Библиотека рецептов</a>
           </div>
         </div>
@@ -129,16 +143,35 @@ export function WeekPage({ id, initialTab }: { id: string; initialTab?: 'menu' |
   const ws = weeklyOf(data);
   const w = ws?.weeks[id];
   const [tab, setTab] = useState<'menu' | 'cook' | 'stock' | 'buy'>((route.query.get('tab') as 'menu') || initialTab || 'menu');
+  const [confirm, setConfirm] = useState<string[] | null>(null);
   if (!ws || !w) return <div className="page"><PageHead title="Неделя" backTo="/week" /><div className="card"><Empty title="Неделя не найдена" /></div></div>;
   const pur = weekPurchase(data, w);
+  const approve = (accept: boolean) => W.approveWeek(w.id, accept).then((issues) => {
+    if (issues.length) { setConfirm(issues); return; }
+    setConfirm(null);
+    toast(accept ? 'Меню утверждено с замечаниями' : 'Меню недели утверждено');
+  });
   return (
     <div className="page">
       <PageHead
         title={`${fmtShort(weekFrom(w))}–${fmtShort(weekTo(w))}`}
         sub={<>{w.title} · <span className={`chip ${w.status === 'approved' ? 'ok' : 'warn'}`}>{STATUS[w.status]}</span>{w.source === 'chat' ? ' · составлено в чате' : w.source === 'planner' ? ' · планировщик' : ''}</>}
         backTo="/week"
-        right={w.status === 'draft' ? <button className="btn primary small" onClick={() => W.approveWeek(w.id).then(() => toast('Меню недели утверждено'))}><PiCheck /> Утвердить меню</button> : undefined}
+        right={w.status === 'draft' ? <button className="btn primary small" onClick={() => approve(false)}><PiCheck /> Утвердить меню</button> : undefined}
       />
+      {confirm && (
+        <div className="card tight" role="alertdialog" aria-label="Меню не сходится">
+          <h3 className="mt0"><PiWarning /> Меню собрано не полностью</h3>
+          <ul className="small" style={{ paddingLeft: 18 }}>{confirm.map((x) => <li key={x}>{x}</li>)}</ul>
+          <p className="small">Лучше выбрать вариант ниже. Утвердить как есть можно — замечания сохранятся в неделе.</p>
+          <div className="btn-row">
+            <button className="btn" onClick={() => setConfirm(null)}>Выбрать вариант</button>
+            <button className="btn ghost" onClick={() => approve(true)}>Утвердить с замечаниями</button>
+          </div>
+        </div>
+      )}
+      {w.status === 'draft' && <ProblemsCard w={w} today={today} />}
+      {w.acceptedProblems?.length ? <Note kind="warn">Утверждено с замечаниями: {w.acceptedProblems.join(' ')}</Note> : null}
       {w.notes.map((n, i) => <Note key={i} kind={/не хватает|нужна короткая|вместо 2–3/i.test(n) ? 'warn' : 'info'}>{n}</Note>)}
       <Seg value={tab} onChange={setTab} label="Раздел" options={[
         { value: 'menu', label: 'Меню' }, { value: 'cook', label: 'Готовка' }, { value: 'stock', label: `Запасы${w.stockConfirmedAt ? ' ✓' : ''}` }, { value: 'buy', label: pur.ready ? 'Закупка ✓' : 'Закупка' },
@@ -147,6 +180,47 @@ export function WeekPage({ id, initialTab }: { id: string; initialTab?: 'menu' |
       {tab === 'cook' && <CookTab w={w} />}
       {tab === 'stock' && <StockTab w={w} onDone={() => setTab('buy')} />}
       {tab === 'buy' && <BuyTab w={w} />}
+    </div>
+  );
+}
+
+/** Проблемы черновика и варианты: другой вариант меню, блюда дешевле, замена отдельного блюда. */
+function ProblemsCard({ w, today }: { w: WeekPlan; today: ISODate }) {
+  const data = useApp();
+  const issues = [...new Set([...(w.problems ?? []), ...weekIssues(data, w, today)])];
+  const budget = issues.some((x) => /бюджет/.test(x));
+  const cheaper = useMemo(() => (budget ? w.cook.flatMap((c) => cheaperMains(data, w, c.r, today, 2).map((o) => ({ from: c.r, ...o }))) : []), [budget, data, w, today]);
+  const est = w.estimate ?? null;
+  return (
+    <div className="card tight">
+      {issues.length > 0 ? (
+        <>
+          <h3 className="mt0"><PiWarning /> Нужен ваш выбор</h3>
+          <ul className="small" style={{ paddingLeft: 18 }}>{issues.map((x) => <li key={x}>{x}</li>)}</ul>
+        </>
+      ) : <h3 className="mt0"><PiCheck /> Меню собрано: КБЖУ дней в цели, все обеды и ужины закрыты</h3>}
+      {est && (
+        <p className="small mt0">
+          Закупка ≈<b>{fmtRub(est.cost)}</b> при доле месячного бюджета на эти дни ≈{fmtRub(est.allowance)}.
+          {est.usedLeftovers.length ? ` Из остатков прошлых упаковок: ${est.usedLeftovers.slice(0, 6).join(', ')}.` : ''}
+          {est.waste.length ? ` Может пропасть: ${est.waste.join(', ')} — замените блюдо или добавку, чтобы доесть.` : ' Скоропортящихся остатков не ожидается.'}
+        </p>
+      )}
+      {cheaper.length > 0 && (
+        <div className="small" style={{ marginBottom: 8 }}>
+          <b>Дешевле:</b>
+          {cheaper.map((o) => (
+            <div key={`${o.from}-${o.r.id}`} className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+              <span className="grow">{LIB[o.from]?.title} → {o.r.title} ({fmtRub(o.costDelta)}, {o.kcal} ккал, Б {o.p} г)</span>
+              <button className="btn small" onClick={() => W.replaceDish(w.id, o.from, o.r.id).then(() => toast('Блюдо заменено — КБЖУ, порции и закупка пересчитаны'))}>Заменить</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="btn-row">
+        <button className="btn small" onClick={() => W.redraftWeek(w.id).then(() => toast('Составлен другой вариант меню'))}><PiArrowsClockwise /> Другой вариант меню</button>
+      </div>
+      <p className="hint" style={{ marginBottom: 0 }}>Любое блюдо можно заменить в меню ниже: пересчитываются КБЖУ дней, порции, хранение и разморозка, готовка и её время, закупка и бюджет.</p>
     </div>
   );
 }
@@ -160,19 +234,26 @@ function srcLabel(w: WeekPlan, date: ISODate, slot: MealSlot): string {
   return use?.storage === 'freeze' ? `из морозилки — разморозить ${use.thawOn ? `${fmtShort(use.thawOn)} вечером` : 'накануне'}` : 'из готовки, холодильник';
 }
 
-function MenuTab({ w, today }: { w: WeekPlan; today: ISODate }) {
+function MenuTab({ w: w0, today }: { w: WeekPlan; today: ISODate }) {
   const data = useApp();
   const [open, setOpen] = useState<string | null>(null);
+  const w = effectiveWeek(data, w0);
+  const suspended = suspendedMeals(data, w0);
   return (
     <div className="week-menu">
+      {suspended.length > 0 && (
+        <Note>Не действуют из-за командировки или релакс-дня: {[...new Set(suspended.map((x) => fmtShort(x.date)))].join(', ')} — {suspended.filter((x) => x.src === 'cook').length} порц. готовки не готовятся{suspended.some((x) => x.src === 'cook') ? ', закупка меньше' : ''}. Если поездку отменят — вернутся в меню.</Note>
+      )}
       {weekDates(w).map((date) => {
-        const n = weekDayNutrition(w, date);
-        const full = MEAL_SLOTS.every((s) => w.meals[date]?.[s]?.r);
+        const n = dayNutrition(data, date);
         return (
           <div className="card tight" key={date} style={{ opacity: date < today ? 0.65 : 1 }}>
             <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
               <h3 className="mt0" style={{ marginBottom: 4 }}>{fmtLong(date)}</h3>
-              {n && <span className="small muted">{full ? '' : 'без учёта приёмов «из остатков»: '}{n.kcal} ккал · Б {n.p} / Ж {n.f} / У {n.c} г</span>}
+              <span className="small muted">
+                {n.complete ? <span className={`chip ${n.ok ? 'ok' : 'warn'}`} style={{ marginRight: 6 }}>{n.ok ? 'в цели' : 'вне цели'}</span> : `без учёта: ${n.unknown.map((s) => MEAL_LABELS[s].toLowerCase()).join(', ')} — `}
+                {n.kcal} ккал · Б {n.p} / Ж {n.f} / У {n.c} г
+              </span>
             </div>
             <div className="list">
               {MEAL_SLOTS.map((slot) => {
@@ -180,17 +261,19 @@ function MenuTab({ w, today }: { w: WeekPlan; today: ISODate }) {
                 if (!m) return null;
                 const r = m.r ? LIB[m.r] : null;
                 const key = `${date}|${slot}`;
-                const alts = open === key && r ? alternatives(data, w, r.id) : [];
+                const alts = open === key && r ? alternatives(data, w0, r.id) : [];
+                const subs = r ? libEff(r).subs : [];
                 return (
                   <div className="li" key={slot} style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
                     <span className="small muted" style={{ minWidth: 72 }}>{MEAL_LABELS[slot]}</span>
                     <span className="grow" style={{ minWidth: 0 }}>
                       {r ? <a href={href(`/lib/${r.id}`)}>{r.title}</a> : <b>{m.title ?? 'Из того, что есть'}</b>}
-                      <span className="small muted" style={{ display: 'block' }}>{srcLabel(w, date, slot)}{m.note ? ` · ${m.note}` : ''}</span>
+                      {(m.add ?? []).map((a) => <span key={a} style={{ display: 'block' }}>+ {ADDON[a]?.title ?? a}</span>)}
+                      <span className="small muted" style={{ display: 'block' }}>{srcLabel(w, date, slot)}{m.note ? ` · ${m.note}` : ''}{subs.length ? ` · замена: ${subs.map((x) => `${ingrName(x.from)} → ${ingrName(x.to)}`).join(', ')}` : ''}</span>
                       {open === key && (
                         <span style={{ display: 'block', marginTop: 6 }}>
                           {alts.length ? alts.map((a) => (
-                            <button key={a.id} className="btn small" style={{ margin: '0 6px 6px 0' }} onClick={() => W.replaceDish(w.id, r!.id, a.id, { date, slot }).then(() => { setOpen(null); toast(r!.kind === 'main' ? 'Блюдо заменено во всех порциях готовки' : 'Заменено'); })}>{a.title}</button>
+                            <button key={a.id} className="btn small" style={{ margin: '0 6px 6px 0' }} onClick={() => W.replaceDish(w0.id, r!.id, a.id, { date, slot }).then(() => { setOpen(null); toast(r!.kind === 'main' ? 'Блюдо заменено во всех порциях готовки: КБЖУ, закупка и готовка пересчитаны' : 'Заменено: КБЖУ дня и закупка пересчитаны'); })}>{a.title}</button>
                           )) : <span className="small muted">Подходящих замен в библиотеке пока нет.</span>}
                         </span>
                       )}
@@ -207,9 +290,36 @@ function MenuTab({ w, today }: { w: WeekPlan; today: ISODate }) {
   );
 }
 
-function CookTab({ w }: { w: WeekPlan }) {
+function DeliveryCard({ w }: { w: WeekPlan }) {
   const data = useApp();
   const ws = weeklyOf(data)!;
+  const [t, setT] = useState(w.delivery?.time ?? '');
+  if (!w.cookDate || w.shopDate !== w.cookDate) return null;
+  const start = cookStart(w, ws);
+  const ready = dinnerReadyIn(w);
+  const hm = (s: string, add: number) => { const [h, m] = s.split(':').map(Number); const x = h * 60 + m + add; return `${String(Math.floor(x / 60) % 24).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; };
+  const late = !!w.delivery?.time && ready != null && hm(start, ready) > '21:30';
+  const dinner = w.meals[w.cookDate]?.dinner;
+  return (
+    <div className="card tight">
+      <h3 className="mt0">Доставка {fmtShort(w.cookDate)}</h3>
+      <p className="small mt0">{w.delivery?.time ? `Доставка в ${w.delivery.time} — готовка с ${start}.` : `Время доставки не подтверждено${w.delivery?.note ? ` (${w.delivery.note.toLowerCase()})` : ''}: готовка — сразу после доставки.`}{ready != null && dinner?.src === 'cook' ? ` Ужин (${LIB[dinner.r]?.title}) готовится первым — примерно через ${ready} мин после начала${w.delivery?.time ? `, к ${hm(start, ready)}` : ''}.` : ''}</p>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <input className="input" type="time" style={{ width: 120 }} aria-label="Время доставки" value={t} onChange={(e) => setT(e.target.value)} />
+        <button className="btn small" onClick={() => W.setDelivery(w.id, t || null).then(() => toast('Время готовки пересчитано'))}>Сохранить</button>
+        {w.delivery?.time && <button className="btn small ghost" onClick={() => { setT(''); W.setDelivery(w.id, null); }}>Не знаю</button>}
+      </div>
+      {late && dinner?.src === 'cook' && (
+        <Note kind="warn">Ужин будет готов поздно. Вариант: ужин — из того, что есть, а эта порция — в морозилку про запас. <button className="btn small" onClick={() => W.lateDinner(w.id).then(() => toast('Ужин — из того, что есть; порция в запас'))}>Так и сделать</button></Note>
+      )}
+    </div>
+  );
+}
+
+function CookTab({ w: w0 }: { w: WeekPlan }) {
+  const data = useApp();
+  const ws = weeklyOf(data)!;
+  const w = effectiveWeek(data, w0);
   if (!w.cook.length || !w.cookDate) return <div className="card"><Empty title="Готовки на этой неделе нет" /></div>;
   const t = cookTiming(w);
   const sch = cookSchedule(w);
@@ -220,11 +330,37 @@ function CookTab({ w }: { w: WeekPlan }) {
   return (
     <div className="grid2">
       <div>
+        <DeliveryCard w={w0} />
         <div className="card tight">
-          <h3 className="mt0"><PiCookingPot /> {fmtLong(w.cookDate)}, {w.cookTime ?? ws.cookTime}</h3>
+          <h3 className="mt0"><PiCookingPot /> {fmtLong(w.cookDate)}, {w.delivery && !w.delivery.time && w.shopDate === w.cookDate ? `после доставки (ориентир ${cookStart(w, ws)})` : cookStart(w, ws)}</h3>
           <p className="small mt0">{w.cook.map((c) => `${LIB[c.r]?.title ?? c.r} — ${c.servings} порц.`).join('; ')}.</p>
-          <p className="small">Примерно <b>{Math.floor(t.total / 60) ? `${Math.floor(t.total / 60)} ч ` : ''}{t.total % 60} мин</b>, из них активно около {t.active} мин. Занятость техники: {Object.entries(t.byDevice).map(([k, v]) => `${k} ${v} мин`).join(', ')} — плита на двух конфорках, аэрогриль и электрогриль параллельно.</p>
+          <p className="small">Примерно <b>{Math.floor(t.total / 60) ? `${Math.floor(t.total / 60)} ч ` : ''}{t.total % 60} мин</b>, из них активно около {t.active} мин. Занятость техники: {Object.entries(t.byDevice).map(([k, v]) => `${k} ${v} мин`).join(', ')} — плита на двух конфорках, аэрогриль и электрогриль параллельно, готовит один человек.</p>
           <p className="small" style={{ marginBottom: 0 }}>{cookStatus === 'done' ? 'Отмечено «Приготовлено».' : <a href={href(`/cook/${cookEventId(w)}`)}>Открыть готовку: «Приготовлено», порции и списание продуктов</a>}</p>
+        </div>
+        <div className="card tight">
+          <h3 className="mt0">Граммовки: на партию и на порцию</h3>
+          {w.cook.map((c) => {
+            const r = LIB[c.r];
+            if (!r) return null;
+            const eff = libEff(r).r;
+            const k = c.servings / r.servings;
+            return (
+              <Disclosure key={c.r} summary={<span>{r.title} — партия {c.servings} порц.{c.servings !== r.servings ? ` (в рецепте ${r.servings})` : ''}</span>}>
+                <div className="table-scroll">
+                  <table className="small" style={{ width: '100%' }}>
+                    <thead><tr><th>Продукт</th><th>На партию</th><th>На порцию</th></tr></thead>
+                    <tbody>
+                      {eff.ingredients.map((i) => {
+                        const p = PRODUCTS[i.p];
+                        return <tr key={i.p}><td>{ingrName(i.p)}{i.note ? <span className="muted"> ({i.note})</span> : null}</td><td>{p ? fmtQty(p, i.q * k) : i.q * k}</td><td>{p ? fmtQty(p, i.q / r.servings) : i.q / r.servings}</td></tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="hint" style={{ marginBottom: 0 }}>Мясо и рыба — сырые, крупы — сухие, овощи — очищенные. <a href={href(`/lib/${r.id}`, { n: c.servings })}>Рецепт на {c.servings} порц.</a></p>
+              </Disclosure>
+            );
+          })}
         </div>
         <div className="card tight">
           <h3 className="mt0">Порядок</h3>
@@ -237,7 +373,7 @@ function CookTab({ w }: { w: WeekPlan }) {
               </li>
             ))}
           </ol>
-          <p className="hint" style={{ marginBottom: 0 }}>Время от начала готовки. Пока варится или запекается, делается следующий шаг; плита — две конфорки, аэрогриль и электрогриль — по одной закладке.</p>
+          <p className="hint" style={{ marginBottom: 0 }}>Время от начала готовки. Готовит один человек: подготовка — по одной, пока варится или запекается, делается следующий шаг; плита — две конфорки, аэрогриль и электрогриль — по одной закладке. Ужин дня готовки — первым.</p>
         </div>
       </div>
       <div>
@@ -258,6 +394,9 @@ function CookTab({ w }: { w: WeekPlan }) {
                     <td>{u.thawOn ? `${fmtShort(u.thawOn)} вечером переложить в холодильник` : '—'}</td>
                   </tr>
                 )))}
+                {w.cook.filter((c) => c.servings > c.uses.length).map((c) => (
+                  <tr key={`${c.r}-spare`}><td>{LIB[c.r]?.title ?? c.r}</td><td>{c.servings - c.uses.length} порц. про запас</td><td>морозилка, плоский пакет</td><td>—</td></tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -275,11 +414,12 @@ function StockTab({ w, onDone }: { w: WeekPlan; onDone: () => void }) {
   const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(rows.map((r) => [r.productId, String(Math.round(r.usable))])));
   const [opened, setOpened] = useState<Record<string, string>>(() => Object.fromEntries(rows.map((r) => [r.productId, data.stock[r.productId]?.openedOn ?? ''])));
   if (w.status === 'draft') return <Note kind="warn">Сначала утвердите меню недели — потом проверка запасов и закупка.</Note>;
+  const unconfirmed = w.stockConfirmedAt ? rows.filter((r) => !r.confirmed) : [];
   const save = () => {
     const amounts: Record<string, number> = {};
     const op: Record<string, string | null> = {};
     for (const r of rows) {
-      const v = parseNum(vals[r.productId]);
+      const v = parseNum(vals[r.productId] ?? String(Math.round(r.usable)));
       if (v == null || v < 0) { toast(`Укажите количество: ${ingrName(r.productId)}`); return; }
       amounts[r.productId] = v;
       if ((opened[r.productId] ?? '') !== (data.stock[r.productId]?.openedOn ?? '')) op[r.productId] = opened[r.productId] || null;
@@ -290,6 +430,7 @@ function StockTab({ w, onDone }: { w: WeekPlan; onDone: () => void }) {
     <div className="card tight">
       <h3 className="mt0"><PiListChecks /> Что есть дома сейчас</h3>
       <p className="small mt0">Проверьте холодильник, морозилку и шкаф. Укажите фактическое количество (0 — нет или испортилось). Закупка посчитается только после подтверждения и купит только недостающее.{w.stockConfirmedAt ? ` Последнее подтверждение: ${fmtShort(w.stockConfirmedAt.slice(0, 10))}.` : ''}</p>
+      {unconfirmed.length > 0 && <Note kind="warn">После изменения меню нужно подтвердить: {unconfirmed.map((r) => ingrName(r.productId)).join(', ')}. До этого их нет в закупке.</Note>}
       <div className="table-scroll">
         <table className="small stock-confirm" style={{ width: '100%' }}>
           <thead><tr><th>Продукт</th><th>Нужно на неделю</th><th>По учёту</th><th>Есть дома</th><th>Вскрыто</th></tr></thead>
@@ -299,12 +440,12 @@ function StockTab({ w, onDone }: { w: WeekPlan; onDone: () => void }) {
               const u = p.unit === 'pcs' ? 'шт.' : p.unit === 'ml' ? 'мл' : 'г';
               return (
                 <tr key={r.productId}>
-                  <td>{ingrName(r.productId)}{p.av === 'unverified' ? <span className="chip warn" style={{ marginLeft: 4 }}>av.ru не подтверждено</span> : null}</td>
+                  <td>{ingrName(r.productId)}{w.stockConfirmedAt && !r.confirmed ? <span className="chip warn" style={{ marginLeft: 4 }}>подтвердить</span> : null}{p.av === 'unverified' ? <span className="chip warn" style={{ marginLeft: 4 }}>av.ru не подтверждено</span> : null}</td>
                   <td>{fmtQty(p, r.need)}</td>
                   <td>{data.stock[r.productId] ? fmtQty(p, r.have) : '—'}{r.have - r.usable > 0.5 ? <span className="muted">, из них {fmtQty(p, r.have - r.usable)} — срок вышел</span> : null}{data.stock[r.productId] && !data.stock[r.productId].confirmedAt ? ' (уточнить)' : ''}</td>
                   <td>
                     <span className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
-                      <input className="input" style={{ width: 84 }} inputMode="decimal" aria-label={`${ingrName(r.productId)}: есть дома, ${u}`} value={vals[r.productId] ?? ''} onChange={(e) => setVals({ ...vals, [r.productId]: e.target.value })} />
+                      <input className="input" style={{ width: 84 }} inputMode="decimal" aria-label={`${ingrName(r.productId)}: есть дома, ${u}`} value={vals[r.productId] ?? String(Math.round(r.usable))} onChange={(e) => setVals({ ...vals, [r.productId]: e.target.value })} />
                       <span className="muted">{u}</span>
                       <button className="btn small ghost" onClick={() => setVals({ ...vals, [r.productId]: '0' })} aria-label={`${ingrName(r.productId)}: нет дома`}>нет</button>
                     </span>
@@ -326,11 +467,17 @@ function StockTab({ w, onDone }: { w: WeekPlan; onDone: () => void }) {
 
 function BuyTab({ w }: { w: WeekPlan }) {
   const data = useApp();
+  const today = useToday();
   const pur = weekPurchase(data, w);
   const eventId = shopEventId(w);
-  if (!pur.ready) return <Note kind="warn" icon={<PiWarning />}>{w.status === 'draft' ? 'Меню недели — черновик. Утвердите его, затем подтвердите запасы — после этого появится список закупки.' : 'Список закупки появится после подтверждения запасов (раздел «Запасы»). До этого окончательный заказ не составляется.'}</Note>;
+  const est = useMemo(() => (pur.ready ? null : w.estimate ?? estimateWeek(data, w, today, '')), [pur.ready, w, data, today]);
+  if (!pur.ready) return (
+    <>
+      <Note kind="warn" icon={<PiWarning />}>{w.status === 'draft' ? 'Меню недели — черновик. Утвердите его, затем подтвердите запасы — после этого появится список закупки.' : 'Список закупки появится после подтверждения запасов (раздел «Запасы»). До этого окончательный заказ не составляется.'}</Note>
+      {est && <p className="small">Прогноз: ≈{fmtRub(est.cost)} — упаковками, с учётом того, что останется от прошлых недель и что дома по учёту.</p>}
+    </>
+  );
   const month = (w.shopDate ?? weekFrom(w)).slice(0, 7);
-  const spend = monthSpend(data, month);
   let left = 0;
   for (const l of pur.lines) if (!data.shoppingChecks[`${eventId}:${l.productId}`]?.bought && !data.shoppingChecks[`${eventId}:${l.productId}`]?.absent) left++;
   return (
@@ -338,6 +485,7 @@ function BuyTab({ w }: { w: WeekPlan }) {
       <div className="card tight">
         <h3 className="mt0"><PiShoppingCart /> Закупка {w.shopDate ? fmtShort(w.shopDate) : ''}: {fmtRub(pur.total)}</h3>
         <p className="small mt0">Только недостающее по подтверждённым запасам, упаковками целиком. У каждого товара — карточка av.ru, цена упаковки и дата проверки; наличие по адресу доставки av.ru показывает в корзине при заказе. Осталось отметить: {left}.</p>
+        {pur.pending?.length ? <Note kind="warn">Меню изменилось: подтвердите остаток — {pur.pending.map(ingrName).join(', ')}. <a href={href(`/week/${w.id}`, { tab: 'stock' })}>Запасы</a></Note> : null}
         <div className="list">
           {pur.lines.map((l) => {
             const p = PRODUCTS[l.productId];
@@ -386,14 +534,12 @@ function BuyTab({ w }: { w: WeekPlan }) {
         </div>
       </div>
       <div>
-        <div className="card tight">
-          <h3 className="mt0">Бюджет месяца</h3>
-          <p className="small mt0">Закупки недель за месяц: {fmtRub(spend.planned)} из {fmtRub(BUDGET_RUB)}. «Куплено» добавляет продукт в «Мои запасы».</p>
-        </div>
+        <BudgetCard month={month} today={today} />
         {pur.leftovers.length > 0 && (
           <div className="card tight">
             <h3 className="mt0"><PiPackage /> Что останется</h3>
             <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>{pur.leftovers.map((x) => <li key={x}>{x}</li>)}</ul>
+            <p className="hint" style={{ marginBottom: 0 }}>Остатки учитываются в следующих неделях: планировщик сначала берёт их, особенно скоропортящиеся.</p>
           </div>
         )}
         {pur.unverified.length > 0 && <Note kind="warn">Без подтверждённой карточки и цены av.ru: {pur.unverified.join(', ')}. Их стоимость в сумму не входит — проверьте при оформлении заказа.</Note>}
