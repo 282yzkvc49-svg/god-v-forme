@@ -19,6 +19,7 @@ const VIEWPORTS = {
   'ipad-landscape': { viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true },
   'ipad-portrait': { viewport: { width: 820, height: 1180 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true },
   iphone: { ...devices['iPhone 13'], deviceScaleFactor: 1 },
+  'iphone-landscape': { ...devices['iPhone 13 landscape'], deviceScaleFactor: 1 },
 };
 const only = process.env.VP ? [process.env.VP] : Object.keys(VIEWPORTS);
 const results = [];
