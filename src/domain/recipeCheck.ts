@@ -39,7 +39,7 @@ export const EQUIP: Equip[] = ['аэрогриль', 'электрогриль',
 export const KIND_LABEL: Record<LibKind, string> = { breakfast: 'Завтрак', snack: 'Перекус', main: 'Основное блюдо' };
 export const CUISINES = [
   'русская', 'европейская', 'средиземноморская', 'итальянская', 'греческая', 'испанская', 'французская', 'скандинавская',
-  'ближневосточная', 'турецкая', 'кавказская', 'польская', 'грузинская', 'узбекская', 'индийская', 'тайская', 'вьетнамская',
+  'ближневосточная', 'турецкая', 'кавказская', 'польская', 'грузинская', 'узбекская', 'индийская', 'тайская', 'вьетнамская', 'индонезийская',
   'китайская', 'японская', 'корейская', 'мексиканская', 'американская (креольская)', 'американская', 'латиноамериканская',
   'северноафриканская',
 ];
@@ -258,10 +258,13 @@ export function checkLibrary(recipes: LibRecipe[], products: Record<string, Prod
   }
   const duplicates: LibraryCheck['duplicates'] = [];
   const vecs = recipes.map((r) => compVector(r, products));
+  // второй взгляд: корень из граммов — чтобы мелкие ингредиенты (ягоды, соус, гарнир) весили больше,
+  // а два блюда с одинаковым набором продуктов не прятались за разной долей мяса
+  const sqrtVecs = vecs.map((v) => new Map([...v].map(([k, x]) => [k, Math.sqrt(x)])));
   for (let i = 0; i < recipes.length; i++) {
     for (let j = i + 1; j < recipes.length; j++) {
       if (recipes[i].kind !== recipes[j].kind) continue;
-      const sim = cosine(vecs[i], vecs[j]);
+      const sim = Math.max(cosine(vecs[i], vecs[j]), cosine(sqrtVecs[i], sqrtVecs[j]));
       // тот же состав и та же техника — повтор (ошибка); другой способ приготовления — другое блюдо, но смотрю вручную
       const sameEq = [...recipes[i].equipment].sort().join() === [...recipes[j].equipment].sort().join();
       if (sim >= 0.92 && sameEq) {
