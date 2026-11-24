@@ -259,6 +259,42 @@ export function libDish(r: LibRecipe): Dish {
 }
 for (const r of LIB_RECIPES) DISHES[libDishId(r.id)] = libDish(libEff(r).r);
 
+// ------------------------------------------------------------------ добавки к дню
+
+/**
+ * Добавки к дню — простые продукты без готовки (кроме яиц): доводят калорийность и белок дня до цели и
+ * доедают остатки упаковок. Подбираются планировщиком к перекусу, обеду или завтраку.
+ */
+export interface Addon { id: string; p: string; q: number; slot: MealSlot; title: string; steps?: string[] }
+export const ADDONS: Addon[] = [
+  { id: 'add-curd', p: 'curd', q: 200, slot: 'snack', title: 'Творог 5%, 200 г' },
+  { id: 'add-greek', p: 'l_greek_yogurt', q: 200, slot: 'snack', title: 'Греческий йогурт, 200 г' },
+  { id: 'add-yogurt', p: 'yogurt', q: 250, slot: 'snack', title: 'Йогурт натуральный, 250 г' },
+  { id: 'add-kefir', p: 'l_kefir', q: 250, slot: 'snack', title: 'Кефир, 250 г' },
+  { id: 'add-almonds', p: 'almonds', q: 30, slot: 'snack', title: 'Миндаль, 30 г' },
+  { id: 'add-walnuts', p: 'walnuts', q: 25, slot: 'snack', title: 'Грецкие орехи, 25 г' },
+  { id: 'add-pumpkin', p: 'l_pumpkin_seeds', q: 25, slot: 'snack', title: 'Тыквенные семечки, 25 г' },
+  { id: 'add-banana', p: 'banana', q: 120, slot: 'snack', title: 'Банан' },
+  { id: 'add-apple', p: 'apple', q: 150, slot: 'snack', title: 'Яблоко' },
+  { id: 'add-bread', p: 'bread', q: 60, slot: 'lunch', title: 'Хлеб на закваске, 2 ломтика (60 г)' },
+  { id: 'add-rye', p: 'l_bread_rye', q: 60, slot: 'lunch', title: 'Ржаной хлеб, 2 ломтика (60 г)' },
+  { id: 'add-eggs', p: 'egg', q: 2, slot: 'breakfast', title: '2 варёных яйца', steps: ['Сварить 9–10 минут (можно накануне), остудить в холодной воде'] },
+  { id: 'add-cheese', p: 'l_cheese_light', q: 30, slot: 'breakfast', title: 'Сыр 15%, 30 г' },
+];
+export const ADDON: Record<string, Addon> = Object.fromEntries(ADDONS.map((a) => [a.id, a]));
+for (const a of ADDONS) {
+  const p = PRODUCTS[a.p];
+  if (!p) continue;
+  DISHES[a.id] = {
+    id: a.id, title: `Добавка: ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}`, short: a.title, category: a.slot === 'snack' ? 'snack' : a.slot === 'breakfast' ? 'breakfast' : 'side',
+    kind: 'fresh', unit: 'portion', unit_label: null, cooked_factor: null, serving_g: null,
+    ingredients: [{ product: a.p, qty: a.q, note: null }], spices: [],
+    steps: (a.steps ?? ['Без готовки']).map((text) => ({ text, temperature_c: null, minutes: null })),
+    method: a.steps ? 'плита' : 'без нагрева', storage: { place: p.storage === 'pantry' ? 'pantry' : 'fridge', days: p.shelf_days, freezable: false }, note: null, legacy: null,
+    active_minutes: a.steps ? 2 : 0, portable: true, storage_text: null, extra: true,
+  };
+}
+
 // ------------------------------------------------------------------ замены недоступных товаров
 
 /** Товары комплекта без замен — исходные данные для сброса. */

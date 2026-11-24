@@ -10,9 +10,8 @@ import { addDays, type ISODate } from '../lib/dates';
 import { PRODUCTS } from './catalog';
 import { emptyStock, stockRemaining } from './stock';
 import { tripList } from './trips';
-import {
-  draftWeek, planCycles, setRemainingOps, weeklyOf, weeklyReplanOps, type WeekPlan, type WeeklySettings,
-} from './weekly';
+import { planCycles, setRemainingOps, weeklyOf, type WeekPlan, type WeeklySettings } from './weekly';
+import { draftWeek, weeklyReplanAll } from './weekPlanner';
 
 export const V2_SINCE: ISODate = '2026-11-24';
 export const V2_BACKUP_PREFIX = 'v2-';
@@ -50,9 +49,10 @@ export function approvedWeek1(now: string): WeekPlan {
       ] },
     ],
     stockConfirmedAt: null,
+    delivery: { time: null, note: 'Вечер 25.11, время не подтверждено' },
     notes: [
       'Меню предварительно утверждено 24.11; окончательно — после проверки запасов.',
-      'Время доставки 25.11 ещё не подтверждено.',
+      'Доставка 25.11 вечером, время ещё не подтверждено: готовка — сразу после доставки, первым готовится ужин этого дня. Укажите время доставки в разделе «Готовка».',
       'В морозилку — 4 плоских пакета: котлеты и курица на 28.11, тефтели и курица на 30.11.',
     ],
     createdAt: now,
@@ -121,11 +121,11 @@ export function planV10Ops(data0: AppData, today: ISODate, now: string, appVersi
   step([{ store: 'settings', put: settings }]);
   const draftFrom = '2026-12-03' > today ? '2026-12-03' : addDays(today, 1);
   for (const c of planCycles(data, draftFrom, addDays(draftFrom, 34), 7)) {
-    const w = draftWeek(data, c, { now });
+    const w = draftWeek(data, c, { now, today });
     const s2 = { ...data.settings, weekly: { ...(weeklyOf(data) as WeeklySettings), weeks: { ...(weeklyOf(data) as WeeklySettings).weeks, [w.id]: w } } } as AppData['settings'];
     step([{ store: 'settings', put: s2 }]);
   }
   // записи приложения с сегодняшнего дня (прошедшее и отмеченное не меняется)
-  step(weeklyReplanOps(data, today).ops);
+  step(weeklyReplanAll(data, today, { now }).ops);
   return ops;
 }

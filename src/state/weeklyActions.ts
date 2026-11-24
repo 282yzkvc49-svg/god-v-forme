@@ -9,16 +9,17 @@ import { nowStamp } from '../lib/util';
 import type { ISODate } from '../lib/dates';
 import { emptyStock } from '../domain/stock';
 import {
-  computePurchase, draftWeek, planCycles, prefsOf, replaceInWeek, setRemainingOps, shopEventId, weekPurchase, weeklyOf, weeklyReplanOps,
+  computePurchase, planCycles, prefsOf, recalcPurchase, replaceInWeek, setRemainingOps, shopEventId, weekPurchase, weeklyOf,
   type RecipePref, type WeekPlan, type WeeklySettings,
 } from '../domain/weekly';
+import { draftWeek, weekIssues, weeklyReplanAll } from '../domain/weekPlanner';
 
 function commitWeekly(build: (data: AppData) => Op[]): Promise<string[]> {
   const data = getData();
   const ops = build(data);
   if (!ops.length) return Promise.resolve([]);
   const mid = applyToData(data, ops);
-  const rp = weeklyReplanOps(mid, todayFn());
+  const rp = weeklyReplanAll(mid, todayFn(), { now: nowStamp() });
   return commit([...ops, ...rp.ops]).then(() => rp.conflicts ?? []);
 }
 
@@ -35,12 +36,45 @@ export function updateWeek(id: string, fn: (w: WeekPlan) => WeekPlan) {
   });
 }
 
-export function approveWeek(id: string) {
-  return updateWeek(id, (w) => ({ ...w, status: 'approved', approvedAt: nowStamp() }));
+/** Утвердить меню. Если есть нерешённые проблемы (порции, КБЖУ дней, бюджет) — только с явным подтверждением accept. */
+export function approveWeek(id: string, accept = false): Promise<string[]> {
+  const data = getData();
+  const w = weeklyOf(data)?.weeks[id];
+  if (!w) return Promise.resolve([]);
+  const issues = [...weekIssues(data, w, todayFn()), ...(w.problems ?? []).filter((p) => /бюджет|морозилк|повторяется/.test(p))];
+  if (issues.length && !accept) return Promise.resolve(issues);
+  return updateWeek(id, (x) => ({ ...x, status: 'approved', approvedAt: nowStamp(), acceptedProblems: issues.length ? issues : null })).then(() => []);
 }
 
+/** Заменить блюдо: меню, порции, хранение и разморозка, КБЖУ дней пересчитываются; закупка — по подтверждённым запасам. */
 export function replaceDish(id: string, oldId: string, newId: string, at?: { date: ISODate; slot: MealSlot }) {
-  return updateWeek(id, (w) => replaceInWeek(w, oldId, newId, at));
+  return commitWeekly((data) => {
+    const ws = weeklyOf(data);
+    const w = ws?.weeks[id];
+    if (!ws || !w) return [];
+    const next = replaceInWeek(w, oldId, newId, at);
+    const mid = applyToData(data, [putWeekly(data, { ...ws, weeks: { ...ws.weeks, [id]: next } })]);
+    const purchase = recalcPurchase(mid, next);
+    const fixed: WeekPlan = { ...next, ...(purchase ? { purchase } : {}), problems: w.status === 'draft' ? weekIssues(mid, next, todayFn()) : next.problems };
+    return [putWeekly(data, { ...ws, weeks: { ...ws.weeks, [id]: fixed } })];
+  });
+}
+
+/** Время доставки в день закупки (ЧЧ:ММ) или null — не подтверждено. */
+export function setDelivery(id: string, time: string | null) {
+  return updateWeek(id, (w) => ({ ...w, delivery: { time, note: w.delivery?.note ?? null } }));
+}
+
+/** Доставка поздно: ужин дня готовки — из того, что есть; его порция остаётся запасом в морозилке. */
+export function lateDinner(id: string) {
+  return updateWeek(id, (w) => {
+    if (!w.cookDate) return w;
+    const m = w.meals[w.cookDate]?.dinner;
+    if (!m || m.src !== 'cook') return w;
+    const meals = { ...w.meals, [w.cookDate]: { ...w.meals[w.cookDate], dinner: { r: '', src: 'stock' as const, title: 'Из того, что есть дома', note: 'Доставка поздно — ужин из того, что есть; порция готовки — в морозилку про запас.' } } };
+    const cook = w.cook.map((c) => (c.r === m.r ? { ...c, uses: c.uses.filter((u) => !(u.date === w.cookDate && u.slot === 'dinner')) } : c));
+    return { ...w, meals, cook };
+  });
 }
 
 /** Пересобрать черновик недели планировщиком (утверждённую неделю — только после явного «Пересобрать»). */
@@ -53,7 +87,7 @@ export function redraftWeek(id: string) {
     const to = next ? next : Object.keys(w.meals).sort().slice(-1)[0];
     const cyc = planCycles(data, w.cookDate, to, ws.shopDay).find((c) => c.cookDate === w.cookDate);
     if (!cyc) return [];
-    const drafted = draftWeek({ ...data, settings: { ...data.settings, weekly: { ...ws, weeks: Object.fromEntries(Object.entries(ws.weeks).filter(([k]) => k !== id)) } } }, cyc, { now: nowStamp() });
+    const drafted = draftWeek({ ...data, settings: { ...data.settings, weekly: { ...ws, weeks: Object.fromEntries(Object.entries(ws.weeks).filter(([k]) => k !== id)) } } }, cyc, { now: nowStamp(), today: todayFn(), seed: (w.seed ?? 0) + 1, skipId: id });
     return [putWeekly(data, { ...ws, weeks: { ...ws.weeks, [id]: { ...drafted, id, title: w.title } } })];
   });
 }
@@ -121,7 +155,7 @@ export function setWeekSub(weekId: string, productId: string, to: string | null)
     const subs = { ...(w.subs ?? {}) };
     if (to) subs[productId] = to; else delete subs[productId];
     const next: WeekPlan = { ...w, subs };
-    if (w.stockConfirmedAt && w.purchase) next.purchase = computePurchase(data, next);
+    if (w.stockConfirmedAt && w.purchase) next.purchase = recalcPurchase(data, next) ?? computePurchase(data, next);
     return [putWeekly(data, { ...ws, weeks: { ...ws.weeks, [weekId]: next } })];
   });
 }
@@ -143,7 +177,7 @@ export function setWeeklySettings(patch: Partial<Pick<WeeklySettings, 'shopDay' 
       const start = lastKept >= today ? lastKept : today;
       for (const c of planCycles(d, start, addDaysLocal(start, 34), patch.shopDay)) {
         if (c.cookDate <= lastKept && Object.values(keep).some((w) => w.cookDate === c.cookDate)) continue;
-        const w = draftWeek(d, c, { now: nowStamp() });
+        const w = draftWeek(d, c, { now: nowStamp(), today });
         d = { ...d, settings: { ...d.settings, weekly: { ...(weeklyOf(d) as WeeklySettings), weeks: { ...(weeklyOf(d) as WeeklySettings).weeks, [w.id]: w } } } };
       }
       return [putWeekly(data, weeklyOf(d) as WeeklySettings)];
@@ -169,7 +203,7 @@ export function draftMissingWeeks() {
     const from = start > today ? start : today;
     for (const c of planCycles(d, from, addDaysLocal(from, 28), ws.shopDay)) {
       if (c.slots.every((x) => covered.has(x.date))) continue;
-      const w = draftWeek(d, c, { now: nowStamp() });
+      const w = draftWeek(d, c, { now: nowStamp(), today });
       d = { ...d, settings: { ...d.settings, weekly: { ...(weeklyOf(d) as WeeklySettings), weeks: { ...(weeklyOf(d) as WeeklySettings).weeks, [w.id]: w } } } };
     }
     return [putWeekly(data, weeklyOf(d) as WeeklySettings)];

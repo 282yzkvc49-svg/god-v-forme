@@ -6,9 +6,10 @@ import { readFileSync } from 'node:fs';
 import { applyOps, dataMigrationOps, storesToData, DATA_VERSION } from '../src/state/model';
 import type { AppData, MealSlot } from '../src/state/types';
 import {
-  computePurchase, draftWeek, planCycles, recentMains, recipeAvail, setRemainingOps, weekList, weekPurchase, weekStockRows, weeklyOf, weeklyReplanOps,
+  computePurchase, planCycles, recentMains, recipeAvail, setRemainingOps, weekList, weekPurchase, weekStockRows, weeklyOf, weeklyReplanOps,
   type WeekPlan,
 } from '../src/domain/weekly';
+import { draftWeek } from '../src/domain/weekPlanner';
 import { LIB_RECIPES, PRODUCTS, buyInfo, libEff, subCandidates } from '../src/domain/catalog';
 import { buildReport } from '../src/domain/report';
 import { stockRemaining } from '../src/domain/stock';
