@@ -32,7 +32,9 @@ const result = await esbuild.build({
   legalComments: 'none',
   charset: 'utf8',
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(process.env.PREVIEW ? `${pkg.version}-preview` : pkg.version),
+    // предварительный просмотр: отдельная база (god-v-forme-preview) и демо-копия данных; установленное приложение не трогается
+    __PREVIEW__: process.env.PREVIEW ? 'true' : 'false',
     __BUILD_ID__: JSON.stringify(new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')),
     __DEV__: 'false',
     'process.env.NODE_ENV': '"production"',

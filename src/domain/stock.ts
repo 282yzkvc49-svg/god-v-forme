@@ -22,7 +22,30 @@ export function defaultPlace(p: Product): StockPlace {
 }
 
 /** До какой даты годна партия: с упаковки (если указан); замороженное мясо и птица — 90 дней; иначе — общий срок хранения. */
+/** Сколько хранится вскрытая упаковка в холодильнике (дней); null — вскрытие на срок не влияет (крупы, заморозка). */
+export function openDays(p: Product): number | null {
+  if (p.storage === 'freezer' || p.storage === 'pantry' && !['Консервы и готовые продукты'].includes(p.category)) return null;
+  if (p.category === 'Молочные продукты') return 3;
+  if (p.category === 'Консервы и готовые продукты') return 3;
+  if (p.category === 'Мясо и птица' || p.category === 'Рыба и морепродукты') return 1;
+  if (p.category === 'Хлеб и выпечка') return 4;
+  return null;
+}
+
+/** Безопасный срок вскрытой упаковки (если отмечена дата вскрытия). */
+export function openedUntil(rec: StockRec): ISODate | null {
+  const p = PRODUCTS[rec.productId];
+  const d = p ? openDays(p) : null;
+  return rec.openedOn && d != null && rec.location !== 'freezer' ? addDays(rec.openedOn, d) : null;
+}
+
 export function lotUntil(rec: StockRec, date: ISODate): ISODate {
+  const base = lotUntilBase(rec, date);
+  const op = openedUntil(rec);
+  return op && op < base ? op : base;
+}
+
+function lotUntilBase(rec: StockRec, date: ISODate): ISODate {
   if (rec.expiresOn) return rec.expiresOn;
   const p = PRODUCTS[rec.productId];
   if (!p) return addDays(date, 3);

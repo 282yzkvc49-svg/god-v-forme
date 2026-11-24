@@ -738,3 +738,23 @@ html:has(.timer-dock) { scroll-padding-bottom: calc(var(--dock-h, 96px) + 16px);
 .table.small td, .table.small th { padding: 6px 6px; }
 .warn-row td { background: var(--warn-soft); }
 .danger-text { color: var(--danger); }
+
+/* ---------------------------------------------------------------- версия 2.0: неделя и библиотека рецептов */
+.chip.ok { background: var(--sea-soft); color: var(--sea); }
+.btn.active { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.week-card { color: inherit; text-decoration: none; margin-bottom: 10px; }
+.week-card:hover { border-color: var(--accent); }
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.lib-card { color: inherit; text-decoration: none; margin: 0; overflow-wrap: anywhere; }
+.lib-card:hover { border-color: var(--accent); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; margin-top: 8px; }
+.filters .field { flex: 1 1 160px; min-width: 0; margin: 0; }
+.filters select.input { width: 100%; }
+.table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll table { border-collapse: collapse; min-width: 100%; }
+.table-scroll th, .table-scroll td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.table-scroll th { font-weight: 600; color: var(--ink-3); white-space: nowrap; }
+.stock-confirm td:first-child { overflow-wrap: anywhere; min-width: 120px; }
+.week-menu .li { gap: 8px; }
+.banner.preview-banner { background: var(--amber-soft); color: var(--ink); }
+.banner.preview-banner a { color: inherit; text-decoration: underline; }

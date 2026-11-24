@@ -105,6 +105,8 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   if (v < 9) step(planV9Ops(data, today, now, appVersion));
   // v10 (версия 2.0): недельный цикл питания, резервная копия до изменений
   if (v < 10 && today >= '2026-11-24') step(planV10Ops(data, today, now, appVersion, { toStores: (d) => dataToStores(d), apply: applyOps }));
+  // до 24.11 переход на 2.0 не делается — версия данных остаётся 9, чтобы он сработал при следующем запуске
+  const target = v < 10 && today < '2026-11-24' ? 9 : DATA_VERSION;
   if (v < 2) {
     // v2: у позиции «Апельсины» из стартовых закупок убрано примечание (по решению пользователя)
     for (const e of Object.values(data.shoppingEvents)) {
@@ -119,7 +121,7 @@ export function dataMigrationOps(data0: AppData, today: ISODate = BASE_START, no
   // v4: план питания из шаблона с выбором даты старта; тренировки — своё расписание
   if (v < 4 && !settings.plan) settings.plan = makePlanSettings(V1_START, now, false);
   if (JSON.stringify(settings) !== JSON.stringify(data.settings)) ops.push({ store: 'settings', put: settings });
-  if (v !== DATA_VERSION) ops.push({ store: 'meta', put: { ...data.meta, dataVersion: DATA_VERSION } });
+  if (v !== target) ops.push({ store: 'meta', put: { ...data.meta, dataVersion: target } });
   return ops;
 }
 

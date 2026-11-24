@@ -14,7 +14,7 @@ import { DISHES, LIB_RECIPES, PRODUCTS, libDishId, type Product } from './catalo
 import type { LibRecipe } from './recipeCheck';
 import { DRINKS_TEXT, TRIP_DRINKS_TEXT, hasDayMarks, mealTitle, setWeeklyHook, type ReplanResult } from './plan';
 import { isRelaxDate, tripList, tripMeal, tripOn } from './trips';
-import { emptyStock, stockRemaining } from './stock';
+import { emptyStock, stockLots, stockRemaining } from './stock';
 import { recipeHash } from './recipeCheck';
 import report from '../data/library/check_report.json';
 
@@ -48,6 +48,8 @@ export interface WeekPlan {
   cook: WeekCookItem[];
   /** Когда пользователь подтвердил фактические запасы к закупке; до этого закупка не считается. */
   stockConfirmedAt: string | null;
+  /** Список закупки на момент подтверждения запасов (не меняется от отметок «куплено»). */
+  purchase?: WeekPurchase | null;
   notes: string[];
   createdAt: string;
 }
@@ -380,16 +382,21 @@ export function weekNeeds(w: WeekPlan, data?: AppData): Map<string, WeekNeed> {
 }
 
 export interface StockCheckRow {
-  productId: string; name: string; unit: Product['unit']; need: number; have: number; confirmed: boolean; checkedAt: string | null; place: string;
+  productId: string; name: string; unit: Product['unit']; need: number;
+  /** По учёту всего и сколько из этого ещё в сроке (просроченное по учёту — не предлагается). */
+  have: number; usable: number;
+  confirmed: boolean; checkedAt: string | null; place: string;
 }
 /** Что проверить дома перед закупкой: всё, что нужно на неделю, с остатком по учёту. */
-export function weekStockRows(data: AppData, w: WeekPlan): StockCheckRow[] {
+export function weekStockRows(data: AppData, w: WeekPlan, today: ISODate): StockCheckRow[] {
   const rows: StockCheckRow[] = [];
   for (const n of weekNeeds(w, data).values()) {
     const p = PRODUCTS[n.productId];
     const rec = data.stock[n.productId];
+    const usable = rec ? stockLots(rec).filter((l) => l.until >= today).reduce((a, l) => a + l.qty, 0) : 0;
     rows.push({
       productId: n.productId, name: p.name, unit: p.unit, need: n.qty, have: Math.max(0, Math.round(stockRemaining(data, n.productId) * 10) / 10),
+      usable: Math.max(0, Math.round(Math.min(usable, stockRemaining(data, n.productId)) * 10) / 10),
       confirmed: !!rec?.confirmedAt && !!w.stockConfirmedAt && rec.confirmedAt >= w.stockConfirmedAt.slice(0, 10), checkedAt: rec?.confirmedAt ?? null,
       place: rec?.location ?? p.storage,
     });
@@ -408,9 +415,17 @@ export interface WeekPurchase {
   leftovers: string[];
 }
 
-/** Закупка недели: считается только после подтверждения запасов; упаковки целиком, остатки и их использование. */
-export function weekPurchase(data: AppData, w: WeekPlan): WeekPurchase {
-  if (!w.stockConfirmedAt || w.status !== 'approved') return { ready: false, lines: [], total: 0, unverified: [], deficits: [], leftovers: [] };
+const NOT_READY: WeekPurchase = { ready: false, lines: [], total: 0, unverified: [], deficits: [], leftovers: [] };
+
+/** Закупка недели: снимок на момент подтверждения запасов; до подтверждения — нет. */
+export function weekPurchase(_data: AppData, w: WeekPlan): WeekPurchase {
+  if (!w.stockConfirmedAt || w.status !== 'approved' || !w.purchase) return NOT_READY;
+  return w.purchase;
+}
+
+/** Посчитать закупку по текущим запасам: упаковки целиком, остатки и их использование. */
+export function computePurchase(data: AppData, w: WeekPlan): WeekPurchase {
+  if (w.status !== 'approved') return NOT_READY;
   const lines: ShopLine[] = [];
   const unverified: string[] = [];
   const deficits: string[] = [];
@@ -420,14 +435,14 @@ export function weekPurchase(data: AppData, w: WeekPlan): WeekPurchase {
     const p = PRODUCTS[n.productId];
     const have = Math.max(0, stockRemaining(data, n.productId));
     const buyNeed = Math.max(0, n.qty - n.stockOnly - Math.max(0, have - n.stockOnly));
-    if (n.stockOnly > have + 0.01) deficits.push(`${p.name}: к блюдам из запасов нужно ${fmtQty(p, n.stockOnly)}, дома ${fmtQty(p, have)}`);
+    if (n.stockOnly > have + 0.01 && p.category !== 'Специи' && !['salt', 'oliveoil'].includes(n.productId)) deficits.push(`${shortName(n.productId)}: к блюдам из запасов нужно ${fmtQty(p, n.stockOnly)}, дома ${fmtQty(p, have)}`);
     if (buyNeed <= 0.01) continue;
     const size = p.pack?.size || 0;
     const packs = size > 0 ? Math.ceil(buyNeed / size - 1e-9) : null;
     const buy = packs != null ? packs * size : buyNeed;
     const price = (p as Product & { pack_price?: number }).pack_price;
     const cost = packs != null && typeof price === 'number' && !p.av ? Math.round(packs * price) : 0;
-    if (p.av === 'unverified' || typeof price !== 'number') unverified.push(p.name);
+    if (p.av === 'unverified' || typeof price !== 'number') unverified.push(shortName(n.productId));
     const leftover = Math.round((buy - buyNeed) * 10) / 10;
     const notes: string[] = [];
     if (leftover > 0.5) {
@@ -436,7 +451,7 @@ export function weekPurchase(data: AppData, w: WeekPlan): WeekPurchase {
       const where = perishable ? (p.freezable ? 'заморозить в день покупки или поставить в меню следующей недели' : `использовать до ${fmtShort(addDays(n.firstUse, Math.max(1, p.shelf_days - 1)))}`) : 'остаётся в запасах';
       notes.push(`останется ${fmtQty(p, leftover)} — ${where}`);
       if (perishable && share >= 0.5 && buyNeed <= 100 && p.unit !== 'pcs') notes.push('нужно мало, упаковка большая: проверьте упаковку поменьше');
-      leftovers.push(`${p.name}: ${fmtQty(p, leftover)} — ${where}`);
+      leftovers.push(`${shortName(n.productId)}: ${fmtQty(p, leftover)} — ${where}`);
     }
     if (n.firstUse > addDays(w.shopDate ?? weekFrom(w), p.shelf_days) && p.storage === 'fridge') notes.push(p.freezable ? 'нужно позже срока хранения — заморозить в день покупки' : 'нужно позже срока хранения — купить ближе к дате');
     total += cost;
@@ -448,6 +463,8 @@ export function weekPurchase(data: AppData, w: WeekPlan): WeekPurchase {
   lines.sort((a, b) => (PRODUCTS[a.productId].category + PRODUCTS[a.productId].name).localeCompare(PRODUCTS[b.productId].category + PRODUCTS[b.productId].name));
   return { ready: true, lines, total, unverified, deficits, leftovers };
 }
+
+const shortName = (pid: string) => (PRODUCTS[pid]?.name ?? pid).split(/[«,]/)[0].trim();
 
 export function fmtQty(p: Product, q: number): string {
   if (p.unit === 'pcs') return `${Math.round(q * 10) / 10} шт.`;
@@ -545,7 +562,8 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
   const prefs = prefsOf(data);
   const recent = recentMains(data, cycle.cookDate, 28);
   const notes: string[] = [];
-  const ok = (r: LibRecipe) => libVerified(r) && !prefs[r.id]?.hidden && !opts.exclude?.has(r.id);
+  // «больше не предлагать» и оценка 1–2 — не предлагать
+  const ok = (r: LibRecipe) => libVerified(r) && !prefs[r.id]?.hidden && (prefs[r.id]?.rating ?? 3) > 2 && !opts.exclude?.has(r.id);
   const score = (r: LibRecipe) => (prefs[r.id]?.fav ? 2 : 0) + ((prefs[r.id]?.rating ?? 3) - 3) * 0.5 + (r.tags.includes('заморозка') ? 0.3 : 0);
   const N = cycle.slots.length;
   let pool = LIB_RECIPES.filter((r) => r.kind === 'main' && r.servings >= 2 && ok(r) && !recent.has(r.id));
@@ -675,7 +693,7 @@ export function replaceInWeek(w: WeekPlan, oldId: string, newId: string, at?: { 
   if (at && LIB[oldId]?.kind !== 'main') {
     const m = meals[at.date]?.[at.slot];
     if (m) meals[at.date]![at.slot] = { ...m, r: newId };
-    return { ...w, meals, stockConfirmedAt: null };
+    return { ...w, meals, stockConfirmedAt: null, purchase: null };
   }
   for (const slots of Object.values(meals)) for (const s of MEAL_SLOTS) if (slots[s]?.r === oldId) slots[s] = { ...slots[s]!, r: newId };
   const cook = w.cook.map((c) => {
@@ -688,7 +706,7 @@ export function replaceInWeek(w: WeekPlan, oldId: string, newId: string, at?: { 
     });
     return { r: newId, servings: Math.max(uses.length, r.servings), uses };
   });
-  return { ...w, meals, cook, stockConfirmedAt: null };
+  return { ...w, meals, cook, stockConfirmedAt: null, purchase: null };
 }
 
 /** Подходящие замены: того же вида (основное — с тем же числом порций ±1), не скрытые, без недавних повторов. */
@@ -700,7 +718,7 @@ export function alternatives(data: AppData, w: WeekPlan, recipeId: string, limit
   const recent = recentMains(data, w.cookDate ?? weekFrom(w), 28);
   const need = w.cook.find((c) => c.r === recipeId)?.uses.length ?? 1;
   return LIB_RECIPES
-    .filter((r) => r.kind === cur.kind && r.id !== cur.id && !inWeek.has(r.id) && !prefs[r.id]?.hidden && libVerified(r))
+    .filter((r) => r.kind === cur.kind && r.id !== cur.id && !inWeek.has(r.id) && !prefs[r.id]?.hidden && (prefs[r.id]?.rating ?? 3) > 2 && libVerified(r))
     .filter((r) => cur.kind !== 'main' || (r.servings >= need && r.servings <= need + 2))
     .sort((a, b) => Number(recent.has(a.id)) - Number(recent.has(b.id)) || Number(!!prefs[b.id]?.fav) - Number(!!prefs[a.id]?.fav) || (prefs[b.id]?.rating ?? 3) - (prefs[a.id]?.rating ?? 3) || Number(a.protein === cur.protein) - Number(b.protein === cur.protein))
     .slice(0, limit);
@@ -725,16 +743,60 @@ export function weekDayNutrition(w: WeekPlan, date: ISODate): { kcal: number; p:
   return { kcal: Math.round(s.kcal), p: Math.round(s.p), f: Math.round(s.f), c: Math.round(s.c) };
 }
 
-/** Последовательность общей готовки: что на плите, что в аэрогриле и на электрогриле, по порядку. */
-export function cookSequence(w: WeekPlan): { eq: string; text: string; recipe: string; min: string | null }[] {
-  const out: { eq: string; text: string; recipe: string; min: string | null }[] = [];
-  const recipes = w.cook.map((c) => LIB[c.r]).filter(Boolean);
-  // сначала подготовка всех блюд, затем шаги с нагревом: длинные на плите — раньше, аэрогриль и электрогриль — параллельно
-  for (const r of recipes) for (const s of r.steps) if (!s.eq) out.push({ eq: 'подготовка', text: s.t, recipe: r.title, min: s.min && s.min !== '—' ? s.min : null });
-  const heat = recipes.flatMap((r) => r.steps.filter((s) => s.eq).map((s) => ({ eq: s.eq as string, text: s.t + (s.temp ? ` (${s.temp})` : ''), recipe: r.title, min: s.min ?? null, load: r.load?.[s.eq!] ?? 0 })));
-  heat.sort((a, b) => (a.eq === 'плита' ? 0 : 1) - (b.eq === 'плита' ? 0 : 1) || b.load - a.load);
-  for (const h of heat) out.push({ eq: h.eq, text: h.text, recipe: h.recipe, min: h.min });
-  return out;
+export interface ScheduledStep { start: number; end: number; eq: string; text: string; recipe: string }
+
+function stepMinutes(min: string | undefined, prep: boolean): number {
+  if (!min || min === '—') return prep ? 5 : 0;
+  const nums = (min.match(/\d+/g) ?? []).map(Number);
+  return nums.length ? Math.max(...nums) : prep ? 5 : 0;
+}
+
+/**
+ * Расписание общей готовки: плита — две конфорки, аэрогриль и электрогриль — по одной закладке, руки — одна
+ * подготовка за раз. Пока что-то варится или запекается, можно делать следующий шаг; шаг на том же приборе и
+ * раскладка по порциям ждут окончания предыдущего. Разморозка — накануне, в расписание не входит.
+ */
+export function cookSchedule(w: WeekPlan): { before: string[]; steps: ScheduledStep[]; total: number } {
+  const before: string[] = [];
+  type S = { eq: string; dur: number; text: string };
+  const chains: { title: string; steps: S[]; i: number; prevStart: number; prevEnd: number; ends: number[] }[] = [];
+  for (const c of w.cook) {
+    const r = LIB[c.r];
+    if (!r) continue;
+    const steps: S[] = [];
+    for (const st of r.steps) {
+      if (/разморозить/i.test(st.t) && !st.eq && (!st.min || st.min === '—')) { before.push(`${r.title}: ${st.t}`); continue; }
+      steps.push({ eq: st.eq ?? 'подготовка', dur: stepMinutes(st.min, !st.eq), text: st.t + (st.temp && !st.t.includes(st.temp) ? ` (${st.temp})` : '') });
+    }
+    chains.push({ title: r.title, steps, i: 0, prevStart: 0, prevEnd: 0, ends: [] });
+  }
+  const cap: Record<string, number> = { 'плита': 2, 'аэрогриль': 1, 'электрогриль': 1, 'подготовка': 1, 'без нагрева': 1 };
+  const busy: { eq: string; end: number }[] = [];
+  const out: ScheduledStep[] = [];
+  const remaining = (ch: (typeof chains)[number]) => ch.steps.slice(ch.i).reduce((a, x) => a + x.dur, 0);
+  for (let t = 0; t < 600 && chains.some((ch) => ch.i < ch.steps.length); t++) {
+    for (let k = busy.length - 1; k >= 0; k--) if (busy[k].end <= t) busy.splice(k, 1);
+    const order = [...chains].sort((a, b) => remaining(b) - remaining(a));
+    for (const ch of order) {
+      if (ch.i >= ch.steps.length) continue;
+      const st = ch.steps[ch.i];
+      const prev = ch.i > 0 ? ch.steps[ch.i - 1] : null;
+      const last = ch.i === ch.steps.length - 1 && ch.steps.length > 1;
+      // ждать окончания: после подготовки, на том же приборе и для раскладки; иначе — можно начать, когда прошлый шаг пошёл
+      const waitEnd = !prev || prev.eq === 'подготовка' || prev.eq === st.eq || last;
+      const readyAt = !prev ? 0 : last ? Math.max(ch.prevEnd, ...ch.ends) : waitEnd ? ch.prevEnd : ch.prevStart + 1;
+      if (t < readyAt) continue;
+      const res = st.eq === 'без нагрева' ? 'подготовка' : st.eq;
+      if (busy.filter((b) => b.eq === res).length >= (cap[res] ?? 1)) continue;
+      const end = t + Math.max(1, st.dur);
+      busy.push({ eq: res, end });
+      out.push({ start: t, end, eq: st.eq, text: st.text, recipe: ch.title });
+      ch.prevStart = t; ch.prevEnd = end; ch.ends.push(end); ch.i++;
+      if (res === 'подготовка') break; // руки одни: за минуту начинаем не больше одной подготовки
+    }
+  }
+  out.sort((a, b) => a.start - b.start || a.end - b.end);
+  return { before, steps: out, total: out.reduce((m, x) => Math.max(m, x.end), 0) };
 }
 
 /** Сколько займёт готовка недели: активная работа и общее время с учётом параллельной работы техники. */
@@ -747,8 +809,7 @@ export function cookTiming(w: WeekPlan): { active: number; total: number; byDevi
     active += r.time.active;
     for (const [k, v] of Object.entries(r.load ?? {})) byDevice[k] = (byDevice[k] ?? 0) + (v ?? 0);
   }
-  // плита — две конфорки параллельно; общее время — самый загруженный прибор плюс подготовка
-  const stove = Math.ceil((byDevice['плита'] ?? 0) / 2);
-  const total = Math.max(stove, byDevice['аэрогриль'] ?? 0, byDevice['электрогриль'] ?? 0) + Math.round(active / 2) + 15;
+  // общее время — по расписанию с параллельной техникой, плюс 15 минут на раскладку и остывание
+  const total = cookSchedule(w).total + 15;
   return { active, total, byDevice };
 }

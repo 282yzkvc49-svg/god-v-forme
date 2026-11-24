@@ -369,6 +369,8 @@ export interface ShoppingCheck {
   itemId: string;
   bought: boolean;
   atHome?: boolean; // «есть дома» — не покупать
+  /** Нет в магазине (версия 2.0): позиция не куплена, нужна замена. */
+  absent?: boolean;
   actualPrice?: number | null;
   updatedAt: string;
 }
@@ -547,6 +549,8 @@ export interface StockRec {
   confirmedAt: string | null;
   /** Срок годности с упаковки, если указан. */
   expiresOn: ISODate | null;
+  /** Когда упаковку вскрыли (версия 2.0): от этой даты считается безопасный срок открытой упаковки. */
+  openedOn?: ISODate | null;
   note: string | null;
   updatedAt: string;
 }

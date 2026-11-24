@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { applyOps, dataMigrationOps, emptyData } from '../src/state/model';
+import { applyOps, dataMigrationOps, emptyData, DATA_VERSION } from '../src/state/model';
 import { replanOps } from '../src/domain/plan';
 import { scheduledTraining, thawList } from '../src/domain/tasks';
 import { SEED_RECIPES } from '../src/lib/seed';
@@ -267,7 +267,7 @@ test('миграция v9 при запуске 23.11: меню 22–24.11 пр�
   const ops = dataMigrationOps(d0, '2026-11-23', '2026-11-23T08:10:00.000Z', '1.9.0');
   assert.equal(ops[0].store, 'backups', 'сначала резервная копия');
   const d = applyOps(d0, ops);
-  assert.equal(d.meta!.dataVersion, 9);
+  assert.equal(d.meta!.dataVersion, 9, 'до 24.11 переход на 2.0 (v10) не применяется');
   // календарь 23–24.11
   const titles = (date: string) => MEAL_SLOTS.map((s) => card(d, date, s).title);
   assert.deepEqual(titles('2026-11-22'), ['Сырники с клубникой и йогуртом', 'Пропущен', 'Йогурт с грушей и овсяными хлопьями', 'Нут с булгуром и овощами']);
@@ -288,11 +288,16 @@ test('миграция v9 при запуске 23.11: меню 22–24.11 пр�
   assert.deepEqual([rep.id, rep.auto], [CORR_REV, true]);
   assert.ok(rep.dishes.some((x) => x.date === '2026-11-23' && x.slot === 'lunch' && x.before === 'Тефтели индейки, гречка, овощи' && x.after === 'Индейка с гречкой и морковью'));
   assert.equal(dataMigrationOps(d, '2026-11-23', '2026-11-23T09:00:00.000Z').length, 0);
-  assert.equal(dataMigrationOps(d, '2026-11-24', '2026-11-24T09:00:00.000Z').length, 0);
+  // 24.11 — переход на 2.0 (v10): прошедшие дни 22–23.11 не меняются
+  const d24 = applyOps(d, dataMigrationOps(d, '2026-11-24', '2026-11-24T09:00:00.000Z'));
+  assert.equal(d24.meta!.dataVersion, DATA_VERSION);
+  for (const date of ['2026-11-22', '2026-11-23']) assert.equal(J(d24.planDays[date]), J(d.planDays[date]), date);
+  assert.equal(dataMigrationOps(d24, '2026-11-24', '2026-11-24T10:00:00.000Z').length, 0, 'повторный запуск ничего не меняет');
   // устройство с первой редакцией — тоже обновляется при запуске
   const r1 = applyOps(deviceR1(), dataMigrationOps(deviceR1(), '2026-11-23', '2026-11-23T08:10:00.000Z'));
   assert.equal(card(r1, '2026-11-23', 'lunch').title, 'Индейка с гречкой и морковью');
   assert.equal(r1.cookingEvents[R1], undefined);
   // после 24.11 меню прошедших дней не переписывается
-  assert.equal(dataMigrationOps(device(), '2026-11-25', AT).filter((o) => o.store !== 'meta' && o.store !== 'settings').length, 0);
+  const late = dataMigrationOps(device(), '2026-11-25', AT);
+  assert.equal(late.filter((o) => o.store === 'planDays' && ('put' in o ? (o.put as { date: string }).date : 'del' in o ? String(o.del) : '') < '2026-11-25').length, 0);
 });

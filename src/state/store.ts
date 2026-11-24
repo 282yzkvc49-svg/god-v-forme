@@ -84,6 +84,14 @@ export async function init(): Promise<void> {
     d = applyOps(d, ops);
     const now = nowStamp();
     const extra: Op[] = [];
+    if (!d.meta && typeof __PREVIEW__ !== 'undefined' && __PREVIEW__) {
+      // предварительный просмотр: демо-копия данных на 22.11 (версия 1.7.0), дальше — обычные миграции при запуске
+      const fx = (await import('../../tests/fixtures/state_1.7.0_r1_2211.json')).default as Record<string, any>;
+      const seed: Op[] = [];
+      for (const [k, v] of Object.entries(fx)) for (const r of k === 'settings' || k === 'meta' ? [v] : Object.values(v as object)) seed.push({ store: k, put: r });
+      d = applyOps(d, seed);
+      extra.push(...seed);
+    }
     if (!d.meta) {
       extra.push(...seedOps(now, localDate()));
       d = applyOps(d, extra);
@@ -105,6 +113,13 @@ export async function init(): Promise<void> {
   } catch (e: any) {
     // Без IndexedDB (например, особый режим браузера) — работаем в памяти и честно предупреждаем.
     let d = applyOps(emptyData(), seedOps(nowStamp(), localDate()));
+    if (typeof __PREVIEW__ !== 'undefined' && __PREVIEW__) {
+      const fx = (await import('../../tests/fixtures/state_1.7.0_r1_2211.json')).default as Record<string, any>;
+      const seed: Op[] = [];
+      for (const [k, v] of Object.entries(fx)) for (const r of k === 'settings' || k === 'meta' ? [v] : Object.values(v as object)) seed.push({ store: k, put: r });
+      d = applyOps(emptyData(), seed);
+      d = applyOps(d, dataMigrationOps(d, today(), nowStamp(), __APP_VERSION__));
+    }
     d.ready = true;
     data = d;
     db = null;

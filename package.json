@@ -1,6 +1,6 @@
 {
   "name": "god-v-forme",
-  "version": "1.9.1",
+  "version": "2.0.0",
   "private": true,
   "description": "Мой год в форме — личный PWA-трекер питания, тренировок и прогресса для iPad и iPhone",
   "type": "module",
@@ -10,7 +10,9 @@
     "build:single": "node scripts/build.mjs --single",
     "preview": "node scripts/serve.mjs dist 4173",
     "test": "node --import tsx --test tests/*.test.ts",
-    "test:e2e": "node scripts/build.mjs && node e2e/smoke.mjs && node e2e/timer.mjs && node e2e/layout-audit.mjs",
+    "test:e2e": "node scripts/build.mjs && node e2e/smoke.mjs && node e2e/timer.mjs && node e2e/layout-audit.mjs && node e2e/v2.mjs",
+    "check:library": "node --import tsx scripts/check-library.ts",
+    "build:preview": "PREVIEW=1 OUT_DIR=dist-preview node scripts/build.mjs --single",
     "test:pwa": "node scripts/build.mjs && node e2e/pwa-update.mjs && OLD=1.7.0 node e2e/pwa-update.mjs",
     "figures": "node tools/preview/render-figures.mjs",
     "icons": "node tools/make-icons.mjs",

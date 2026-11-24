@@ -23,6 +23,8 @@ import { containersFor } from './planViews';
 import { AvLink } from '../ui/AvLink';
 import { AvStateChip, BasketSummary } from './AvCheck';
 import { isBlocked, orderProductIds } from '../domain/avCheck';
+import { weekOfEvent } from '../domain/weekly';
+import { WeekPage } from './Week';
 
 type Data = ReturnType<typeof useApp>;
 
@@ -212,6 +214,9 @@ export function ShopPage({ id }: { id: string }) {
   const e = data.shoppingEvents[id];
   const [editPrices, setEditPrices] = useState(false);
   if (!e) return <div className="page"><PageHead title="Закупка не найдена" backTo="/shopping" /></div>;
+  // версия 2.0: закупка недели — в разделе «Неделя» (считается после проверки запасов)
+  const wk = e.instanceId === 'weekly' ? weekOfEvent(data, e.id) : null;
+  if (wk) return <WeekPage id={wk.id} initialTab="buy" />;
   const task = taskById(data, `shop:${e.id}`);
   const st = task ? statusOf(data, task) : 'planned';
   const t = shopTotals(data, e);
@@ -374,6 +379,7 @@ export function CookPage({ id }: { id: string }) {
           : inventoryOn(data, e.date) ? null
           : <button className="btn small primary" onClick={() => { A.setTaskStatus(task, 'done'); toast('Готовка отмечена'); }}><PiCheck /> Готовка выполнена</button>)
       } />
+      {e.instanceId === 'weekly' && weekOfEvent(data, e.id) && <Note>Порядок общей готовки, загрузка аэрогриля и плиты и хранение порций — <a href={href(`/week/${weekOfEvent(data, e.id)!.id}`, { tab: 'cook' })}>в разделе «Неделя»</a>.</Note>}
       {st === 'skipped' && <Note kind="plain">Готовка отменена — продукты остались в запасах.</Note>}
       {task && st === 'planned' && inventoryOn(data, e.date) && <CookStockCheck e={e} />}
       {e.timeNote && <Note kind="info">{e.timeNote}</Note>}

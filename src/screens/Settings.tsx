@@ -18,8 +18,34 @@ import { isStandalone } from '../lib/files';
 import { repairViewport, viewportInfo, type ViewportInfo } from '../app/viewport';
 import { NumberStepper, Note, PageHead, Seg, Switch, toast } from '../ui/kit';
 import {
-  PiBookOpen, PiChartLineUp, PiChatsCircle, PiGear, PiShoppingCart, PiTrash, PiCaretRight, PiShareNetwork,
+  PiBookOpen, PiChartLineUp, PiChatsCircle, PiGear, PiShoppingCart, PiTrash, PiCaretRight, PiShareNetwork, PiCalendarDots,
 } from '../ui/icons';
+import * as W from '../state/weeklyActions';
+import { WEEKDAY_NAMES, weeklyOf } from '../domain/weekly';
+
+function WeeklySettingsGroup() {
+  const data = useApp();
+  const ws = weeklyOf(data)!;
+  const [cap, setCap] = useState(ws.freezer.capacity == null ? '' : String(ws.freezer.capacity));
+  return (
+    <Group id="weekly" title="Недельный цикл (версия 2.0)">
+      <p className="mt0">Одна закупка и одна основная готовка в неделю. Меню недели — из <a href={href('/library')}>библиотеки рецептов</a>; закупка считается только после проверки запасов. <a href={href('/week')}>Открыть «Неделю»</a>.</p>
+      <div className="field">
+        <span className="field-label">День закупки и основной готовки</span>
+        <Seg value={ws.shopDay} onChange={(v) => W.setWeeklySettings({ shopDay: v }).then(() => toast(`День закупки: ${WEEKDAY_NAMES[v - 1]}. Черновики будущих недель пересобраны, утверждённые — без изменений`))} label="День недели" options={WEEKDAY_NAMES.map((n, i) => ({ value: i + 1, label: n.slice(0, 2) }))} />
+      </div>
+      <TimeField label="Время готовки" value={ws.cookTime} onChange={(v) => W.setWeeklySettings({ cookTime: v })} />
+      <label className="field">
+        <span>Свободное место в морозилке — сколько плоских пакетов на 1 л помещается</span>
+        <span className="row" style={{ gap: 6 }}>
+          <input className="input" style={{ width: 100 }} inputMode="numeric" value={cap} placeholder="не указано" onChange={(e) => setCap(e.target.value.replace(/[^0-9]/g, ''))} />
+          <button className="btn small" onClick={() => W.setWeeklySettings({ freezerCapacity: cap === '' ? null : Number(cap) }).then(() => toast(cap === '' ? 'Место в морозилке не указано' : `Морозилка: ${cap} пакетов`))}>Сохранить</button>
+        </span>
+      </label>
+      <p className="hint">Пока место не указано, приложение ничего не предполагает и только показывает, сколько пакетов нужно. Генерация меню: планировщик приложения по проверенным рецептам библиотеки (без ИИ); новые недели можно составлять в чате с Claude. Генерация через API заложена на будущее и не подключена — ключи не нужны.</p>
+    </Group>
+  );
+}
 
 function Group({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
   return (
@@ -58,7 +84,8 @@ export function SettingsScreen() {
     <div className="page narrow">
       <PageHead title="Настройки" />
       <div className="stack">
-        <Group id="plan" title="Программа питания">
+        {weeklyOf(data) && <WeeklySettingsGroup />}
+        {!weeklyOf(data) && <Group id="plan" title="Программа питания">
           {menuUpdatePending(data) ? (
             <Note kind="warn">
               <p className="mt0">Доступно новое меню {TEMPLATE.title}: старт {fmtFull(TEMPLATE.base_start)}. Перед применением посмотрите, что изменится.</p>
@@ -72,10 +99,10 @@ export function SettingsScreen() {
           ) : <p className="mt0">Дата старта ещё не выбрана.</p>}
           {!menuUpdatePending(data) && <PlanStartForm submitLabel="Применить" />}
           <p className="hint">При смене даты меню, закупки, готовка и контейнеры пересчитываются; командировки, релакс-дни и выполненное остаются на своих датах. Программа рассчитана минимум на год: после 30-го дня можно начать следующий месяц по этому же меню или загрузить новый план от ChatGPT.</p>
-        </Group>
+        </Group>}
 
         <Group id="relax" title="Релакс-дни">
-          <RelaxEditor months={Array.from(new Set([0, 29, 45].map((n) => monthKey(addDays(s.plan?.startDate ?? todayFn(), n)))))} />
+          <RelaxEditor months={Array.from(new Set((s.weekly ? [0, 31, 62] : [0, 29, 45]).map((n) => monthKey(addDays(s.weekly ? today : s.plan?.startDate ?? todayFn(), n)))))} />
         </Group>
 
         <Group id="trips" title="Командировки">
@@ -297,6 +324,8 @@ function ScreenCheck() {
 
 export function MoreScreen() {
   const items = [
+    { to: '/week', label: 'Неделя: меню и закупка', icon: <PiCalendarDots /> },
+    { to: '/library', label: 'Библиотека рецептов', icon: <PiBookOpen /> },
     { to: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart /> },
     { to: '/progress', label: 'Прогресс', icon: <PiChartLineUp /> },
     { to: '/analysis', label: 'Анализ с ChatGPT', icon: <PiChatsCircle /> },

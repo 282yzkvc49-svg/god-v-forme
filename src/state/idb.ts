@@ -3,7 +3,8 @@
 // поэтому данные пользователя переживают обновления приложения.
 import { STORE_KEYS } from './types';
 
-export const DB_NAME = 'god-v-forme';
+// предварительный просмотр версии работает на своей базе и не видит данные установленного приложения
+export const DB_NAME = typeof __PREVIEW__ !== 'undefined' && __PREVIEW__ ? 'god-v-forme-preview' : 'god-v-forme';
 export const DB_VERSION = 4;
 
 type Migration = (db: IDBDatabase, tx: IDBTransaction) => void;

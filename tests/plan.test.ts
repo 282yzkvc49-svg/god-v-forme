@@ -245,7 +245,7 @@ function v1State(): AppData {
 test('миграция с первой версии: план с граммовками, командировки, отметки и вес сохраняются, без дублей', () => {
   const d = v1State();
   const d2 = applyOps(d, dataMigrationOps(d, '2026-11-04', NOW));
-  assert.equal(d2.meta!.dataVersion, DATA_VERSION);
+  assert.equal(d2.meta!.dataVersion, DATA_VERSION - 1, 'до 24.11 — версия 9: переход на 2.0 сработает с 24.11');
   assert.ok(d2.planDays['2026-11-02'].mealCards, 'у дня появились карточки с граммовками');
   assert.equal(d2.settings.training.startDate, '2026-11-16');
   assert.equal(Object.keys(d2.trips).length, 2);

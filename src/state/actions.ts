@@ -80,7 +80,7 @@ export function confirmStock(productId: string) {
   return commit([{ store: 'stock', put: { ...rec, confirmedAt: nowStamp(), updatedAt: nowStamp() } }]).then(() => [] as string[]);
 }
 
-export function updateStock(productId: string, patch: Partial<Pick<StockRec, 'expiresOn' | 'location' | 'note'>>) {
+export function updateStock(productId: string, patch: Partial<Pick<StockRec, 'expiresOn' | 'location' | 'note' | 'openedOn'>>) {
   const rec = getData().stock[productId] ?? emptyStock(productId, nowStamp());
   return recalcFromStock([{ store: 'stock', put: { ...rec, ...patch, updatedAt: nowStamp() } }]);
 }

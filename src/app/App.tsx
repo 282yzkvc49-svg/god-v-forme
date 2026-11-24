@@ -4,7 +4,7 @@ import { useRoute, href, go } from './router';
 import { menuUpdatePending } from '../domain/plan';
 import { Toasts } from '../ui/kit';
 import {
-  KettlebellIcon, PiCalendarBlank, PiChartLineUp, PiChatsCircle, PiCloudSlash, PiForkKnife, PiGear, PiHouse, PiShoppingCart, PiSquaresFour,
+  KettlebellIcon, PiCalendarDots, PiBookOpen, PiCalendarBlank, PiChartLineUp, PiChatsCircle, PiCloudSlash, PiForkKnife, PiGear, PiHouse, PiShoppingCart, PiSquaresFour,
   PiWarning, PiArrowsClockwise,
 } from '../ui/icons';
 import { Today } from '../screens/Today';
@@ -24,6 +24,8 @@ import { correctionPending } from '../domain/correction';
 import { today as todayFn } from '../lib/clock';
 import { AvCheckScreen } from '../screens/AvCheck';
 import { Onboarding } from '../screens/Onboarding';
+import { WeekHub, WeekPage } from '../screens/Week';
+import { LibraryScreen, LibRecipePage } from '../screens/Library';
 import { onUpdateReady, applyUpdate } from './sw';
 
 interface NavItem { path: string; label: string; icon: ReactNode; match: string[] }
@@ -32,6 +34,8 @@ const NAV: NavItem[] = [
   { path: '/calendar', label: 'Календарь', icon: <PiCalendarBlank />, match: ['calendar', 'day'] },
   { path: '/training', label: 'Тренировки', icon: <KettlebellIcon />, match: ['training', 'workout', 'exercise'] },
   { path: '/nutrition', label: 'Питание', icon: <PiForkKnife />, match: ['nutrition', 'recipes', 'recipe', 'recipe-needed'] },
+  { path: '/week', label: 'Неделя: меню и закупка', icon: <PiCalendarDots />, match: ['week'] },
+  { path: '/library', label: 'Библиотека рецептов', icon: <PiBookOpen />, match: ['library', 'lib'] },
   { path: '/shopping', label: 'Закупки и готовка', icon: <PiShoppingCart />, match: ['shopping', 'shop', 'cook', 'av-check', 'correction'] },
   { path: '/progress', label: 'Прогресс', icon: <PiChartLineUp />, match: ['progress'] },
   { path: '/analysis', label: 'Анализ с ChatGPT', icon: <PiChatsCircle />, match: ['analysis'] },
@@ -75,10 +79,11 @@ export function App() {
     // перенос командировки применён при запуске или ждёт подтверждения — один раз показать
     const trip = !!(data.settings.tripReportUnseen || data.settings.tripMovePending);
     // корректировка по фактическим покупкам ждёт проверки запасов и подтверждения
-    const fact = !!(data.settings.correctionReportUnseen || correctionPending(data, todayFn()));
-    if (!menu && !trip && !fact) return;
+    const fact = !data.settings.weekly && !!(data.settings.correctionReportUnseen || correctionPending(data, todayFn()));
+    const v2 = !!data.settings.weekly?.reportUnseen;
+    if (!menu && !trip && !fact && !v2) return;
     menuPromptShown = true;
-    if (!route.path[0] || route.path[0] === 'today') go(menu ? '/menu-update' : trip ? '/trip-update' : '/correction');
+    if (!route.path[0] || route.path[0] === 'today') go(v2 ? '/week' : menu ? '/menu-update' : trip ? '/trip-update' : '/correction');
   }, [data.ready]);
 
   if (!data.ready) return <div className="boot">Загрузка…</div>;
@@ -111,6 +116,9 @@ export function App() {
     case 'correction': screen = <CorrectionScreen />; break;
     case 'av-check': screen = <AvCheckScreen />; break;
     case 'more': screen = <MoreScreen />; break;
+    case 'week': screen = route.path[1] ? <WeekPage key={route.path[1]} id={route.path[1]} /> : <WeekHub />; break;
+    case 'library': screen = <LibraryScreen />; break;
+    case 'lib': screen = <LibRecipePage key={route.path[1]} id={route.path[1]} />; break;
     default: screen = <Today />;
   }
 
@@ -128,6 +136,9 @@ export function App() {
         </div>
       </nav>
       <main className="main" id="main">
+        {typeof __PREVIEW__ !== 'undefined' && __PREVIEW__ && (
+          <div className="banner preview-banner"><PiWarning /><span className="grow"><b>Предварительный просмотр версии 2.0.</b> Отдельная копия: демо-данные плана на 22.11 и переход на 2.0 при открытии. Установленное приложение не меняется. Посмотреть на своих данных: в установленном приложении — «Анализ» → «Резервная копия» → сохранить, затем здесь <a href={href('/analysis', { tab: 'backup' })}>восстановить из файла</a>.</span></div>
+        )}
         {status.mode === 'memory' && (
           <div className="banner warn"><PiWarning /><span className="grow">Хранилище браузера недоступно ({status.error}). Данные не сохранятся после закрытия — откройте приложение с экрана «Домой» в обычном режиме Safari.</span></div>
         )}

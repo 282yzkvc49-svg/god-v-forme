@@ -74,7 +74,7 @@ test('перенос Санкт-Петербурга на 25–26.11 при за
   const bk = d.backups[d.settings.tripReportUnseen!];
   assert.ok(bk?.tripReport, 'отчёт ждёт показа');
   assert.equal(bk.stores.planDays.length, Object.keys(before.planDays).length);
-  assert.equal(d.meta!.dataVersion, DATA_VERSION);
+  assert.equal(d.meta!.dataVersion, DATA_VERSION - 1, 'до 24.11 — версия 9');
   // командировки: Санкт-Петербург 25–26, Екатеринбург без изменений; старт, меню, релакс — прежние
   const spb = Object.values(d.trips).find((t) => t.city === 'Санкт-Петербург')!;
   assert.deepEqual([spb.from, spb.to, spb.trainNextDay, spb.hotelBreakfast], ['2026-11-25', '2026-11-26', true, true]);
