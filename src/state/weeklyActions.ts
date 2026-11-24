@@ -112,6 +112,20 @@ export function setWeekLine(weekId: string, productId: string, patch: { bought?:
   return commit(ops);
 }
 
+/** Замена товара на эту неделю (его нет в магазине): закупка и КБЖУ дней пересчитываются; null — отменить. */
+export function setWeekSub(weekId: string, productId: string, to: string | null) {
+  return commitWeekly((data) => {
+    const ws = weeklyOf(data);
+    const w = ws?.weeks[weekId];
+    if (!ws || !w) return [];
+    const subs = { ...(w.subs ?? {}) };
+    if (to) subs[productId] = to; else delete subs[productId];
+    const next: WeekPlan = { ...w, subs };
+    if (w.stockConfirmedAt && w.purchase) next.purchase = computePurchase(data, next);
+    return [putWeekly(data, { ...ws, weeks: { ...ws.weeks, [weekId]: next } })];
+  });
+}
+
 export function setWeeklySettings(patch: Partial<Pick<WeeklySettings, 'shopDay' | 'cookTime'>> & { freezerCapacity?: number | null }) {
   return commitWeekly((data) => {
     const ws = weeklyOf(data);

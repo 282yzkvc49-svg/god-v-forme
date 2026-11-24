@@ -10,7 +10,7 @@ import type {
 } from '../state/types';
 import { MEAL_SLOTS } from '../state/types';
 import { addDays, diffDays, fmtShort, isoWeekday, isWeekend, range, type ISODate } from '../lib/dates';
-import { DISHES, LIB_RECIPES, PRODUCTS, libDishId, type Product } from './catalog';
+import { AV_SUBS, DISHES, LIB_RECIPES, PRODUCTS, avSub, buyInfo, libDishId, libEff, type LibSub, type Product } from './catalog';
 import type { LibRecipe } from './recipeCheck';
 import { DRINKS_TEXT, TRIP_DRINKS_TEXT, hasDayMarks, mealTitle, setWeeklyHook, type ReplanResult } from './plan';
 import { isRelaxDate, tripList, tripMeal, tripOn } from './trips';
@@ -50,6 +50,8 @@ export interface WeekPlan {
   stockConfirmedAt: string | null;
   /** Список закупки на момент подтверждения запасов (не меняется от отметок «куплено»). */
   purchase?: WeekPurchase | null;
+  /** Замены на эту неделю, выбранные пользователем (товара нет в магазине): продукт → замена. */
+  subs?: Record<string, string>;
   notes: string[];
   createdAt: string;
 }
@@ -228,7 +230,7 @@ export function buildWeeklyRecords(data: AppData, from: ISODate, to: ISODate): W
         for (const u of uses) { dates.add(u.date); if (u.storage === 'freeze') frozen++; }
         items.push({ dishId: libDishId(r.id), qty: it.servings, uses });
         // сырые замороженные рыба и мясо — накануне готовки переложить в холодильник
-        for (const i of r.ingredients) {
+        for (const i of libEff(r).r.ingredients) {
           const p = PRODUCTS[i.p];
           if (p && p.storage === 'freezer' && (p.category === 'Рыба и морепродукты' || p.category === 'Мясо и птица')) thaw.set(i.p, (thaw.get(i.p) ?? 0) + i.q * (it.servings / r.servings));
         }
@@ -343,6 +345,18 @@ function gross(p: Product, net: number): number {
   return p.unit === 'pcs' || p.edible_ratio >= 1 ? net : net / p.edible_ratio;
 }
 
+/** Можно ли сейчас поставить блюдо в меню: каждый продукт (после замен) есть на av.ru по последней проверке или лежит дома. */
+export function recipeAvail(r: LibRecipe, data?: AppData): { ok: boolean; missing: string[]; subs: LibSub[] } {
+  const { r: e, subs } = libEff(r);
+  const home = (pid: string) => !!data && stockRemaining(data, pid) > 0;
+  const missing = [...new Set(e.ingredients.map((i) => i.p))].filter((pid) => {
+    if (buyInfo(pid).status === 'listed' || home(pid)) return false;
+    return true;
+  });
+  // замена не нужна, если исходный продукт есть дома
+  return { ok: missing.length === 0, missing, subs: subs.filter((x) => !home(x.from)) };
+}
+
 export interface WeekNeed { productId: string; qty: number; uses: string[]; stockOnly: number; firstUse: ISODate }
 
 /** Что нужно на неделю (масса покупки с учётом очистки): готовка целиком + свежие блюда с дня закупки.
@@ -431,20 +445,39 @@ export function computePurchase(data: AppData, w: WeekPlan): WeekPurchase {
   const deficits: string[] = [];
   const leftovers: string[] = [];
   let total = 0;
-  for (const n of weekNeeds(w, data).values()) {
+  // товара нет на av.ru: сначала то, что есть дома, недостающее — покупаем замену (граммовка × ratio)
+  const needs = new Map([...weekNeeds(w, data)].map(([k, v]) => [k, { ...v, uses: [...v.uses] }]));
+  for (const n of [...needs.values()]) {
+    const chosen = w.subs?.[n.productId];
+    const sub = chosen ? { to: chosen, ratio: AV_SUBS[n.productId]?.to === chosen ? AV_SUBS[n.productId].ratio ?? 1 : 1, note: 'замена выбрана: товара нет в магазине' } : avSub(n.productId);
+    if (!sub || sub.to === n.productId) continue;
+    const have = Math.max(0, stockRemaining(data, n.productId));
+    const covered = Math.min(n.qty, Math.max(have, n.stockOnly));
+    const rest = Math.max(0, n.qty - covered);
+    if (rest <= 0.01) continue;
+    n.qty = Math.round(covered * 10) / 10;
+    if (n.qty <= 0.01) needs.delete(n.productId);
+    const t = needs.get(sub.to) ?? { productId: sub.to, qty: 0, uses: [], stockOnly: 0, firstUse: n.firstUse };
+    t.qty = Math.round((t.qty + rest * sub.ratio) * 10) / 10;
+    t.uses.push(`вместо: ${shortName(n.productId)} — ${sub.note}`);
+    if (n.firstUse < t.firstUse) t.firstUse = n.firstUse;
+    needs.set(sub.to, t);
+  }
+  for (const n of needs.values()) {
     const p = PRODUCTS[n.productId];
     const have = Math.max(0, stockRemaining(data, n.productId));
     const buyNeed = Math.max(0, n.qty - n.stockOnly - Math.max(0, have - n.stockOnly));
     if (n.stockOnly > have + 0.01 && p.category !== 'Специи' && !['salt', 'oliveoil'].includes(n.productId)) deficits.push(`${shortName(n.productId)}: к блюдам из запасов нужно ${fmtQty(p, n.stockOnly)}, дома ${fmtQty(p, have)}`);
     if (buyNeed <= 0.01) continue;
-    const size = p.pack?.size || 0;
+    const bi = buyInfo(n.productId);
+    const size = bi.packSize || p.pack?.size || 0;
     const packs = size > 0 ? Math.ceil(buyNeed / size - 1e-9) : null;
     const buy = packs != null ? packs * size : buyNeed;
-    const price = (p as Product & { pack_price?: number }).pack_price;
-    const cost = packs != null && typeof price === 'number' && !p.av ? Math.round(packs * price) : 0;
-    if (p.av === 'unverified' || typeof price !== 'number') unverified.push(shortName(n.productId));
+    const price = bi.status === 'listed' ? bi.packPrice : null;
+    const cost = packs != null && typeof price === 'number' ? Math.round(packs * price) : 0;
+    if (bi.status !== 'listed' || typeof price !== 'number') unverified.push(shortName(n.productId));
     const leftover = Math.round((buy - buyNeed) * 10) / 10;
-    const notes: string[] = [];
+    const notes: string[] = n.uses.filter((u) => u.startsWith('вместо: '));
     if (leftover > 0.5) {
       const perishable = p.storage !== 'pantry' && p.shelf_days <= 10;
       const share = size ? leftover / size : 0;
@@ -562,8 +595,8 @@ export function draftWeek(data: AppData, cycle: Cycle, opts: DraftOptions): Week
   const prefs = prefsOf(data);
   const recent = recentMains(data, cycle.cookDate, 28);
   const notes: string[] = [];
-  // «больше не предлагать» и оценка 1–2 — не предлагать
-  const ok = (r: LibRecipe) => libVerified(r) && !prefs[r.id]?.hidden && (prefs[r.id]?.rating ?? 3) > 2 && !opts.exclude?.has(r.id);
+  // «больше не предлагать» и оценка 1–2 — не предлагать; в меню — только блюда из товаров, найденных на av.ru или уже лежащих дома
+  const ok = (r: LibRecipe) => libVerified(r) && !prefs[r.id]?.hidden && (prefs[r.id]?.rating ?? 3) > 2 && !opts.exclude?.has(r.id) && recipeAvail(r, data).ok;
   const score = (r: LibRecipe) => (prefs[r.id]?.fav ? 2 : 0) + ((prefs[r.id]?.rating ?? 3) - 3) * 0.5 + (r.tags.includes('заморозка') ? 0.3 : 0);
   const N = cycle.slots.length;
   let pool = LIB_RECIPES.filter((r) => r.kind === 'main' && r.servings >= 2 && ok(r) && !recent.has(r.id));
@@ -718,7 +751,7 @@ export function alternatives(data: AppData, w: WeekPlan, recipeId: string, limit
   const recent = recentMains(data, w.cookDate ?? weekFrom(w), 28);
   const need = w.cook.find((c) => c.r === recipeId)?.uses.length ?? 1;
   return LIB_RECIPES
-    .filter((r) => r.kind === cur.kind && r.id !== cur.id && !inWeek.has(r.id) && !prefs[r.id]?.hidden && (prefs[r.id]?.rating ?? 3) > 2 && libVerified(r))
+    .filter((r) => r.kind === cur.kind && r.id !== cur.id && !inWeek.has(r.id) && !prefs[r.id]?.hidden && (prefs[r.id]?.rating ?? 3) > 2 && libVerified(r) && recipeAvail(r, data).ok)
     .filter((r) => cur.kind !== 'main' || (r.servings >= need && r.servings <= need + 2))
     .sort((a, b) => Number(recent.has(a.id)) - Number(recent.has(b.id)) || Number(!!prefs[b.id]?.fav) - Number(!!prefs[a.id]?.fav) || (prefs[b.id]?.rating ?? 3) - (prefs[a.id]?.rating ?? 3) || Number(a.protein === cur.protein) - Number(b.protein === cur.protein))
     .slice(0, limit);
@@ -734,9 +767,12 @@ export function weekDayNutrition(w: WeekPlan, date: ISODate): { kcal: number; p:
     const d = DISHES[libDishId(m.r)];
     if (!d) continue;
     for (const i of d.ingredients) {
-      const p = PRODUCTS[i.product];
+      // замена, выбранная на эту неделю, — КБЖУ по замене
+      const to = w.subs?.[i.product];
+      const p = PRODUCTS[to ?? i.product];
       if (!p) continue;
-      const g = p.unit === 'pcs' ? i.qty * (p.piece_g ?? 0) : i.qty;
+      const ratio = to && AV_SUBS[i.product]?.to === to ? AV_SUBS[i.product].ratio ?? 1 : 1;
+      const g = (p.unit === 'pcs' ? i.qty * (p.piece_g ?? 0) : i.qty) * ratio;
       s.kcal += (g * p.nutr.kcal) / 100; s.p += (g * p.nutr.p) / 100; s.f += (g * p.nutr.f) / 100; s.c += (g * p.nutr.c) / 100;
     }
   }

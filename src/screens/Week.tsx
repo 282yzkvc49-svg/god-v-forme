@@ -8,7 +8,7 @@ import { href, useRoute } from '../app/router';
 import { fmtLong, fmtShort, weekdayShort, type ISODate } from '../lib/dates';
 import { fmtRub, parseNum } from '../lib/util';
 import { MEAL_LABELS, MEAL_SLOTS, type MealSlot } from '../state/types';
-import { PRODUCTS } from '../domain/catalog';
+import { PRODUCTS, buyInfo, subCandidates } from '../domain/catalog';
 import { BUDGET_RUB } from '../domain/plan';
 import {
   LIB, WEEKDAY_NAMES, alternatives, cookEventId, cookSchedule, cookTiming, fmtQty, shopEventId, weekDates, weekDayNutrition, weekFrom,
@@ -337,20 +337,44 @@ function BuyTab({ w }: { w: WeekPlan }) {
     <div className="grid2">
       <div className="card tight">
         <h3 className="mt0"><PiShoppingCart /> Закупка {w.shopDate ? fmtShort(w.shopDate) : ''}: {fmtRub(pur.total)}</h3>
-        <p className="small mt0">Только недостающее по подтверждённым запасам, упаковками целиком. Цены — ориентир av.ru на 14.11; наличие и доставка по адресу не проверены. Осталось отметить: {left}.</p>
+        <p className="small mt0">Только недостающее по подтверждённым запасам, упаковками целиком. У каждого товара — карточка av.ru, цена упаковки и дата проверки; наличие по адресу доставки av.ru показывает в корзине при заказе. Осталось отметить: {left}.</p>
         <div className="list">
           {pur.lines.map((l) => {
             const p = PRODUCTS[l.productId];
             const c = data.shoppingChecks[`${eventId}:${l.productId}`];
+            const bi = buyInfo(l.productId);
+            const rest = Math.max(0, l.need - l.fromStock);
             return (
               <div className="li" key={l.productId} style={{ alignItems: 'flex-start', flexWrap: 'wrap', opacity: c?.bought ? 0.6 : 1 }}>
                 <span className="grow" style={{ minWidth: 0 }}>
-                  <b>{ingrName(l.productId)}</b> — {l.packs != null ? `${l.packs} × ${p.pack.label}` : fmtQty(p, l.buy)}{l.cost ? ` · ${fmtRub(l.cost)}` : ' · цена не подтверждена'}
+                  <b>{ingrName(l.productId)}</b> — {l.packs != null ? `${l.packs} × ${bi.packLabel || p.pack.label}` : fmtQty(p, l.buy)}{l.cost ? ` · ${fmtRub(l.cost)}` : ' · цена не подтверждена'}
+                  <span className="small" style={{ display: 'block' }}>
+                    {bi.url ? <a href={bi.url} target="_blank" rel="noopener">{bi.name}</a> : bi.name}
+                    {bi.packPrice != null ? ` · ${fmtRub(bi.packPrice)} за упаковку` : ''}{bi.checkedAt ? ` · проверено ${fmtShort(bi.checkedAt)}` : ''}
+                    {bi.label ? ` · на 100 г: ${Math.round(bi.label.kcal)} ккал, Б ${bi.label.p} / Ж ${bi.label.f} / У ${bi.label.c} (этикетка)` : ''}
+                  </span>
                   <span className="small muted" style={{ display: 'block' }}>
                     нужно {fmtQty(p, l.need)}{l.fromStock ? `, дома ${fmtQty(p, l.fromStock)}` : ''}{l.notes.length ? ` · ${l.notes.join('; ')}` : ''}
-                    {p.av === 'unverified' ? ' · карточка av.ru не подтверждена' : ''}
+                    {bi.status !== 'listed' ? ' · карточка av.ru не найдена' : ''}{bi.note ? ` · ${bi.note}` : ''}
                   </span>
-                  {c?.absent && <span className="small" style={{ display: 'block', color: 'var(--warn, #b45309)' }}>Нет в магазине — замените блюдо в меню или купите в другом месте.</span>}
+                  {c?.absent && (
+                    <span className="small" style={{ display: 'block' }}>
+                      <span style={{ color: 'var(--warn, #b45309)' }}>Нет в магазине. Замена с пересчётом стоимости и КБЖУ:</span>
+                      {subCandidates(l.productId).map((x) => {
+                        const tb = buyInfo(x.to);
+                        const tp = PRODUCTS[x.to];
+                        const need = rest * x.ratio;
+                        const packs = tb.packSize ? Math.ceil(need / tb.packSize - 1e-9) : null;
+                        return (
+                          <span key={x.to} className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                            <span className="grow">{ingrName(x.to)} — {fmtQty(tp, need)}{packs != null && tb.packPrice != null ? ` (${packs} × ${tb.packLabel}, ${fmtRub(packs * tb.packPrice)})` : ''} · на 100 г {Math.round(tp.nutr.kcal)} ккал, Б {tp.nutr.p}{x.note ? ` · ${x.note}` : ''}</span>
+                            <button className="btn small" onClick={() => W.setWeekSub(w.id, l.productId, x.to).then(() => toast('Замена учтена: закупка и КБЖУ пересчитаны'))}>Заменить</button>
+                          </span>
+                        );
+                      })}
+                      {!subCandidates(l.productId).length && <span className="muted"> подходящей замены на av.ru нет — замените блюдо в меню.</span>}
+                    </span>
+                  )}
                 </span>
                 <span className="btn-row" style={{ flexWrap: 'nowrap' }}>
                   <button className={`btn small${c?.bought ? ' primary' : ''}`} onClick={() => W.setWeekLine(w.id, l.productId, { bought: !c?.bought })}><PiCheck /> {c?.bought ? 'Куплено' : 'Купил'}</button>
@@ -373,6 +397,16 @@ function BuyTab({ w }: { w: WeekPlan }) {
           </div>
         )}
         {pur.unverified.length > 0 && <Note kind="warn">Без подтверждённой карточки и цены av.ru: {pur.unverified.join(', ')}. Их стоимость в сумму не входит — проверьте при оформлении заказа.</Note>}
+        {w.subs && Object.keys(w.subs).length > 0 && (
+          <div className="card tight">
+            <h3 className="mt0">Замены этой недели</h3>
+            <ul className="small" style={{ paddingLeft: 18, margin: 0 }}>
+              {Object.entries(w.subs).map(([from, to]) => (
+                <li key={from}>{ingrName(from)} → {ingrName(to)} <button className="btn small ghost" onClick={() => W.setWeekSub(w.id, from, null)}>Отменить</button></li>
+              ))}
+            </ul>
+          </div>
+        )}
         {pur.deficits.length > 0 && <Note kind="warn">Не хватает к блюдам «из запасов» (не докупается): {pur.deficits.join('; ')}.</Note>}
         <p className="small"><a href={href('/shopping', { tab: 'stock' })}>Мои запасы</a> · <a href={href(`/week/${w.id}`, { tab: 'stock' })}>Проверить запасы заново</a></p>
       </div>

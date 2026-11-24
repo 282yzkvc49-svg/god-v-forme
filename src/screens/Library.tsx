@@ -4,10 +4,10 @@ import { useMemo, useState } from 'react';
 import { useApp } from '../state/store';
 import * as W from '../state/weeklyActions';
 import { href } from '../app/router';
-import { PRODUCTS } from '../domain/catalog';
+import { PRODUCTS, buyInfo, libEff } from '../domain/catalog';
 import { CUISINES, KIND_LABEL, PROTEINS, type LibKind, type LibRecipe } from '../domain/recipeCheck';
 import { LIBRARY, REPORT_DATE, ingrName, libNutrition, reportFor, verifyState } from '../domain/recipeLib';
-import { prefsOf } from '../domain/weekly';
+import { prefsOf, recipeAvail } from '../domain/weekly';
 import { fmtShort } from '../lib/dates';
 import { Empty, Note, NumberStepper, PageHead, Seg, Switch, toast } from '../ui/kit';
 import { PiMagnifyingGlass, PiStar, PiStarFill, PiProhibit, PiShieldCheck, PiWarning, PiSnowflake } from '../ui/icons';
@@ -41,10 +41,11 @@ export function LibraryScreen() {
   const [workOnly, setWorkOnly] = useState(false);
   const [hidden, setHidden] = useState(false);
   const counts = useMemo(() => {
-    const c = { breakfast: 0, snack: 0, main: 0, verified: 0 };
-    for (const r of LIBRARY) { c[r.kind]++; if (verifyState(r) === 'verified') c.verified++; }
+    const c = { breakfast: 0, snack: 0, main: 0, verified: 0, avail: 0 };
+    for (const r of LIBRARY) { c[r.kind]++; if (verifyState(r) === 'verified') c.verified++; if (recipeAvail(r, data).ok) c.avail++; }
     return c;
-  }, []);
+  }, [data]);
+  const [availOnly, setAvailOnly] = useState(false);
   const list = LIBRARY.filter((r) => {
     if (kind !== 'all' && r.kind !== kind) return false;
     if (!!prefs[r.id]?.hidden !== hidden) return false;
@@ -54,6 +55,7 @@ export function LibraryScreen() {
     if (equip && !r.equipment.includes(equip as never)) return false;
     if (freezeOnly && !r.storage.freeze) return false;
     if (workOnly && !r.tags.includes('на работу')) return false;
+    if (availOnly && !recipeAvail(r, data).ok) return false;
     if (q.trim()) {
       const t = norm(q.trim());
       const hay = norm(`${r.title} ${r.cuisine} ${r.protein} ${r.tags.join(' ')} ${r.ingredients.map((i) => ingrName(i.p)).join(' ')}`);
@@ -66,7 +68,7 @@ export function LibraryScreen() {
   return (
     <div className="page">
       <PageHead title="Библиотека рецептов" sub={`Сейчас ${LIBRARY.length} из 300: завтраки ${counts.breakfast} из ${TARGET.breakfast}, перекусы ${counts.snack} из ${TARGET.snack}, основные ${counts.main} из ${TARGET.main}. Прошли автоматическую проверку: ${counts.verified}${REPORT_DATE ? ` (отчёт ${fmtShort(REPORT_DATE.slice(0, 10))})` : ''}.`} />
-      <Note>Библиотека пополняется партиями после согласования. Ккал и БЖУ посчитаны по ингредиентам; у новых ингредиентов — справочные данные, их наличие и цена на av.ru не подтверждены.</Note>
+      <Note>Ккал и БЖУ посчитаны по ингредиентам: по этикеткам товаров av.ru, где они указаны, иначе по справочным данным. Товары проверены на av.ru (карточка, цена, дата проверки); если товара нет — в расчётах используется замена. В меню можно ставить {counts.avail} из {LIBRARY.length}: в остальных есть продукт, которого нет на av.ru и для которого нет замены.</Note>
       <div className="card tight">
         <label className="field" style={{ marginTop: 0 }}>
           <span><PiMagnifyingGlass /> Поиск: название, продукт, кухня</span>
@@ -82,6 +84,7 @@ export function LibraryScreen() {
           <Switch checked={favOnly} onChange={setFavOnly} label="Только избранное" />
           <Switch checked={freezeOnly} onChange={setFreezeOnly} label="Можно заморозить" />
           <Switch checked={workOnly} onChange={setWorkOnly} label="На работу" />
+          <Switch checked={availOnly} onChange={setAvailOnly} label="Можно купить на av.ru" />
           <Switch checked={hidden} onChange={setHidden} label="Скрытые («больше не предлагать»)" />
         </div>
       </div>
@@ -98,7 +101,7 @@ export function LibraryScreen() {
               </div>
               <div className="small muted" style={{ marginTop: 4 }}>{KIND_LABEL[r.kind]} · {r.cuisine} · {r.protein} · {r.equipment.join(' + ')} · {r.time.active} мин активно{r.storage.freeze ? ' · ' : ''}{r.storage.freeze ? <PiSnowflake aria-label="морозится" /> : null}</div>
               <div className="small" style={{ marginTop: 4 }}>{n.kcal} ккал · Б {Math.round(n.p)} г на порцию{r.servings > 1 ? ` · партия ${r.servings} порц.` : ''}{pr?.rating ? ` · оценка ${pr.rating}/5` : ''}</div>
-              <div style={{ marginTop: 6 }}><VerifyChip r={r} /></div>
+              <div style={{ marginTop: 6 }}><VerifyChip r={r} />{!recipeAvail(r, data).ok ? <span className="chip warn" style={{ marginLeft: 4 }}>нет на av.ru</span> : libEff(r).subs.length ? <span className="chip" style={{ marginLeft: 4 }}>с заменой</span> : null}</div>
             </a>
           );
         })}
@@ -116,6 +119,8 @@ export function LibRecipePage({ id }: { id: string }) {
   const pr = prefsOf(data)[r.id];
   const n = libNutrition(r);
   const k = servings / r.servings;
+  const subs = libEff(r).subs;
+  const avail = recipeAvail(r, data);
   const rep = reportFor(r.id);
   const v = verifyState(r);
   const st = r.storage;
@@ -130,7 +135,9 @@ export function LibRecipePage({ id }: { id: string }) {
               {r.tags.map((t) => <span key={t} className="chip">{t}</span>)}
             </div>
             <p style={{ marginBottom: 4 }}><b>{n.kcal} ккал</b> · белки {n.p} г · жиры {n.f} г · углеводы {n.c} г — на порцию.</p>
-            <p className="small muted mt0">Посчитано по ингредиентам каталога{n.complete ? '' : ' — не по всем: калорийность требует уточнения'}.</p>
+            <p className="small muted mt0">Посчитано по ингредиентам: по этикеткам товаров av.ru, где они есть, иначе по справочным данным{n.complete ? '' : ' — не по всем: калорийность требует уточнения'}{subs.length ? '; с заменами ниже' : ''}.</p>
+            {subs.length > 0 && <Note kind="info">Этих товаров нет на av.ru — в расчётах и закупке используется замена: {subs.map((x) => `${ingrName(x.from)} → ${ingrName(x.to)}${x.toQ !== x.q ? ` (${fmtAmt(x.to, x.toQ * k)} вместо ${fmtAmt(x.from, x.q * k)})` : ''} — ${x.note}`).join('; ')}.</Note>}
+            {!avail.ok && <Note kind="warn">Пока не попадёт в меню: на av.ru не найдено и замены нет — {avail.missing.map(ingrName).join(', ')}. Если продукт есть дома, отметьте его в запасах.</Note>}
             {v !== 'verified' && rep?.errors?.length ? <Note kind="warn">{rep.errors.join('; ')}</Note> : null}
             {rep?.warnings?.length ? <p className="small muted" style={{ marginBottom: 0 }}>Замечания проверки: {rep.warnings.join('; ')}.</p> : null}
           </div>
@@ -143,7 +150,9 @@ export function LibRecipePage({ id }: { id: string }) {
             <ul className="ing-list" style={{ paddingLeft: 18 }}>
               {r.ingredients.map((i) => {
                 const p = PRODUCTS[i.p];
-                return <li key={i.p}><span className="grow">{ingrName(i.p)} — <b>{fmtAmt(i.p, i.q * k)}</b>{i.note ? <span className="muted"> ({i.note})</span> : null}{p?.av === 'unverified' ? <span className="chip warn" style={{ marginLeft: 4 }}>av.ru не подтверждено</span> : null}</span></li>;
+                const bi = buyInfo(i.p);
+                const sub = subs.find((x) => x.from === i.p);
+                return <li key={i.p}><span className="grow">{ingrName(i.p)} — <b>{fmtAmt(i.p, i.q * k)}</b>{i.note ? <span className="muted"> ({i.note})</span> : null}{sub ? <span className="chip warn" style={{ marginLeft: 4 }}>замена: {ingrName(sub.to)}</span> : bi.status !== 'listed' && p ? <span className="chip warn" style={{ marginLeft: 4 }}>нет на av.ru</span> : null}</span></li>;
               })}
             </ul>
           </div>

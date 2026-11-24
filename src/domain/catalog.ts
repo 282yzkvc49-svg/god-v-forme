@@ -8,6 +8,7 @@ import libIngredients from '../data/library/ingredients.json';
 import libBreakfasts from '../data/library/breakfasts.json';
 import libSnacks from '../data/library/snacks.json';
 import libMains from '../data/library/mains.json';
+import avCheck from '../data/library/av_check.json';
 import type { LibRecipe } from './recipeCheck';
 
 export interface Nutr { kcal: number; p: number; f: number; c: number }
@@ -43,8 +44,8 @@ export interface Product {
   checked_date?: string | null;
   /** Название исходного товара, если этот заменён по подтверждению пользователя. */
   substituteFor?: string | null;
-  /** Ингредиент библиотеки рецептов: наличие и цена на av.ru не подтверждены. */
-  av?: 'unverified';
+  /** Ингредиент библиотеки: 'unverified' — карточка av.ru не проверена; 'missing' — на av.ru не найден (нужна замена). */
+  av?: 'unverified' | 'missing';
   /** Источник справочной пищевой ценности. */
   ref?: string;
 }
@@ -129,12 +130,94 @@ for (const d of EXTRA_DISHES) if (!TEMPLATE.dishes.some((x) => x.id === d.id)) T
 export const PRODUCTS: Record<string, Product> = Object.fromEntries(TEMPLATE.products.map((p) => [p.id, p]));
 /** Ингредиенты библиотеки рецептов, которых нет в каталоге меню (не av.ru-карточки: цена и наличие не подтверждены). */
 export const LIB_PRODUCTS: Record<string, Product> = {};
+
+// ------------------------------------------------------------------ проверка товаров на av.ru (src/data/library/av_check.json)
+
+/** Результат проверки карточки товара av.ru. «listed» — карточка открыта, цена указана, отметок «нет в наличии» нет
+ * на дату проверки; наличие по адресу доставки av.ru показывает только в корзине при заказе. */
+export interface AvInfo {
+  status: 'listed' | 'not_found';
+  url?: string;
+  name?: string;
+  pack?: { size: number; unit: string; label: string };
+  price?: number;
+  checkedAt: string;
+  /** КБЖУ на 100 г с карточки товара (если указано). */
+  label?: Nutr | null;
+  note?: string;
+  alts?: string[];
+}
+export const AV_CHECK: Record<string, AvInfo> = avCheck as unknown as Record<string, AvInfo>;
+
 for (const raw of libIngredients as unknown as Partial<Product>[]) {
   const x = raw as Product;
   if (PRODUCTS[x.id]) continue;
-  const p: Product = { ...x, price: x.price ?? 0, note: x.note ?? null, pantry: x.pantry ?? x.storage === 'pantry', piece_label: x.piece_label ?? null };
+  let p: Product = { ...x, price: x.price ?? 0, note: x.note ?? null, pantry: x.pantry ?? x.storage === 'pantry', piece_label: x.piece_label ?? null };
+  const av = AV_CHECK[p.id];
+  if (av?.status === 'listed') {
+    // товар библиотеки найден на av.ru: упаковка, цена и КБЖУ — с карточки (если КБЖУ на карточке есть)
+    p = {
+      ...p, av: undefined, url: av.url, checked_date: av.checkedAt, availability: 'not_verified',
+      pack: av.pack ? { size: av.pack.size, label: av.pack.label } : p.pack, pack_price: av.price,
+      price: av.price && av.pack?.size ? Math.round((av.price / av.pack.size) * 1000 * 100) / 100 : p.price,
+      ...(av.label ? { nutr: av.label, nutr_src: 'label' as const } : {}),
+      av_note: av.note || null,
+    };
+  } else if (av?.status === 'not_found') p = { ...p, av: 'missing', av_note: av.note || null };
   LIB_PRODUCTS[p.id] = p;
   PRODUCTS[p.id] = p;
+}
+
+/** Что купить на av.ru для продукта: карточка, упаковка, цена и дата проверки.
+ * Для продуктов прежнего меню название и КБЖУ в истории не меняются — новая карточка влияет только на закупку. */
+export interface BuyInfo { status: 'listed' | 'missing' | 'unchecked'; name: string; url: string | null; packSize: number; packLabel: string; packPrice: number | null; checkedAt: string | null; label: Nutr | null; note: string | null }
+export function buyInfo(pid: string): BuyInfo {
+  const p = PRODUCTS[pid];
+  const av = AV_CHECK[pid];
+  if (av?.status === 'listed') {
+    return { status: 'listed', name: av.name ?? p?.name ?? pid, url: av.url ?? null, packSize: av.pack?.size ?? p?.pack.size ?? 0, packLabel: av.pack?.label ?? p?.pack.label ?? '',
+      packPrice: av.price ?? null, checkedAt: av.checkedAt, label: av.label ?? null, note: av.note || null };
+  }
+  if (av?.status === 'not_found') return { status: 'missing', name: p?.name ?? pid, url: null, packSize: p?.pack.size ?? 0, packLabel: p?.pack.label ?? '', packPrice: null, checkedAt: av.checkedAt, label: null, note: av.note || null };
+  // товары прежнего меню: карточка av.ru из проверки 14.11 (в справочнике)
+  if (p && p.url && typeof p.pack_price === 'number' && !p.av) {
+    return { status: 'listed', name: p.name, url: p.url, packSize: p.pack.size, packLabel: p.pack.label, packPrice: p.pack_price, checkedAt: p.checked_date ?? null,
+      label: p.nutr_src === 'label' ? p.nutr : null, note: p.av_note ?? null };
+  }
+  return { status: 'unchecked', name: p?.name ?? pid, url: null, packSize: p?.pack.size ?? 0, packLabel: p?.pack.label ?? '', packPrice: null, checkedAt: null, label: null, note: null };
+}
+
+/** Замены товаров, которых нет на av.ru: та же роль в блюде, граммовка × ratio. КБЖУ и стоимость считаются по замене. */
+export const AV_SUBS: Record<string, { to: string; ratio?: number; note: string }> = {
+  pollock: { to: 'l_haddock', ratio: 1.15, note: 'филе минтая нет на av.ru — пикша (нежирная белая рыба, на 15% больше по белку)' },
+  l_pink_salmon: { to: 'l_trout', ratio: 1.15, note: 'филе горбуши нет на av.ru — стейк форели (с поправкой на кость)' },
+  l_quinoa: { to: 'bulgur', note: 'киноа нет на av.ru — булгур (варить 12 минут)' },
+  l_pekin: { to: 'l_cabbage', note: 'пекинской капусты нет на av.ru — белокочанная' },
+  l_lentils_green: { to: 'lentils', note: 'зелёной чечевицы нет на av.ru — красная (варится быстрее, разваривается)' },
+  l_split_peas: { to: 'lentils', note: 'колотого гороха нет на av.ru — красная чечевица (варить 20 минут)' },
+  l_flax: { to: 'l_chia', note: 'семян льна нет на av.ru — чиа' },
+  l_pumpkin: { to: 'carrot', note: 'тыква на av.ru только целиком ≈10 кг — морковь (так же запекать)' },
+  l_squid: { to: 'l_hake', ratio: 1.1, note: 'сырого кальмара нет на av.ru — филе хека (готовить до непрозрачности, 4–6 минут)' },
+};
+/** Чем заменить товар, которого нет в магазине: сначала заранее подобранная замена, затем товары той же категории,
+ * найденные на av.ru (с ценой упаковки и КБЖУ на 100 г для сравнения). */
+export function subCandidates(pid: string, limit = 4): { to: string; ratio: number; note: string }[] {
+  const p = PRODUCTS[pid];
+  if (!p) return [];
+  const out: { to: string; ratio: number; note: string }[] = [];
+  const pre = AV_SUBS[pid];
+  if (pre && buyInfo(pre.to).status === 'listed') out.push({ to: pre.to, ratio: pre.ratio ?? 1, note: pre.note });
+  const same = Object.values(PRODUCTS)
+    .filter((x) => x.id !== pid && !x.archived && x.category === p.category && x.unit === p.unit && buyInfo(x.id).status === 'listed' && !out.some((o) => o.to === x.id))
+    .sort((a, b) => Math.abs(a.nutr.p - p.nutr.p) + Math.abs(a.nutr.kcal - p.nutr.kcal) / 10 - (Math.abs(b.nutr.p - p.nutr.p) + Math.abs(b.nutr.kcal - p.nutr.kcal) / 10));
+  for (const x of same) { if (out.length >= limit) break; out.push({ to: x.id, ratio: 1, note: 'та же категория товаров' }); }
+  return out;
+}
+
+export function avSub(pid: string): { to: string; ratio: number; note: string } | null {
+  const s = AV_SUBS[pid];
+  if (!s || buyInfo(pid).status === 'listed') return null;
+  return { to: s.to, ratio: s.ratio ?? 1, note: s.note };
 }
 export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.map((d) => [d.id, d]));
 
@@ -142,6 +225,25 @@ export const DISHES: Record<string, Dish> = Object.fromEntries(TEMPLATE.dishes.m
 
 export const LIB_RECIPES: LibRecipe[] = [...(libBreakfasts as unknown as LibRecipe[]), ...(libSnacks as unknown as LibRecipe[]), ...(libMains as unknown as LibRecipe[])];
 export const libDishId = (recipeId: string) => `lib-${recipeId}`;
+
+export interface LibSub { from: string; to: string; q: number; toQ: number; note: string }
+const EFF = new Map<string, { r: LibRecipe; subs: LibSub[] }>();
+/** Рецепт «как готовить сейчас»: товары, которых нет на av.ru, заменены (граммовка, КБЖУ и стоимость — по замене). */
+export function libEff(r: LibRecipe): { r: LibRecipe; subs: LibSub[] } {
+  let e = EFF.get(r.id);
+  if (e && e.r.id === r.id) return e;
+  const subs: LibSub[] = [];
+  const ingredients = r.ingredients.map((i) => {
+    const s = avSub(i.p);
+    if (!s) return i;
+    const toQ = Math.round(i.q * s.ratio);
+    subs.push({ from: i.p, to: s.to, q: i.q, toQ, note: s.note });
+    return { ...i, p: s.to, q: toQ, note: [i.note, `вместо: ${PRODUCTS[i.p]?.name ?? i.p}`].filter(Boolean).join('; ') };
+  });
+  e = { r: subs.length ? { ...r, ingredients } : r, subs };
+  EFF.set(r.id, e);
+  return e;
+}
 /** Рецепт библиотеки → блюдо меню (ингредиенты на одну порцию; партия — servings порций). */
 export function libDish(r: LibRecipe): Dish {
   const st = r.storage;
@@ -155,7 +257,7 @@ export function libDish(r: LibRecipe): Dish {
     active_minutes: r.time.active, portable: r.tags.includes('на работу'), storage_text: storageText, extra: true, library: r.id,
   };
 }
-for (const r of LIB_RECIPES) DISHES[libDishId(r.id)] = libDish(r);
+for (const r of LIB_RECIPES) DISHES[libDishId(r.id)] = libDish(libEff(r).r);
 
 // ------------------------------------------------------------------ замены недоступных товаров
 

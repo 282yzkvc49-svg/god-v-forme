@@ -1654,5 +1654,101 @@
   "edible_ratio": 0.95,
   "piece_g": 170,
   "av": "unverified"
+ },
+ {
+  "id": "l_turkey_mince",
+  "name": "Фарш из индейки",
+  "category": "Мясо и птица",
+  "unit": "g",
+  "nutr": {
+   "kcal": 200,
+   "p": 21,
+   "f": 13,
+   "c": 0
+  },
+  "nutr_src": "label",
+  "ref": "этикетка av.ru",
+  "pack": {
+   "size": 450,
+   "label": "лоток 450 г"
+  },
+  "shelf_days": 10,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_beef_mince",
+  "name": "Фарш говяжий",
+  "category": "Мясо и птица",
+  "unit": "g",
+  "nutr": {
+   "kcal": 122.3,
+   "p": 21.8,
+   "f": 3.9,
+   "c": 0
+  },
+  "nutr_src": "label",
+  "ref": "этикетка av.ru",
+  "pack": {
+   "size": 500,
+   "label": "лоток 500 г"
+  },
+  "shelf_days": 3,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_trout",
+  "name": "Форель радужная, стейк, замороженная",
+  "category": "Рыба и морепродукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 119,
+   "p": 20.5,
+   "f": 3.5,
+   "c": 0
+  },
+  "nutr_src": "label",
+  "ref": "этикетка av.ru",
+  "pack": {
+   "size": 500,
+   "label": "упаковка 500 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 0.85,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_haddock",
+  "name": "Пикша, филе без кожи, замороженное",
+  "category": "Рыба и морепродукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 77,
+   "p": 17,
+   "f": 1,
+   "c": 0
+  },
+  "nutr_src": "label",
+  "ref": "этикетка av.ru",
+  "pack": {
+   "size": 500,
+   "label": "упаковка 500 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
  }
 ]

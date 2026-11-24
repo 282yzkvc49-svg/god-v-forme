@@ -6,10 +6,10 @@ import { readFileSync } from 'node:fs';
 import { applyOps, dataMigrationOps, storesToData, DATA_VERSION } from '../src/state/model';
 import type { AppData, MealSlot } from '../src/state/types';
 import {
-  computePurchase, draftWeek, planCycles, recentMains, setRemainingOps, weekList, weekPurchase, weekStockRows, weeklyOf, weeklyReplanOps,
+  computePurchase, draftWeek, planCycles, recentMains, recipeAvail, setRemainingOps, weekList, weekPurchase, weekStockRows, weeklyOf, weeklyReplanOps,
   type WeekPlan,
 } from '../src/domain/weekly';
-import { LIB_RECIPES } from '../src/domain/catalog';
+import { LIB_RECIPES, PRODUCTS, buyInfo, libEff, subCandidates } from '../src/domain/catalog';
 import { buildReport } from '../src/domain/report';
 import { stockRemaining } from '../src/domain/stock';
 
@@ -85,7 +85,10 @@ test('2.0: закупка — только после подтверждения
   const confirmed: WeekPlan = { ...w, stockConfirmedAt: AT };
   const pur = computePurchase(d, confirmed);
   const line = (pid: string) => pur.lines.find((l) => l.productId === pid);
-  assert.equal(line('pollock')?.packs, 1, 'минтай: одна упаковка 300 г (200 г есть)');
+  // филе минтая на av.ru нет: 200 г из дома, недостающее — пикша (замена с поправкой ×1,15)
+  assert.equal(line('pollock'), undefined, 'минтай не покупается — его нет на av.ru');
+  assert.ok((line('l_haddock')?.packs ?? 0) >= 1, 'вместо минтая — пикша');
+  assert.ok(line('l_haddock')!.notes.length >= 0 && pur.unverified.indexOf('Минтай') < 0);
   assert.equal(line('greenbeans'), undefined, 'стручковая фасоль есть — не покупать');
   assert.equal(line('buckwheat'), undefined, 'гречки 500 г хватает на 400 г');
   assert.equal(line('chicken')?.packs, 1, 'курица — один лоток 865 г, без остатка');
@@ -156,4 +159,41 @@ test('отчёт для ChatGPT: вес гири без «undefined кг»', () 
   const { md } = buildReport(after, { from: '2026-11-01', to: '2026-11-30', today: '2026-11-24', photos: [], notes: '', include: { weights: true, workouts: true, nutrition: true, notes: true }, appVersion: '2.0.0', generatedAt: AT } as any);
   assert.ok(/кг/.test(md));
   assert.ok(!/undefined/.test(md), 'в отчёте нет «undefined»');
+});
+
+test('av.ru: товары с карточкой — цена, упаковка и КБЖУ этикетки; отсутствующие — замена с пересчётом; без замены — не в меню', () => {
+  // этикетка av.ru вместо справочных данных
+  assert.equal(PRODUCTS.l_greek_yogurt.nutr.p, 8);
+  assert.equal(buyInfo('l_greek_yogurt').packPrice, 108);
+  assert.equal(buyInfo('pollock').status, 'missing');
+  assert.equal(buyInfo('chicken').status, 'listed');
+  // рецепт с минтаем: КБЖУ и закупка — по пикше
+  const m010 = LIB_RECIPES.find((r) => r.id === 'm010')!;
+  const eff = libEff(m010);
+  assert.ok(eff.subs.some((s) => s.from === 'pollock' && s.to === 'l_haddock'));
+  assert.ok(eff.r.ingredients.every((i) => i.p !== 'pollock'));
+  // тофу на av.ru нет и замены нет — блюдо не предлагается
+  const tofu = LIB_RECIPES.find((r) => r.ingredients.some((i) => i.p === 'l_tofu'))!;
+  assert.equal(recipeAvail(tofu).ok, false);
+  const { after } = migrated();
+  const cyc = planCycles(after, '2026-12-03', '2026-12-06', 7)[0];
+  const w = draftWeek(after, cyc, { now: AT });
+  const used = [...w.cook.map((c) => c.r), ...Object.values(w.meals).flatMap((s) => Object.values(s).map((m) => m?.r))].filter(Boolean) as string[];
+  for (const id of used) assert.ok(recipeAvail(LIB_RECIPES.find((r) => r.id === id)!, after).ok, `${id} — все продукты есть на av.ru или дома`);
+});
+
+test('av.ru: «нет в магазине» → выбранная замена пересчитывает закупку', () => {
+  const { after } = migrated();
+  const w = w1(after);
+  let d = after;
+  for (const r of weekStockRows(after, w, '2026-11-24')) d = applyOps(d, setRemainingOps(d, r.productId, 0, AT, '2026-11-24', null));
+  const confirmed: WeekPlan = { ...w, stockConfirmedAt: AT };
+  const pur = computePurchase(d, confirmed);
+  assert.ok(pur.lines.some((l) => l.productId === 'chicken'));
+  const cand = subCandidates('chicken');
+  assert.ok(cand.length > 0, 'есть замены той же категории');
+  const pur2 = computePurchase(d, { ...confirmed, subs: { chicken: cand[0].to } });
+  assert.ok(!pur2.lines.some((l) => l.productId === 'chicken'), 'курицу не покупаем');
+  const line = pur2.lines.find((l) => l.productId === cand[0].to)!;
+  assert.ok(line && line.notes.some((n) => /вместо/.test(n)), 'строка замены с пояснением');
 });

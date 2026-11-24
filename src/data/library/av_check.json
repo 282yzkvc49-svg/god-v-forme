@@ -1,0 +1,1544 @@
+{
+ "chicken": {
+  "status": "listed",
+  "url": "https://av.ru/i/572843",
+  "name": "Филе грудки цыплёнка-бройлера охлаждённое «Петелинка», ≈865 г",
+  "pack": {
+   "size": 865,
+   "unit": "g",
+   "label": "865 г"
+  },
+  "price": 590.79,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 110,
+   "p": 21,
+   "f": 2.5,
+   "c": 0
+  },
+  "note": "Весовой товар; срок хранения 10 суток",
+  "alts": []
+ },
+ "cucumber": {
+  "status": "listed",
+  "url": "https://av.ru/i/234311/",
+  "name": "Огурцы луховицкие, 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 124,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "КБЖУ на карточке нет — справочные",
+  "alts": []
+ },
+ "curd": {
+  "status": "listed",
+  "url": "https://av.ru/i/434872/",
+  "name": "Творог 5% «Молочная Культура», 200 г",
+  "pack": {
+   "size": 200,
+   "unit": "g",
+   "label": "200 г"
+  },
+  "price": 120,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 120,
+   "p": 16,
+   "f": 5,
+   "c": 3
+  },
+  "note": "Прежний творог «Простоквашино» 200 г в поиске av.ru на 24.11 не найден",
+  "alts": []
+ },
+ "egg": {
+  "status": "listed",
+  "url": "https://av.ru/i/375528/",
+  "name": "Яйцо куриное С2 «Просто Азбука», 10 шт. (450 г)",
+  "pack": {
+   "size": 10,
+   "unit": "pcs",
+   "label": "10 шт. (≈450 г)"
+  },
+  "price": 134,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 157,
+   "p": 12.7,
+   "f": 11.5,
+   "c": 0.7
+  },
+  "note": "Яйца С0 «Просто Азбука» в поиске не найдены, С0 «О!Вкусное яйцо» — без цены; С2 мельче (≈45 г)",
+  "alts": []
+ },
+ "l_barley": {
+  "status": "listed",
+  "url": "https://av.ru/i/242155/",
+  "name": "Крупа перловая премиум «Мистраль», 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 205,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 349,
+   "p": 12.1,
+   "f": 0.8,
+   "c": 76.6
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_bay_leaf": {
+  "status": "listed",
+  "url": "https://av.ru/i/323887",
+  "name": "Лавровый лист Kotanyi, 20 г",
+  "pack": {
+   "size": 20,
+   "unit": "g",
+   "label": "20 г"
+  },
+  "price": 579,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 352,
+   "p": 7.6,
+   "f": 8.4,
+   "c": 49
+  },
+  "note": "Расход 0,5 г на блюдо — упаковки хватает надолго",
+  "alts": []
+ },
+ "l_beef_lean": {
+  "status": "listed",
+  "url": "https://av.ru/i/338101/",
+  "name": "Лопатка говяжья без кости «Наша Ферма», ≈1 кг",
+  "pack": {
+   "size": 1000,
+   "unit": "g",
+   "label": "1000 г"
+  },
+  "price": 690,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 110,
+   "p": 19.4,
+   "f": 3.6,
+   "c": 0
+  },
+  "note": "Весовой товар, цена за 1 кг",
+  "alts": []
+ },
+ "l_beef_mince": {
+  "status": "listed",
+  "url": "https://av.ru/i/338120/",
+  "name": "Фарш из фермерской говядины «Наша Ферма», 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 262.5,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 122.3,
+   "p": 21.8,
+   "f": 3.9,
+   "c": 0
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_beet": {
+  "status": "listed",
+  "url": "https://av.ru/i/395621/",
+  "name": "Свёкла, ≈500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 24.5,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "Весовой товар; КБЖУ на карточке нет — справочные значения",
+  "alts": []
+ },
+ "l_black_pepper": {
+  "status": "listed",
+  "url": "https://av.ru/i/239079/",
+  "name": "Перец чёрный, мельница, Kotanyi, 36 г",
+  "pack": {
+   "size": 36,
+   "unit": "g",
+   "label": "36 г"
+  },
+  "price": 385,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 202,
+   "p": 8.5,
+   "f": 2.5,
+   "c": 29.8
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_blueberry_frozen": {
+  "status": "listed",
+  "url": "https://av.ru/i/295363/",
+  "name": "Черника быстрозамороженная «Просто Азбука», 350 г",
+  "pack": {
+   "size": 350,
+   "unit": "g",
+   "label": "350 г"
+  },
+  "price": 267,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 44,
+   "p": 1,
+   "f": 0.6,
+   "c": 7.6
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_bread_rye": {
+  "status": "listed",
+  "url": "https://av.ru/i/562949",
+  "name": "Хлеб 100% ржаной на закваске «Азбука вкуса», 450 г",
+  "pack": {
+   "size": 450,
+   "unit": "g",
+   "label": "450 г"
+  },
+  "price": 158,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 199.2,
+   "p": 4.6,
+   "f": 0.8,
+   "c": 43.4
+  },
+  "note": "Срок хранения 24 ч — покупать к дню готовки или замораживать ломтиками",
+  "alts": [
+   "https://av.ru/i/231590/"
+  ]
+ },
+ "l_cabbage": {
+  "status": "listed",
+  "url": "https://av.ru/i/052786/",
+  "name": "Капуста белокочанная, ≈1,8 кг",
+  "pack": {
+   "size": 1800,
+   "unit": "g",
+   "label": "1800 г"
+  },
+  "price": 140.4,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 24,
+   "p": 1.5,
+   "f": 0.1,
+   "c": 5
+  },
+  "note": "Весовой товар: вес и цена могут немного отличаться",
+  "alts": []
+ },
+ "l_capers": {
+  "status": "listed",
+  "url": "https://av.ru/i/104646",
+  "name": "Каперсы консервированные Iberica, 100 г",
+  "pack": {
+   "size": 100,
+   "unit": "g",
+   "label": "100 г"
+  },
+  "price": 272,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 34,
+   "p": 2.6,
+   "f": 0.4,
+   "c": 6.7
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_cauliflower": {
+  "status": "listed",
+  "url": "https://av.ru/i/052002/",
+  "name": "Цветная капуста замороженная Bonduelle, 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 179,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 14,
+   "p": 1.6,
+   "f": 0.2,
+   "c": 3.9
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_cheese_light": {
+  "status": "listed",
+  "url": "https://av.ru/i/326466/",
+  "name": "Сыр полутвёрдый Лёгкий 15% «Тысяча Озёр», 240 г",
+  "pack": {
+   "size": 240,
+   "unit": "g",
+   "label": "240 г"
+  },
+  "price": 193,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 220,
+   "p": 31,
+   "f": 15,
+   "c": 0
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_chia": {
+  "status": "listed",
+  "url": "https://av.ru/i/356021/",
+  "name": "Семена чиа UFEELGOOD, 200 г",
+  "pack": {
+   "size": 200,
+   "unit": "g",
+   "label": "200 г"
+  },
+  "price": 398,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 434,
+   "p": 17.6,
+   "f": 31.2,
+   "c": 1.3
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_chicken_thigh": {
+  "status": "listed",
+  "url": "https://av.ru/i/569511/",
+  "name": "Бедро цыплёнка-бройлера бескостное «Приосколье», 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 234.5,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 180,
+   "p": 18,
+   "f": 12,
+   "c": 0
+  },
+  "note": "По этикетке жирнее справочного (12 г жира на 100 г)",
+  "alts": [
+   "https://av.ru/i/159264/"
+  ]
+ },
+ "l_chili": {
+  "status": "listed",
+  "url": "https://av.ru/i/550216",
+  "name": "Перец чили красный тайский, свежий, 50 г",
+  "pack": {
+   "size": 50,
+   "unit": "g",
+   "label": "50 г"
+  },
+  "price": 118,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "Сушёных хлопьев чили на av.ru не найдено; 1 г хлопьев ≈ 3–4 г свежего чили. КБЖУ — справочные",
+  "alts": []
+ },
+ "l_cocoa": {
+  "status": "listed",
+  "url": "https://av.ru/i/033249",
+  "name": "Какао-порошок «Золотой ярлык», 100 г",
+  "pack": {
+   "size": 100,
+   "unit": "g",
+   "label": "100 г"
+  },
+  "price": 198,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 364,
+   "p": 25.6,
+   "f": 15,
+   "c": 29.6
+  },
+  "note": "Состав на карточке не показан",
+  "alts": []
+ },
+ "l_coconut_milk": {
+  "status": "listed",
+  "url": "https://av.ru/i/266911",
+  "name": "Молоко кокосовое Aroy-D, 250 мл",
+  "pack": {
+   "size": 250,
+   "unit": "g",
+   "label": "250 г"
+  },
+  "price": 229,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 185,
+   "p": 1.6,
+   "f": 19,
+   "c": 2
+  },
+  "note": "Состав на карточке не показан",
+  "alts": []
+ },
+ "l_cod": {
+  "status": "listed",
+  "url": "https://av.ru/i/264947/",
+  "name": "Треска, филе, замороженное, Agama, 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 1098,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 86,
+   "p": 20,
+   "f": 0.9,
+   "c": 0
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_corn_frozen": {
+  "status": "listed",
+  "url": "https://av.ru/i/340245/",
+  "name": "Кукуруза замороженная «4 сезона», 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 183,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "КБЖУ на карточке (250 ккал, Б 10,5) неправдоподобно для кукурузы — используются справочные значения",
+  "alts": []
+ },
+ "l_couscous": {
+  "status": "listed",
+  "url": "https://av.ru/i/242157/",
+  "name": "Кускус «Премиум» «Мистраль», 450 г",
+  "pack": {
+   "size": 450,
+   "unit": "g",
+   "label": "450 г"
+  },
+  "price": 299,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 353,
+   "p": 11.6,
+   "f": 2.1,
+   "c": 75.1
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_crispbread": {
+  "status": "listed",
+  "url": "https://av.ru/i/458428",
+  "name": "Хлебцы Original ржаные «Круазетт», 200 г",
+  "pack": {
+   "size": 200,
+   "unit": "g",
+   "label": "200 г"
+  },
+  "price": 244,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 320,
+   "p": 11.7,
+   "f": 2.7,
+   "c": 61
+  },
+  "note": "Состав на карточке не показан",
+  "alts": [
+   "https://av.ru/i/468066/"
+  ]
+ },
+ "l_cumin": {
+  "status": "listed",
+  "url": "https://av.ru/i/507512/",
+  "name": "Приправа зира (кумин) Masala Traders, 40 г",
+  "pack": {
+   "size": 40,
+   "unit": "g",
+   "label": "40 г"
+  },
+  "price": 398,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 258.2,
+   "p": 19.8,
+   "f": 14.6,
+   "c": 11.9
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_curd_cheese": {
+  "status": "listed",
+  "url": "https://av.ru/i/512207",
+  "name": "Сыр мягкий Рикотта 34% «Galbani», 230 г",
+  "pack": {
+   "size": 230,
+   "unit": "g",
+   "label": "230 г"
+  },
+  "price": 210,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 90,
+   "p": 6,
+   "f": 6,
+   "c": 3
+  },
+  "note": "Лёгкого творожного сыра на av.ru нет; рикотта — самый нежирный вариант",
+  "alts": []
+ },
+ "l_dried_apricots": {
+  "status": "listed",
+  "url": "https://av.ru/i/267022/",
+  "name": "Абрикос сушёный (курага) «Сёмушка», 300 г",
+  "pack": {
+   "size": 300,
+   "unit": "g",
+   "label": "300 г"
+  },
+  "price": 598,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 225,
+   "p": 3,
+   "f": 0.5,
+   "c": 51
+  },
+  "note": "Состав на карточке не показан",
+  "alts": [
+   "https://av.ru/i/412232"
+  ]
+ },
+ "l_edamame": {
+  "status": "listed",
+  "url": "https://av.ru/i/558415/",
+  "name": "Бобы соевые эдамаме очищенные, замороженные, 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 303,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 131,
+   "p": 12,
+   "f": 6.7,
+   "c": 5.7
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_eggplant": {
+  "status": "listed",
+  "url": "https://av.ru/i/108841",
+  "name": "Баклажаны, ≈400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 159.2,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 24,
+   "p": 1.2,
+   "f": 0.1,
+   "c": 5.1
+  },
+  "note": "Весовой товар",
+  "alts": []
+ },
+ "l_feta": {
+  "status": "listed",
+  "url": "https://av.ru/i/272843/",
+  "name": "Сыр рассольный Брынза 45% «President», 250 г",
+  "pack": {
+   "size": 250,
+   "unit": "g",
+   "label": "250 г"
+  },
+  "price": 299,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 213,
+   "p": 12,
+   "f": 16.7,
+   "c": 3.7
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_flax": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Семена льна на av.ru на 24.11 не открываются (карточка недоступна) — замена: семена чиа"
+ },
+ "l_flour_wg": {
+  "status": "listed",
+  "url": "https://av.ru/i/559496/",
+  "name": "Мука пшеничная для выпечки Экстра «Макфа», 2 кг",
+  "pack": {
+   "size": 2000,
+   "unit": "g",
+   "label": "2000 г"
+  },
+  "price": 169,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 350,
+   "p": 11,
+   "f": 1.5,
+   "c": 75
+  },
+  "note": "Цельнозерновой муки на av.ru на 24.11 нет (карточки не открываются) — заменена обычной пшеничной; КБЖУ пересчитаны",
+  "alts": []
+ },
+ "l_ginger": {
+  "status": "listed",
+  "url": "https://av.ru/i/397566",
+  "name": "Имбирь, 250 г",
+  "pack": {
+   "size": 250,
+   "unit": "g",
+   "label": "250 г"
+  },
+  "price": 238,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 80,
+   "p": 1.82,
+   "f": 0.75,
+   "c": 15.77
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_greek_yogurt": {
+  "status": "listed",
+  "url": "https://av.ru/i/521137",
+  "name": "Йогурт греческий 2% TEOS, 250 г",
+  "pack": {
+   "size": 250,
+   "unit": "g",
+   "label": "250 г"
+  },
+  "price": 108,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 66.8,
+   "p": 8,
+   "f": 2,
+   "c": 4.2
+  },
+  "note": "Та же карточка, что у натурального йогурта TEOS; крупнее 250 г на av.ru нет",
+  "alts": [
+   "https://av.ru/i/1002147/",
+   "https://av.ru/i/391949/"
+  ]
+ },
+ "l_greens": {
+  "status": "listed",
+  "url": "https://av.ru/i/228114/",
+  "name": "Зелень укропа и петрушки «Просто Азбука», 100 г",
+  "pack": {
+   "size": 100,
+   "unit": "g",
+   "label": "100 г"
+  },
+  "price": 124,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "КБЖУ на карточке не указано — справочные значения",
+  "alts": []
+ },
+ "l_haddock": {
+  "status": "listed",
+  "url": "https://av.ru/i/525946/",
+  "name": "Пикша, филе без кожи, Borealis, 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 889,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 77,
+   "p": 17,
+   "f": 1,
+   "c": 0
+  },
+  "note": "Замена минтая",
+  "alts": []
+ },
+ "l_hake": {
+  "status": "listed",
+  "url": "https://av.ru/i/478927/",
+  "name": "Хек, филе без кожи, замороженное, Seafood Line, 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 528.8,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 82,
+   "p": 16.5,
+   "f": 1.8,
+   "c": 0
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_hummus": {
+  "status": "listed",
+  "url": "https://av.ru/i/245250/",
+  "name": "Хумус «Иерусалимский» «Салаты и Деликатесы», 200 г",
+  "pack": {
+   "size": 200,
+   "unit": "g",
+   "label": "200 г"
+  },
+  "price": 145,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 384,
+   "p": 18,
+   "f": 28,
+   "c": 15
+  },
+  "note": "По этикетке заметно жирнее справочного (28 г жира на 100 г)",
+  "alts": [
+   "https://av.ru/i/535601/"
+  ]
+ },
+ "l_kefir": {
+  "status": "listed",
+  "url": "https://av.ru/i/242089/",
+  "name": "Кефир 1% термостатный «Просто Азбука», 900 г",
+  "pack": {
+   "size": 900,
+   "unit": "g",
+   "label": "900 г"
+  },
+  "price": 152,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 36,
+   "p": 2.8,
+   "f": 1,
+   "c": 4
+  },
+  "note": "Срок хранения 7 суток",
+  "alts": []
+ },
+ "l_khmeli": {
+  "status": "listed",
+  "url": "https://av.ru/i/565874/",
+  "name": "Приправа «Хмели-сунели» «Просто Азбука», 20 г",
+  "pack": {
+   "size": 20,
+   "unit": "g",
+   "label": "20 г"
+  },
+  "price": 96,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 294,
+   "p": 20,
+   "f": 6.9,
+   "c": 20
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_lavash": {
+  "status": "listed",
+  "url": "https://av.ru/i/280453/",
+  "name": "Лаваш армянский «Просто Азбука», 360 г",
+  "pack": {
+   "size": 360,
+   "unit": "g",
+   "label": "360 г"
+  },
+  "price": 124,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 277,
+   "p": 9.1,
+   "f": 1.1,
+   "c": 56
+  },
+  "note": "Срок хранения 72 часа — покупать к дню готовки или замораживать",
+  "alts": []
+ },
+ "l_lentils_green": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Зелёной чечевицы (крупы) на av.ru на 24.11 нет — замена: красная чечевица «Мистраль» (короче варится, разваривается)"
+ },
+ "l_mango_frozen": {
+  "status": "listed",
+  "url": "https://av.ru/i/501535/",
+  "name": "Мякоть манго Нам Док Май замороженная Best Thai Fruits, 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 761,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 65,
+   "p": 0.5,
+   "f": 0.3,
+   "c": 17
+  },
+  "note": "На карточке: «Без добавления сахара»",
+  "alts": []
+ },
+ "l_milk": {
+  "status": "listed",
+  "url": "https://av.ru/i/272303/",
+  "name": "Молоко ультрапастеризованное 1,5% «Савушкин продукт», 1 л",
+  "pack": {
+   "size": 1000,
+   "unit": "g",
+   "label": "1000 г"
+  },
+  "price": 98.9,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 44,
+   "p": 2.8,
+   "f": 1.5,
+   "c": 4.8
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_millet": {
+  "status": "listed",
+  "url": "https://av.ru/i/021500/",
+  "name": "Крупа пшено «Мистраль», 900 г",
+  "pack": {
+   "size": 900,
+   "unit": "g",
+   "label": "900 г"
+  },
+  "price": 177,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 377,
+   "p": 10.2,
+   "f": 3,
+   "c": 74.7
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_olives": {
+  "status": "listed",
+  "url": "https://av.ru/i/1000481/",
+  "name": "Оливки зелёные без косточки Bella di Cerignola, Monini, 150 г",
+  "pack": {
+   "size": 150,
+   "unit": "g",
+   "label": "150 г"
+  },
+  "price": 719,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 118,
+   "p": 1.2,
+   "f": 12.6,
+   "c": 1
+  },
+  "note": "Дорого; альтернатива — D’Amico «Кастельветрано» 290 г",
+  "alts": [
+   "https://av.ru/i/546652/"
+  ]
+ },
+ "l_oregano": {
+  "status": "listed",
+  "url": "https://av.ru/i/226970/",
+  "name": "Орегано листочки Cannamela, 8 г",
+  "pack": {
+   "size": 8,
+   "unit": "g",
+   "label": "8 г"
+  },
+  "price": 229,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "КБЖУ на карточке нет — справочные",
+  "alts": []
+ },
+ "l_peanut_butter": {
+  "status": "listed",
+  "url": "https://av.ru/i/558247/",
+  "name": "Паста арахисовая с гималайской солью «Азбука Life», 200 г",
+  "pack": {
+   "size": 200,
+   "unit": "g",
+   "label": "200 г"
+  },
+  "price": 356,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 563,
+   "p": 26.2,
+   "f": 46,
+   "c": 10.9
+  },
+  "note": "На карточке: «Без добавления сахара»",
+  "alts": []
+ },
+ "l_peas_frozen": {
+  "status": "listed",
+  "url": "https://av.ru/i/461359",
+  "name": "Зелёный горошек быстрозамороженный «Просто Азбука», 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 208,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 55,
+   "p": 5,
+   "f": 0.2,
+   "c": 8.3
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_pekin": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Пекинская капуста на av.ru не найдена на 24.11 — замена: белокочанная капуста"
+ },
+ "l_persimmon": {
+  "status": "listed",
+  "url": "https://av.ru/i/231143/",
+  "name": "Хурма «Персимон» премиум, в упаковке, 600 г",
+  "pack": {
+   "size": 600,
+   "unit": "g",
+   "label": "600 г"
+  },
+  "price": 980,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 67,
+   "p": 0.5,
+   "f": 0.4,
+   "c": 15.3
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_pink_salmon": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Замороженного филе горбуши на av.ru нет (только консервы и готовые блюда). Ближайшая замена — филе форели Agama 400 г, 1598 ₽ (https://av.ru/i/1012949/), или хек"
+ },
+ "l_polenta": {
+  "status": "listed",
+  "url": "https://av.ru/i/270513/",
+  "name": "Крупа полента Bravolli, 300 г",
+  "pack": {
+   "size": 300,
+   "unit": "g",
+   "label": "300 г"
+  },
+  "price": 98.9,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 370,
+   "p": 7,
+   "f": 4,
+   "c": 77
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_pork_tenderloin": {
+  "status": "listed",
+  "url": "https://av.ru/i/241626/",
+  "name": "Вырезка свиная охлаждённая, ≈500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 194.5,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 142,
+   "p": 19.4,
+   "f": 7.1,
+   "c": 0
+  },
+  "note": "Весовой товар; срок хранения 21 сутки в вакууме, 48 ч после вскрытия",
+  "alts": []
+ },
+ "l_prunes": {
+  "status": "listed",
+  "url": "https://av.ru/i/412227",
+  "name": "Чернослив «Горный» «Наша Ферма», 150 г",
+  "pack": {
+   "size": 150,
+   "unit": "g",
+   "label": "150 г"
+  },
+  "price": 359,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "Данные из каталога av.ru; КБЖУ — справочные",
+  "alts": []
+ },
+ "l_pumpkin": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "На av.ru только целая тыква «Стофунтовая» ≈10 кг за 1980 ₽ (https://av.ru/i/352260/) — для недельной закупки не подходит; нужна замена"
+ },
+ "l_pumpkin_seeds": {
+  "status": "listed",
+  "url": "https://av.ru/i/021110/",
+  "name": "Семечки тыквенные очищенные Ter Mer, 140 г",
+  "pack": {
+   "size": 140,
+   "unit": "g",
+   "label": "140 г"
+  },
+  "price": 269,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 596,
+   "p": 29,
+   "f": 46.7,
+   "c": 13.1
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_quinoa": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Киноа (крупа) на av.ru не найдена на 24.11 — нужна замена (булгур, кускус или рис)"
+ },
+ "l_rice_noodles": {
+  "status": "listed",
+  "url": "https://av.ru/i/483891/",
+  "name": "Лапша рисовая Aroy-D, 454 г",
+  "pack": {
+   "size": 454,
+   "unit": "g",
+   "label": "454 г"
+  },
+  "price": 298,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 357,
+   "p": 7.1,
+   "f": 0.8,
+   "c": 80
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_ryazhenka": {
+  "status": "listed",
+  "url": "https://av.ru/i/235781/",
+  "name": "Ряженка 3% «Наша Ферма», 380 г",
+  "pack": {
+   "size": 380,
+   "unit": "g",
+   "label": "380 г"
+  },
+  "price": 129,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 54,
+   "p": 2.6,
+   "f": 2.5,
+   "c": 4.5
+  },
+  "note": "Срок хранения 72 часа",
+  "alts": []
+ },
+ "l_semolina": {
+  "status": "listed",
+  "url": "https://av.ru/i/133480/",
+  "name": "Крупа манная семолина Panzani, 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 576,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 339,
+   "p": 10.5,
+   "f": 1.4,
+   "c": 72
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_sesame": {
+  "status": "listed",
+  "url": "https://av.ru/i/304146/",
+  "name": "Кунжут белый (семена) Oko Baum, 150 г",
+  "pack": {
+   "size": 150,
+   "unit": "g",
+   "label": "150 г"
+  },
+  "price": 249,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 631,
+   "p": 20,
+   "f": 61.2,
+   "c": 11.7
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_shrimp": {
+  "status": "listed",
+  "url": "https://av.ru/i/544339/",
+  "name": "Креветки аргентинские красные очищенные VICI 20/30, замороженные, 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 1503,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 59,
+   "p": 14.06,
+   "f": 0.3,
+   "c": 0
+  },
+  "note": "По этикетке белка меньше справочного (вес с глазурью)",
+  "alts": []
+ },
+ "l_soba": {
+  "status": "listed",
+  "url": "https://av.ru/i/305976/",
+  "name": "Лапша соба из гречневой муки Wheat Village, 300 г",
+  "pack": {
+   "size": 300,
+   "unit": "g",
+   "label": "300 г"
+  },
+  "price": 119,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 349,
+   "p": 13.3,
+   "f": 2.6,
+   "c": 68.3
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_sour_cream": {
+  "status": "listed",
+  "url": "https://av.ru/i/376822/",
+  "name": "Сметана 10% «Искренне Ваш», 315 г",
+  "pack": {
+   "size": 315,
+   "unit": "g",
+   "label": "315 г"
+  },
+  "price": 76.9,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 116,
+   "p": 2.6,
+   "f": 10,
+   "c": 3.9
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_soy_sauce": {
+  "status": "listed",
+  "url": "https://av.ru/i/018736/",
+  "name": "Соевый соус Kikkoman, 250 мл",
+  "pack": {
+   "size": 250,
+   "unit": "g",
+   "label": "250 г"
+  },
+  "price": 959,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 77,
+   "p": 10,
+   "f": 0,
+   "c": 3.2
+  },
+  "note": "Цена на карточке 959 ₽ — дорого; более дешёвые соевые соусы на 24.11 не открылись",
+  "alts": [
+   "https://av.ru/i/166140/"
+  ]
+ },
+ "l_spinach_frozen": {
+  "status": "listed",
+  "url": "https://av.ru/i/295368/",
+  "name": "Шпинат резаный быстрозамороженный в шайбах «Просто Азбука», 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 282,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 23,
+   "p": 2.9,
+   "f": 0.3,
+   "c": 2
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_split_peas": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Колотого гороха на av.ru на 24.11 не найдено — замена: красная чечевица"
+ },
+ "l_squid": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Сырой очищенной тушки кальмара на av.ru на 24.11 не найдено (карточка 1 кг не открывается, есть только готовые блюда и консервы) — замена: креветки или хек"
+ },
+ "l_tofu": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Тофу на av.ru не найден на 24.11 — блюда с тофу пока не попадают в меню; замена: яйца, творог или курица"
+ },
+ "l_tomato_paste": {
+  "status": "listed",
+  "url": "https://av.ru/i/151175/",
+  "name": "Томатная паста «Помидорка», 70 г",
+  "pack": {
+   "size": 70,
+   "unit": "g",
+   "label": "70 г"
+  },
+  "price": 103,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 80,
+   "p": 5.5,
+   "f": 0,
+   "c": 14
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_trout": {
+  "status": "listed",
+  "url": "https://av.ru/i/532780/",
+  "name": "Форель радужная, стейк, замороженная, Fish&More, 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 835,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 119,
+   "p": 20.5,
+   "f": 3.5,
+   "c": 0
+  },
+  "note": "Прежний охлаждённый стейк в поиске av.ru на 24.11 не найден",
+  "alts": []
+ },
+ "l_trout_salted": {
+  "status": "listed",
+  "url": "https://av.ru/i/386461/",
+  "name": "Форель малосолёная, ломтики «Азбука вкуса», 200 г",
+  "pack": {
+   "size": 200,
+   "unit": "g",
+   "label": "200 г"
+  },
+  "price": 698,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 202.5,
+   "p": 22.5,
+   "f": 12.5,
+   "c": 0
+  },
+  "note": "",
+  "alts": []
+ },
+ "l_turkey_mince": {
+  "status": "listed",
+  "url": "https://av.ru/i/399851/",
+  "name": "Фарш из индейки «Пава-Пава», 450 г",
+  "pack": {
+   "size": 450,
+   "unit": "g",
+   "label": "450 г"
+  },
+  "price": 355,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 200,
+   "p": 21,
+   "f": 13,
+   "c": 0
+  },
+  "note": "По этикетке заметно жирнее прежнего фарша из грудки (13 г жира на 100 г)",
+  "alts": []
+ },
+ "l_turkey_thigh": {
+  "status": "listed",
+  "url": "https://av.ru/i/412189/",
+  "name": "Филе бедра индейки охлаждённое, ≈500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 460,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 160,
+   "p": 18,
+   "f": 10,
+   "c": 0
+  },
+  "note": "Весовой товар; по этикетке жирнее справочного",
+  "alts": []
+ },
+ "l_white_beans": {
+  "status": "listed",
+  "url": "https://av.ru/i/391802/",
+  "name": "Фасоль белая консервированная Visciano, 400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "банка 400 г (≈240 г без жидкости)"
+  },
+  "price": 120,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "КБЖУ на карточке не указано — справочные значения; масса без жидкости ≈240 г",
+  "alts": []
+ },
+ "onion": {
+  "status": "listed",
+  "url": "https://av.ru/i/042547",
+  "name": "Лук репчатый, 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 32,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "КБЖУ — справочные",
+  "alts": []
+ },
+ "pepper": {
+  "status": "listed",
+  "url": "https://av.ru/i/032043",
+  "name": "Перец красный, ≈400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 131.2,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "Весовой товар; КБЖУ — справочные",
+  "alts": []
+ },
+ "pollock": {
+  "status": "not_found",
+  "checkedAt": "2026-11-24",
+  "note": "Филе минтая без кожи на av.ru на 24.11 не найдено (есть только целая рыба 750 г). Замена: филе пикши Borealis 500 г, 889 ₽ (https://av.ru/i/525946/) или хек"
+ },
+ "rice": {
+  "status": "listed",
+  "url": "https://av.ru/i/007154",
+  "name": "Рис басмати «Мистраль», 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 335,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "КБЖУ — из прежней проверки",
+  "alts": []
+ },
+ "strawberry": {
+  "status": "listed",
+  "url": "https://av.ru/i/461354",
+  "name": "Клубника быстрозамороженная «Просто Азбука», 300 г",
+  "pack": {
+   "size": 300,
+   "unit": "g",
+   "label": "300 г"
+  },
+  "price": 278,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "Цена из каталога av.ru; КБЖУ — из прежней проверки",
+  "alts": []
+ },
+ "tomato": {
+  "status": "listed",
+  "url": "https://av.ru/i/425033",
+  "name": "Помидоры махитос «Наша Ферма», 500 г",
+  "pack": {
+   "size": 500,
+   "unit": "g",
+   "label": "500 г"
+  },
+  "price": 274,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 24,
+   "p": 1.1,
+   "f": 0.2,
+   "c": 3.8
+  },
+  "note": "",
+  "alts": []
+ },
+ "tuna": {
+  "status": "listed",
+  "url": "https://av.ru/i/269142/",
+  "name": "Тунец кусочками в собственном соку Fortuna, 185 г",
+  "pack": {
+   "size": 185,
+   "unit": "g",
+   "label": "185 г"
+  },
+  "price": 329,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 104,
+   "p": 24.1,
+   "f": 0.75,
+   "c": 0.29
+  },
+  "note": "Масса без жидкости на карточке не указана (≈140 г)",
+  "alts": []
+ },
+ "turkey": {
+  "status": "listed",
+  "url": "https://av.ru/i/1009784/",
+  "name": "Филе грудки индейки охлаждённое «Индилайт», 1 кг",
+  "pack": {
+   "size": 1000,
+   "unit": "g",
+   "label": "1000 г"
+  },
+  "price": 838,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 110,
+   "p": 22,
+   "f": 2.5,
+   "c": 0
+  },
+  "note": "Прежний лоток 700 г в поиске av.ru на 24.11 не найден; срок хранения 15 суток",
+  "alts": []
+ },
+ "yogurt": {
+  "status": "listed",
+  "url": "https://av.ru/i/521137",
+  "name": "Йогурт греческий 2% TEOS, 250 г",
+  "pack": {
+   "size": 250,
+   "unit": "g",
+   "label": "250 г"
+  },
+  "price": 108,
+  "checkedAt": "2026-11-24",
+  "label": {
+   "kcal": 66.8,
+   "p": 8,
+   "f": 2,
+   "c": 4.2
+  },
+  "note": "",
+  "alts": []
+ },
+ "zucchini": {
+  "status": "listed",
+  "url": "https://av.ru/i/262977",
+  "name": "Кабачки, ≈400 г",
+  "pack": {
+   "size": 400,
+   "unit": "g",
+   "label": "400 г"
+  },
+  "price": 175.2,
+  "checkedAt": "2026-11-24",
+  "label": null,
+  "note": "Весовой товар; КБЖУ — справочные",
+  "alts": []
+ }
+}

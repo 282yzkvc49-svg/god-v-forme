@@ -2,7 +2,7 @@
 // Пищевая ценность считается по ингредиентам каталога; отметка «проверено» — только если отпечаток рецепта
 // совпадает с отчётом автоматической проверки (npm run check:library), то есть рецепт не менялся после проверки.
 import report from '../data/library/check_report.json';
-import { LIB_RECIPES, PRODUCTS } from './catalog';
+import { LIB_RECIPES, PRODUCTS, libEff } from './catalog';
 import { recipeHash, recipeNutrition, type LibRecipe, type RecipeNutr } from './recipeCheck';
 
 export const LIBRARY: LibRecipe[] = LIB_RECIPES;
@@ -22,10 +22,10 @@ export function verifyState(r: LibRecipe): VerifyState {
 export function reportFor(id: string): ReportEntry | null { return REPORT[id] ?? null; }
 
 const NUTR_CACHE = new Map<string, RecipeNutr>();
-/** Ккал и БЖУ на порцию. */
+/** Ккал и БЖУ на порцию — по рецепту «как готовить сейчас» (с заменами товаров, которых нет на av.ru). */
 export function libNutrition(r: LibRecipe): RecipeNutr {
   let n = NUTR_CACHE.get(r.id);
-  if (!n) { n = recipeNutrition(r, PRODUCTS); NUTR_CACHE.set(r.id, n); }
+  if (!n) { n = recipeNutrition(libEff(r).r, PRODUCTS); NUTR_CACHE.set(r.id, n); }
   return n;
 }
 
@@ -42,11 +42,13 @@ const SHORT: Record<string, string> = {
   avocado: 'Авокадо', banana: 'Банан', kiwi: 'Киви', strawberry: 'Клубника замороженная', greenbeans: 'Фасоль стручковая замороженная',
   parmesan: 'Пармезан', l_greek_yogurt: 'Йогурт греческий 2% без сахара', l_soy_sauce: 'Соевый соус', l_pink_salmon: 'Горбуша, филе',
   l_hake: 'Хек, филе', l_shrimp: 'Креветки очищенные сырые', l_chicken_thigh: 'Филе куриного бедра', l_beef_lean: 'Говядина постная',
-  l_crispbread: 'Хлебцы ржаные', l_cheese_light: 'Сыр лёгкий 17%', l_bread_rye: 'Хлеб ржаной', l_lavash: 'Лаваш тонкий',
+  l_crispbread: 'Хлебцы ржаные', l_bread_rye: 'Хлеб ржаной', l_lavash: 'Лаваш тонкий',
   l_pumpkin_seeds: 'Тыквенные семечки', l_mango_frozen: 'Манго замороженное', l_blueberry_frozen: 'Черника замороженная',
   l_spinach_frozen: 'Шпинат замороженный', l_peas_frozen: 'Горошек замороженный', l_greens: 'Зелень (укроп, петрушка)',
   l_olives: 'Оливки зелёные', l_cumin: 'Кумин (зира)', l_black_pepper: 'Перец чёрный молотый', l_tomato_paste: 'Томатная паста',
-  l_flour_wg: 'Мука цельнозерновая', l_pork_tenderloin: 'Свиная вырезка', l_cabbage: 'Капуста белокочанная', l_ginger: 'Имбирь свежий',
+  l_flour_wg: 'Мука пшеничная', l_pork_tenderloin: 'Свиная вырезка', l_cabbage: 'Капуста белокочанная', l_ginger: 'Имбирь свежий',
+  l_turkey_mince: 'Фарш из индейки', l_beef_mince: 'Фарш говяжий', l_trout: 'Форель, стейк', l_haddock: 'Пикша, филе',
+  l_curd_cheese: 'Рикотта', l_cheese_light: 'Сыр лёгкий 15%',
 };
 export function ingrName(pid: string): string {
   return SHORT[pid] ?? (PRODUCTS[pid]?.name ?? pid).split(/[«,]/)[0].trim();
