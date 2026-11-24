@@ -39,7 +39,7 @@ export const EQUIP: Equip[] = ['аэрогриль', 'электрогриль',
 export const KIND_LABEL: Record<LibKind, string> = { breakfast: 'Завтрак', snack: 'Перекус', main: 'Основное блюдо' };
 export const CUISINES = [
   'русская', 'европейская', 'средиземноморская', 'итальянская', 'греческая', 'испанская', 'французская', 'скандинавская',
-  'ближневосточная', 'турецкая', 'кавказская', 'грузинская', 'узбекская', 'индийская', 'тайская', 'вьетнамская',
+  'ближневосточная', 'турецкая', 'кавказская', 'польская', 'грузинская', 'узбекская', 'индийская', 'тайская', 'вьетнамская',
   'китайская', 'японская', 'корейская', 'мексиканская', 'американская (креольская)', 'американская', 'латиноамериканская',
   'северноафриканская',
 ];
@@ -262,10 +262,12 @@ export function checkLibrary(recipes: LibRecipe[], products: Record<string, Prod
     for (let j = i + 1; j < recipes.length; j++) {
       if (recipes[i].kind !== recipes[j].kind) continue;
       const sim = cosine(vecs[i], vecs[j]);
-      if (sim >= 0.92) {
+      // тот же состав и та же техника — повтор (ошибка); другой способ приготовления — другое блюдо, но смотрю вручную
+      const sameEq = [...recipes[i].equipment].sort().join() === [...recipes[j].equipment].sort().join();
+      if (sim >= 0.92 && sameEq) {
         duplicates.push({ a: recipes[i].id, b: recipes[j].id, sim: Math.round(sim * 100) / 100 });
         byId.get(recipes[j].id)!.errors.push(`почти тот же состав, что у ${recipes[i].id} (${Math.round(sim * 100)}%)`);
-      } else if (sim >= 0.8) byId.get(recipes[j].id)!.warnings.push(`похож по составу на ${recipes[i].id} (${Math.round(sim * 100)}%)`);
+      } else if (sim >= 0.92) byId.get(recipes[j].id)!.warnings.push(`состав близок к ${recipes[i].id} (${Math.round(sim * 100)}%), но другой способ приготовления`); else if (sim >= 0.8) byId.get(recipes[j].id)!.warnings.push(`похож по составу на ${recipes[i].id} (${Math.round(sim * 100)}%)`);
       else {
         // отличается одной заменой ингредиента (например, другой фрукт) — повод посмотреть вручную
         const a = new Set(vecs[i].keys()), b = new Set(vecs[j].keys());

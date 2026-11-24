@@ -577,7 +577,7 @@
  },
  {
   "id": "l_greens",
-  "name": "Зелень: укроп, петрушка",
+  "name": "Зелень: укроп, петрушка, кинза",
   "category": "Зелень",
   "unit": "g",
   "nutr": {
@@ -858,6 +858,294 @@
   },
   "shelf_days": 365,
   "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_cod",
+  "name": "Треска, филе без кожи, замороженное",
+  "category": "Рыба и морепродукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 69,
+   "p": 16,
+   "f": 0.6,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 800,
+   "label": "упаковка ≈800 г"
+  },
+  "shelf_days": 180,
+  "storage": "freezer",
+  "freezable": true,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_barley",
+  "name": "Перловая крупа",
+  "category": "Крупы и бобовые",
+  "unit": "g",
+  "nutr": {
+   "kcal": 320,
+   "p": 9.3,
+   "f": 1.1,
+   "c": 66.9
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 800,
+   "label": "пачка ≈800 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_millet",
+  "name": "Пшено",
+  "category": "Крупы и бобовые",
+  "unit": "g",
+  "nutr": {
+   "kcal": 348,
+   "p": 11.5,
+   "f": 3.3,
+   "c": 66.5
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 800,
+   "label": "пачка ≈800 г"
+  },
+  "shelf_days": 270,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_beet",
+  "name": "Свёкла",
+  "category": "Овощи свежие",
+  "unit": "g",
+  "nutr": {
+   "kcal": 42,
+   "p": 1.5,
+   "f": 0.1,
+   "c": 8.8
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 1000,
+   "label": "≈1 кг"
+  },
+  "shelf_days": 30,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 0.8,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_sour_cream",
+  "name": "Сметана 10%",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 115,
+   "p": 3,
+   "f": 10,
+   "c": 2.9
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 300,
+   "label": "стакан ≈300 г"
+  },
+  "shelf_days": 14,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_milk",
+  "name": "Молоко 1,5%",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 44,
+   "p": 2.8,
+   "f": 1.5,
+   "c": 4.7
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 900,
+   "label": "бутылка ≈900 мл"
+  },
+  "shelf_days": 10,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_ryazhenka",
+  "name": "Ряженка 2,5%",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 54,
+   "p": 2.9,
+   "f": 2.5,
+   "c": 4.2
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 450,
+   "label": "бутылка ≈450 г"
+  },
+  "shelf_days": 10,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_feta",
+  "name": "Брынза (сыр рассольный)",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 260,
+   "p": 17.9,
+   "f": 20.1,
+   "c": 0
+  },
+  "nutr_src": "ref",
+  "ref": "таблицы хим. состава РФ",
+  "pack": {
+   "size": 200,
+   "label": "упаковка ≈200 г"
+  },
+  "shelf_days": 30,
+  "storage": "fridge",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_white_beans",
+  "name": "Фасоль белая консервированная",
+  "category": "Консервы и готовые продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 114,
+   "p": 7.3,
+   "f": 0.3,
+   "c": 21.3
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 400,
+   "label": "банка 400 г (≈240 г без жидкости)"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_pumpkin",
+  "name": "Тыква",
+  "category": "Овощи свежие",
+  "unit": "g",
+  "nutr": {
+   "kcal": 26,
+   "p": 1,
+   "f": 0.1,
+   "c": 6.5
+  },
+  "nutr_src": "ref",
+  "ref": "USDA FDC",
+  "pack": {
+   "size": 1000,
+   "label": "кусок ≈1 кг"
+  },
+  "shelf_days": 30,
+  "storage": "fridge",
+  "freezable": true,
+  "edible_ratio": 0.7,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_khmeli",
+  "name": "Хмели-сунели",
+  "category": "Специи",
+  "unit": "g",
+  "nutr": {
+   "kcal": 300,
+   "p": 10,
+   "f": 8,
+   "c": 45
+  },
+  "nutr_src": "ref",
+  "ref": "оценка по составу смеси",
+  "pack": {
+   "size": 30,
+   "label": "пакетик ≈30 г"
+  },
+  "shelf_days": 365,
+  "storage": "pantry",
+  "freezable": false,
+  "edible_ratio": 1,
+  "piece_g": null,
+  "av": "unverified"
+ },
+ {
+  "id": "l_curd_cheese",
+  "name": "Творожный сыр лёгкий",
+  "category": "Молочные продукты",
+  "unit": "g",
+  "nutr": {
+   "kcal": 150,
+   "p": 8,
+   "f": 11,
+   "c": 4
+  },
+  "nutr_src": "ref",
+  "ref": "средние значения этикеток лёгкого творожного сыра",
+  "pack": {
+   "size": 150,
+   "label": "ванночка 150 г"
+  },
+  "shelf_days": 30,
+  "storage": "fridge",
   "freezable": false,
   "edible_ratio": 1,
   "piece_g": null,
